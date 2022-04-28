@@ -1,4 +1,4 @@
-# compiler
+# UMPL
 This my compiler and languge made in rust, and also how I'm learning rust.
 <br>
 The name of the languge is: UMPL (Unnamed Meme Programming Language).
