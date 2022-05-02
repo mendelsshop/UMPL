@@ -25,3 +25,5 @@ hello: int = [2,5,5,5]
 print(hello[1]) # displays 2
 ``` 
 #### Note the syntax is not final, its just meant to show this idea.
+
+# some random case (aLtErNaTe cAsE, tOGGLE cASE,  StudlyCaps Case, etc) for standard functions.
