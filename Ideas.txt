@@ -5,4 +5,12 @@ number interpolation ie: 23{7}4       # 2,374
                          22{3}4.4{3}5 # 2234.435
                          # note you can use variables, function, and other things too
                          
-      
+Indentation and {} both required ie:
+```
+if (expr) {
+  do this;
+  if (expr) {
+    do this
+    }
+  }
+```
