@@ -7,7 +7,7 @@
 1{2.4}4      # 12.44
 22{3}4.4{3}5 # 2234.435
 ``` 
-## Note you can use variables, function, and other things too.
+#### Note you can use variables, function, and other things too.
 
 
 # Indentation and {} both required ie:
