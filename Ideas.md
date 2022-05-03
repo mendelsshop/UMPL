@@ -19,16 +19,16 @@ if (expr) {
     }
   }
 ```
-# Array, string and other sybscripts start at one, thanks Lua.
+# Array, string and other sybscripts start at one (thanks Lua).
 ```
 hello: int = [2,5,5,5]
 print(hello[1]) # displays 2
 ``` 
 #### Note the syntax is not final, its just meant to show this idea.
 
-# Some random case (aLtErNaTe cAsE, tOGGLE cASE,  StudlyCaps Case, etc) for standard functions.
+# Some random case (aLtErNaTe cAsE, tOGGLE cASE,  StudlyCaps Case, etc) for standard functions (I get annoyed at Java for using lowerCamelCase and CamelCase depending on if its a class, object, method etc).
 
-# Comparison operator (equals, less than) will have to be in two letter form ie:
+# Comparison operator (equals, less than) will have to be in two letter form (thanks bash) ie:
 ```
 if (i eq 5) {
   code;
