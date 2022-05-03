@@ -44,3 +44,8 @@ if (!(tRuE) {
   }
 ```
 #### note some things like if and not may change syntaticly.
+
+# There will only be one error message, along with line number and filename/traces
+Segmentation fault (core dumped)
+  in Line: 7, Filename: main.umpl
+  in Line: 5, Filename: module.umpl
