@@ -51,3 +51,4 @@ Segmentation fault (core dumped)
   in Line: 7, Filename: main.umpl
   in Line: 5, Filename: module.umpl
 ```
+# Operator precednce will no be a thing we will go left to right, unless you use parenthesis
