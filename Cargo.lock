@@ -3,5 +3,12 @@
 version = 3
 
 [[package]]
-name = "UMPL"
+name = "cli_args"
 version = "0.1.0"
+
+[[package]]
+name = "umpl"
+version = "0.1.0"
+dependencies = [
+ "cli_args",
+]
