@@ -55,3 +55,5 @@ Segmentation fault (core dumped)
 
 # Indentation, using tabs or more than one space will result in a runtime error.
 Indentation is bad for your health and the readability of your code.
+
+# potato is the keyword for creating a function.
