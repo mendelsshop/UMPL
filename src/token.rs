@@ -87,3 +87,9 @@ impl fmt::Display for Token {
         }
     }
 }
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,"{} at {}", self, self.line)
+    }
+}
