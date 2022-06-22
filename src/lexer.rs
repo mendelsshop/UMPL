@@ -3,6 +3,7 @@ use crate::{
     keywords::Keyword,
     token::{Token, TokenType},
 };
+use hexponent::FloatLiteral;
 
 use unic_emoji_char as emoji;
 
@@ -66,6 +67,10 @@ impl Lexer {
                     self.identifier()
                 } else if c.is_ascii_whitespace() {
                 } else if c.is_ascii_digit() {
+                    if self.peek() == 'x' {
+                        self.advance();
+                        self.start += 2
+                    }
                     self.number();
                 } else if emoji::is_emoji(c) {
                     self.add_unicode_token(TokenType::Identifier);
@@ -89,30 +94,35 @@ impl Lexer {
         }
 
         self.advance();
-        self.start+=1;
-        self.current-=1;
+        self.start += 1;
+        self.current -= 1;
         let string = self.get_text();
-        self.start-=1;
-        self.current+=1;
+        self.start -= 1;
+        self.current += 1;
         self.add_token(TokenType::String { literal: string })
     }
 
     fn number(&mut self) {
-        while self.peek().is_ascii_digit() {
+        let hex_char = vec!['A', 'B', 'B', 'D', 'E', 'F'];
+
+        while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
             self.advance();
         }
-        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
+        if self.peek() == '.'
+            && (self.peek_next().is_ascii_digit() || hex_char.contains(&self.peek()))
+        {
             self.advance();
             while self.peek().is_ascii_digit() {
                 self.advance();
             }
         }
-        let number: f64 = self
-            .get_text()
+        let number: FloatLiteral = format!("0x{}", self.get_text())
             .to_string()
             .parse()
             .expect("could not parse number");
-        self.add_token(TokenType::Number { literal: number });
+        self.add_token(TokenType::Number {
+            literal: number.convert::<f64>().inner(),
+        });
     }
 
     fn identifier(&mut self) {
@@ -147,10 +157,7 @@ impl Lexer {
     }
 
     fn add_unicode_token(&mut self, token_type: TokenType) {
-        let text = format!(
-            "{}",
-            self.source.chars().nth(self.start).expect("Error")
-        );
+        let text = format!("{}", self.source.chars().nth(self.start).expect("Error"));
 
         self.token_list
             .push(Token::new(token_type, &text, self.line));

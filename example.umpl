@@ -5,7 +5,7 @@ potato 😂[arg1:arg2] ( ! to create a function we use the potato keyword, funct
     ! adds both arg1 and arg2, the less than signifies that this should not be the printed and sets it to the final variable
     (return final)< ! returns the final variable and does not print the value that is being return because of the < sign
 )
-(new 😂 10:10)> ! we use the new keyword to call a function followed by function names and colon separated args, prints 32
+(new 😂 10:0x1A)> ! we use the new keyword to call a function followed by function names and colon separated args, prints 32, when the first digit of number is a letre prefix with 0x
 
 list it with (1:2)< ! creates a list with the values  1,2 (in hex), list can only have two elements
 (it.first with 2)< ! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
