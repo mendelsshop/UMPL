@@ -22,7 +22,7 @@ fn main() {
             print!(">> "); // print the prompt
             io::stdout().flush().unwrap();
             io::stdin().read_line(&mut input).unwrap(); // read the input
-            run_line(input.clone());
+            run_line(input.to_string());
             full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
         }
     } else {
@@ -30,10 +30,11 @@ fn main() {
         let mut file = File::open(&parsed_args.file).unwrap(); // open the file
         let mut contents = String::new(); // create a string to hold the contents of the file
         file.read_to_string(&mut contents).unwrap(); // read the file into the string
-        for (_num, line) in contents.lines().enumerate() {
-            // iterate over the lines of the file
-            run_line(String::from(line))
-        }
+                                                     // for (_num, line) in contents.lines().enumerate() {
+                                                     // iterate over the lines of the file
+                                                     // run_line((line))
+                                                     // }
+        run_line(contents);
 
         if parsed_args.repl && !parsed_args.file.is_empty() {
             // if we are in repl mode and we have a file to write to

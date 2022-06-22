@@ -38,6 +38,7 @@ pub enum TokenType {
     AddWith,
     SubtractWith,
     DivideWith,
+    MultiplyWith,
     List,
     First,
     Second,
@@ -52,6 +53,7 @@ pub enum TokenType {
     Null,
     True,
     False,
+    Input,
 
     EOF,
 }
@@ -76,12 +78,12 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.token_type {
             TokenType::String { literal } => {
-                write!(f, "String {:?} {:?}", self.lexeme, literal)
+                write!(f, "String: [lexeme {:?}, value {:?}]", self.lexeme, literal)
             }
             TokenType::Number { literal } => {
-                write!(f, "Number {:?} {:?}", self.lexeme, literal)
+                write!(f, "Number: [lexeme {:?}, value {:?}]", self.lexeme, literal)
             }
-            _ => write!(f, "Token {:?} {:?}", self.token_type, self.lexeme),
+            _ => write!(f, "{:?}: [lexeme {:?}]", self.token_type, self.lexeme),
         }
     }
 }
