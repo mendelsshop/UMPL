@@ -1,0 +1,36 @@
+(add 1:10)> ! prints 17, the greater than signifies that this should be the printed, the bang symbol signifies a comment, numbers must be in hexadecimal but will be printed in decimal
+
+potato 😂[arg1:arg2] ( ! to create a function we use the potato keyword, functions must be nameed with a single emoji, we put the args seperated by colon (:) in brackets ([])
+    create final with (add arg1 arg2)< ! ! we use the create keyword to create a variable and the with keyword to assign a value to the variable
+    ! adds both arg1 and arg2, the less than signifies that this should not be the printed and sets it to the final variable
+    (return final)< ! returns the final variable and does not print the value that is being return because of the < sign
+)
+(new 😂 10:10)> ! we use the new keyword to call a function followed by function names and colon separated args, prints 32
+
+list it with (1:2)< ! creates a list with the values  1,2 (in hex), list can only have two elements
+(it.first with 2)< ! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
+(it.second with 4)> ! sets the second element of the it list to 4 and print its
+
+create bool with (true)<
+
+(if {(not bool)}) ( ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
+  (`hello`)> ! the bactick (`) is used to encapsulate a string
+) else(
+    (`by`)>
+))
+
+(if {true} ( ! there is now else, use nested if elses, condotins must be in {} and we can use nested () within the 
+  (minus 1:10)> ! prints -15
+) else(
+  (plus 1:10)> ! prints 17 
+))
+
+(loop (
+  create input with (input `continue?`)<
+  (if {(eq input `y`)} ( ! there is now else, use nested if elses, condotins must be in {} and we can use nested () within the 
+    (continue)<
+  ) else(
+  ! what the if/esle do can be nothing if you dont pu anything in the parenthesis
+  ))
+  (break)
+))

@@ -6,6 +6,7 @@ pub struct Keyword {
     keywords: HashMap<String, TokenType>,
 }
 
+// TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
 impl Keyword {
     pub fn new() -> Keyword {
         let mut keywords = HashMap::new();
