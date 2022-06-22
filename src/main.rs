@@ -1,17 +1,18 @@
-use cli_args::{self};
-use lexer::{self};
-use std::env;
-use std::fs::File;
-use std::io::{self, Read, Write};
-use std::path::Path;
-use std::process::exit;
+use std::{
+    env,
+    fs::File,
+    io::{self, Read, Write},
+    path::Path,
+    process::exit,
+};
+use umpl::{cli, lexer::Lexer};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
-    let (index, mut parsed_args) = cli_args::get_string_args(&args); // get the ile name args and the index of the firrst flag
+    let (index, mut parsed_args) = cli::get_string_args(&args); // get the ile name args and the index of the firrst flag
     if index != 0 {
         // if there are any args after the program name parse them
-        cli_args::get_dash_args(&args, index, &mut parsed_args);
+        cli::get_dash_args(&args, index, &mut parsed_args);
     }
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
@@ -21,12 +22,7 @@ fn main() {
             print!(">> "); // print the prompt
             io::stdout().flush().unwrap();
             io::stdin().read_line(&mut input).unwrap(); // read the input
-            let mut lexer = lexer::lexer::Lexer::new(input.as_str(), "<STDIN>".to_string(), 0); // create a lexer on the input
-            let tokens = lexer.generate_tokens(); // generate tokens from the lexer
-            for token in tokens {
-                print!("{:?} ", token); // print the tokens
-            }
-            println!(); // print a new line so the next line is on a new line
+            run_line(input.clone());
             full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
         }
     } else {
@@ -34,14 +30,9 @@ fn main() {
         let mut file = File::open(&parsed_args.file).unwrap(); // open the file
         let mut contents = String::new(); // create a string to hold the contents of the file
         file.read_to_string(&mut contents).unwrap(); // read the file into the string
-        for (num, line) in contents.lines().enumerate() {
+        for (_num, line) in contents.lines().enumerate() {
             // iterate over the lines of the file
-            let mut lexer = lexer::lexer::Lexer::new(line, parsed_args.file.clone(), num as u32); // create a lexer on the line
-            let tokens = lexer.generate_tokens(); // generate tokens from the lexer
-            for token in tokens {
-                print!("{:?} ", token); // print the tokens
-            }
-            println!(); // print a new line so the next line is on a new line
+            run_line(String::from(line))
         }
 
         if parsed_args.repl && !parsed_args.file.is_empty() {
@@ -65,5 +56,13 @@ fn main() {
                     .expect("Error encountered while writing to file!"); // write the repl to the file
             }
         }
+    }
+}
+
+fn run_line(line: String) {
+    let mut lexer = Lexer::new(line);
+    let tokens = lexer.scan_tokens();
+    for token in tokens {
+        println!("{}", token);
     }
 }

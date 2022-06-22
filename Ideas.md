@@ -59,4 +59,3 @@ Indentation is bad for your health and the readability of your code.
 # potato is the keyword for creating a function.
 
 # function names can only be a single emoji, no spaces, no special characters.
-
