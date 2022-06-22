@@ -108,11 +108,12 @@ impl Lexer {
         while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
             self.advance();
         }
+        println!("{}", self.peek());
         if self.peek() == '.'
-            && (self.peek_next().is_ascii_digit() || hex_char.contains(&self.peek()))
+            && (self.peek_next().is_ascii_digit() || hex_char.contains(&self.peek_next()))
         {
             self.advance();
-            while self.peek().is_ascii_digit() {
+            while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
                 self.advance();
             }
         }
