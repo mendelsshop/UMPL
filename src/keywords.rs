@@ -47,6 +47,8 @@ impl Keyword {
         keywords.insert("false".to_string(), TokenType::False);
         keywords.insert("null".to_string(), TokenType::Null);
         keywords.insert("input".to_string(), TokenType::Input);
+        keywords.insert("negative".to_string(), TokenType::Negative);
+        keywords.insert("new".to_string(), TokenType::New);
         Keyword { keywords }
     }
 

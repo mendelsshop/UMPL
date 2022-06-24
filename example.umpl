@@ -13,7 +13,7 @@ list it with (1:2)< ! creates a list with the values  1,2 (in hex), list can onl
 
 create bool with (true)<
 
-(if {(not bool)}) ( ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
+(if {(not bool)<}) ( ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
   (`hello`)> ! the bactick (`) is used to encapsulate a string
 ) else(
     (`by`)>

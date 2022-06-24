@@ -19,6 +19,7 @@ pub enum TokenType {
     Minus,
     Divide,
     Multiply,
+    Negative,
     // Comparison stuffs
     Equal,
     NotEqual,
@@ -54,6 +55,7 @@ pub enum TokenType {
     True,
     False,
     Input,
+    New,
 
     EOF,
 }
