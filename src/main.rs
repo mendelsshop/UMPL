@@ -5,7 +5,7 @@ use std::{
     path::Path,
     process::exit,
 };
-use umpl::{cli, lexer::Lexer};
+use umpl::{cli, error, lexer::Lexer, syntax};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
@@ -22,19 +22,22 @@ fn main() {
             print!(">> "); // print the prompt
             io::stdout().flush().unwrap();
             io::stdin().read_line(&mut input).unwrap(); // read the input
-            run_line(input.to_string());
+            run(input.to_string());
             full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
         }
     } else {
         // if we are not in repl mode ie we are reading a file
         let mut file = File::open(&parsed_args.file).unwrap(); // open the file
         let mut contents = String::new(); // create a string to hold the contents of the file
-        file.read_to_string(&mut contents).unwrap(); // read the file into the string
-                                                     // for (_num, line) in contents.lines().enumerate() {
-                                                     // iterate over the lines of the file
-                                                     // run_line((line))
-                                                     // }
-        run_line(contents);
+        match file.read_to_string(&mut contents) {
+            Ok(contents) => contents,
+            Err(_) => {
+                error::error(0, "");
+                0
+            }
+        }; // read the file into the string
+
+        run(contents);
 
         if parsed_args.repl && !parsed_args.file.is_empty() {
             // if we are in repl mode and we have a file to write to
@@ -60,10 +63,10 @@ fn main() {
     }
 }
 
-fn run_line(line: String) {
-    let mut lexer = Lexer::new(line);
-    let tokens = lexer.scan_tokens();
-    for token in tokens {
-        println!("{}", token);
-    }
+fn run(line: String) {
+    let parsed = syntax::parse(line);
+    println!("{:?}",parsed);
+    // for token in parsed {
+    //     println!("{}", token);
+    // }
 }

@@ -118,7 +118,6 @@ impl Lexer {
             }
         }
         let number: FloatLiteral = format!("0x{}", self.get_text())
-            .to_string()
             .parse()
             .expect("could not parse number");
         self.add_token(TokenType::Number {
@@ -133,14 +132,12 @@ impl Lexer {
         self.add_token(
             self.keywords
                 .get(&self.get_text())
-                .unwrap_or(TokenType::Identifier)
-                .clone(),
+                .unwrap_or(TokenType::Identifier),
         );
     }
 
     fn advance(&mut self) -> char {
         self.current += 1;
-        // ;
         let char_vec: Vec<char> = self.source.chars().collect();
         char_vec[self.current - 1]
     }

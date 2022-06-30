@@ -19,7 +19,7 @@
 `! means not`
 <br>
 
-# code
+# code:
 [`<expression>+`](#expression)   `&|`  [`<definitions>+`](#definitions)
 # expression:
 `"(",` [`<stuff>`](#stuff) `, ")", "<" | ">"` 
@@ -43,10 +43,10 @@
 [`<fn-keyword>`](#fn-keywords) `,` [`<function-params>`](#function-params)
 
 # function-params: 
-`"[",` [`<literal>`](#literal)+ `&|` [`<calling>`](#calling)`+ , ":"+,"]"`
+`"[",` [`<stuff>`](#stuff)+ `&|` [`<identifier>`](#identifier)`+ , ":"+,"]"`
 
 # functions:
-`"new"` [`<function>`](#function) `,` [`<function-params>`]()
+`"new"` [`<function>`](#function) `,` [`<function-params>`](#function-params)
 
 # function: 
 `any single unicode emoji`
@@ -54,21 +54,21 @@
 # definitions:
 [`<variable-definitions>`](#variable-definitions) `|` [`<function definitions>`]((#function-definitions)) `|` [`<list-definitions>`](#list-definitions) 
 
-# variable-definitions :
+# variable-definitions:
 `"create", ` [`<variable>`](#variable) `,"with",` [`<expression>`](#expression)
 
 # variable:
 [`<identifier>`](#identifier)
 
-# identifier
+# identifier:
 `!` [`<keyword>`](#keyword)
 <br>
 [`<ident-first>`](#ident-first) `,` [`<ident-other>+`](#ident-other)
 
-# ident-first
+# ident-first:
 `!` [`<number>`](#number) `a-zA-Z`
 
-# ident-other
+# ident-other:
 [`<number>`](#number) ` | a-zA-Z`
 
 # function-definitions:

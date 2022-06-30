@@ -43,7 +43,7 @@ pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
     (index, to_return)
 }
 
-pub fn get_dash_args(args: &Vec<String>, start_index: usize, args_struct: &mut ParsedArgs) {
+pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut ParsedArgs) {
     for arg in args[start_index..].iter() {
         // for each arg after the start index
         if arg.starts_with('-') {

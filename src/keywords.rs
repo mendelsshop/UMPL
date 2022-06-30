@@ -56,3 +56,8 @@ impl Keyword {
         self.keywords.get(name).cloned()
     }
 }
+impl Default for Keyword {
+    fn default() -> Self {
+        Self::new()
+    }
+}
