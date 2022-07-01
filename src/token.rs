@@ -58,7 +58,7 @@ pub enum TokenType {
     New,
 
     EOF,
-    Program
+    Program,
 }
 
 impl fmt::Display for TokenType {

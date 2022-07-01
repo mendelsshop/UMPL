@@ -20,7 +20,7 @@ pub enum Expr {
 }
 
 pub fn parse(src: String) -> Tree<Thing> {
-    let mut tokens =Lexer::new(src).scan_tokens().to_vec();
+    let mut tokens = Lexer::new(src).scan_tokens().to_vec();
     let mut program: Tree<Thing> = Tree::new(Token::new(TokenType::Program, "", 0));
     // loop until we have no more tokens
     // in the loop, we use parse_from_tokens to parse the next expression
@@ -30,7 +30,6 @@ pub fn parse(src: String) -> Tree<Thing> {
         program.add_child(expr);
     }
     program
-    
 }
 #[derive(Debug, Clone)]
 pub enum Tree<T> {
@@ -150,7 +149,9 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
             // println!("{:?}", token);
-        } else if token.token_type == TokenType::GreaterThanSymbol || token.token_type == TokenType::LessThanSymbol {
+        } else if token.token_type == TokenType::GreaterThanSymbol
+            || token.token_type == TokenType::LessThanSymbol
+        {
             error::error(1, "")
         }
         println!("{}", token);
@@ -172,7 +173,6 @@ impl Thing {
             _ => Thing::Other(token.token_type),
         }
     }
-    
 }
 
 impl fmt::Display for Thing {

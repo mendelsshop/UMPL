@@ -65,6 +65,5 @@ fn main() {
 
 fn run(line: String) {
     let parsed = syntax::parse(line);
-    syntax::print(parsed,0,0);
-    
+    syntax::print(parsed, 0, 0);
 }
