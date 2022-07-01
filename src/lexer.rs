@@ -57,8 +57,8 @@ impl Lexer {
                 }
             }
             '.' => self.add_token(TokenType::Dot),
-            '<' => self.add_token(TokenType::LessThan),
-            '>' => self.add_token(TokenType::GreaterThan),
+            '<' => self.add_token(TokenType::LessThanSymbol),
+            '>' => self.add_token(TokenType::GreaterThanSymbol),
             ':' => self.add_token(TokenType::Colon),
             '\n' => self.line += 1,
             '`' => self.string(),

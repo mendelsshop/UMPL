@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 
-use crate::error;
 use crate::token::TokenType;
+use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
 
 pub enum Literal {
@@ -23,7 +23,7 @@ pub fn parse(src: String) -> Tree<Thing> {
     // for i in Lexer::new(src.clone()).scan_tokens().to_vec() {
     //     println!("{}", i.token_type)
     // }
-    parse_from_token(&mut Lexer::new(src).scan_tokens().to_vec())
+    parse_from_token(&mut Lexer::new(src).scan_tokens().to_vec(), 0)
 }
 #[derive(Debug, Clone)]
 pub enum Tree<T> {
@@ -76,31 +76,59 @@ fn space_for_level(level: usize) -> String {
     s
 }
 
-fn parse_from_token(tokens: &mut Vec<Token>) -> Tree<Thing> {
+fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thing> {
     if tokens.is_empty() {
         error::error(0, "")
     }
     let token = tokens.remove(0);
-
+    println!("f {} at level {}", token, paren_count);
     if token.token_type == TokenType::LeftParen {
+        paren_count += 1;
         let mut stuff = Vec::new();
         while tokens[0].token_type != TokenType::RightParen {
-            stuff.push(parse_from_token(tokens));
+            stuff.push(parse_from_token(tokens, paren_count));
         }
-        tokens.remove(0);
+        if tokens[0].token_type == TokenType::RightParen {
+            paren_count -= 1;
+            tokens.remove(0);
+        };
+
+        println!("a {} at level {}", tokens[0], paren_count);
+        match tokens[0].token_type {
+            // TODO: figure outr how to handle function which have multpiple expressions and we have extra parentheses level
+            TokenType::GreaterThanSymbol => {
+                if paren_count == 0 {
+                    stuff.push(Tree::Leaf(Thing::Other(TokenType::GreaterThanSymbol)))
+                } else {
+                    error::error(12, "")
+                }
+            }
+            TokenType::LessThanSymbol => {
+                if paren_count == 0 {
+                    stuff.push(Tree::Leaf(Thing::Other(TokenType::LessThanSymbol)))
+                } else {
+                    error::error(12, "")
+                }
+            }
+            _ => {
+                if paren_count == 0 {
+                    error::error(12, "")
+                };
+            }
+        }
 
         Tree::Branch(stuff)
     } else if token.token_type == TokenType::RightParen {
         error::error(0, "");
         Tree::Leaf(Thing::Other(TokenType::Null))
     } else {
-        // println!("{:?}", token.token_type);
-        // let keywords = keywords::Keyword::new();
-        // let keywords = keywords.keywords;
-        // println!("{:?}", keywords);
-        // if keywords.is_keyword(&token.token_type) {
-        //     println!("{:?}", token);
-        // }
+        let keywords = keywords::Keyword::new();
+        if keywords.is_keyword(&token.token_type) {
+            // println!("{:?}", token);
+        } else if token.token_type == TokenType::GreaterThanSymbol || token.token_type == TokenType::LessThanSymbol {
+            error::error(1, "")
+        }
+        println!("{}", token);
         Tree::Leaf(atom(token))
     }
 }
