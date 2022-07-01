@@ -20,15 +20,38 @@ pub enum Expr {
 }
 
 pub fn parse(src: String) -> Tree<Thing> {
-    // for i in Lexer::new(src.clone()).scan_tokens().to_vec() {
-    //     println!("{}", i.token_type)
-    // }
-    parse_from_token(&mut Lexer::new(src).scan_tokens().to_vec(), 0)
+    let mut tokens =Lexer::new(src).scan_tokens().to_vec();
+    let mut program: Tree<Thing> = Tree::new(Token::new(TokenType::Program, "", 0));
+    // loop until we have no more tokens
+    // in the loop, we use parse_from_tokens to parse the next expression
+    // and add it to the program tree
+    while !tokens.is_empty() {
+        let expr = parse_from_token(&mut tokens, 0);
+        program.add_child(expr);
+    }
+    program
+    
 }
 #[derive(Debug, Clone)]
 pub enum Tree<T> {
     Leaf(T),
     Branch(Vec<Tree<T>>),
+}
+
+impl Tree<Thing> {
+    pub fn new(token: Token) -> Tree<Thing> {
+        Tree::Leaf(Thing::new(token))
+    }
+    pub fn add_child(&mut self, child: Tree<Thing>) {
+        match self {
+            Tree::Leaf(thing) => {
+                *self = Tree::Branch(vec![Tree::Leaf(thing.clone()), child]);
+            }
+            Tree::Branch(children) => {
+                children.push(child);
+            }
+        }
+    }
 }
 impl fmt::Display for Tree<Thing> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -98,14 +121,16 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
             // TODO: figure outr how to handle function which have multpiple expressions and we have extra parentheses level
             TokenType::GreaterThanSymbol => {
                 if paren_count == 0 {
-                    stuff.push(Tree::Leaf(Thing::Other(TokenType::GreaterThanSymbol)))
+                    stuff.push(Tree::Leaf(Thing::Other(TokenType::GreaterThanSymbol)));
+                    tokens.remove(0);
                 } else {
                     error::error(12, "")
                 }
             }
             TokenType::LessThanSymbol => {
                 if paren_count == 0 {
-                    stuff.push(Tree::Leaf(Thing::Other(TokenType::LessThanSymbol)))
+                    stuff.push(Tree::Leaf(Thing::Other(TokenType::LessThanSymbol)));
+                    tokens.remove(0);
                 } else {
                     error::error(12, "")
                 }
@@ -137,6 +162,17 @@ pub enum Thing {
     Number(f64),
     String(String),
     Other(TokenType),
+}
+
+impl Thing {
+    pub fn new(token: Token) -> Thing {
+        match token.token_type {
+            TokenType::Number { literal } => Thing::Number(literal),
+            TokenType::String { literal } => Thing::String(literal),
+            _ => Thing::Other(token.token_type),
+        }
+    }
+    
 }
 
 impl fmt::Display for Thing {
