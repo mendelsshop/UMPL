@@ -60,9 +60,9 @@ pub enum TokenType {
     EOF,
 }
 
-impl fmt::Display for TokenType{
+impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TokenType {:?}", match self { _ => self})
+        write!(f, "TokenType {self:?}",)
     }
 }
 

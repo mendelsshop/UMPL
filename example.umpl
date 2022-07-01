@@ -1,4 +1,4 @@
-((add 1:10))> ! prints 17, the greater than signifies that this should be the printed, the bang symbol signifies a comment, numbers must be in hexadecimal but will be printed in decimal
+((plus 1:10))> ! prints 17, the greater than signifies that this should be the printed, the bang symbol signifies a comment, numbers must be in hexadecimal but will be printed in decimal
 
 potato 😂[arg1:arg2] ( ! to create a function we use the potato keyword, functions must be nameed with a single emoji, we put the args seperated by colon (:) in brackets ([])
     create final with ((add arg1 arg2))< ! ! we use the create keyword to create a variable and the with keyword to assign a value to the variable

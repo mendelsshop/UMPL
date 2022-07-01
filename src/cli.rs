@@ -53,9 +53,6 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     args_struct.repl = true;
                 } else if ['f'].contains(&char_part_arg) {
                     args_struct.force = true;
-                } else if ['h'].contains(&char_part_arg) {
-                    println!("{}", usage());
-                    exit(1);
                 } else {
                     println!("{}", usage());
                     exit(1);

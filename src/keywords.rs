@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::token::TokenType;
 #[derive(Clone)]
 pub struct Keyword {
-    keywords: HashMap<String, TokenType>,
+    pub keywords: HashMap<String, TokenType>,
 }
 
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
@@ -54,6 +54,10 @@ impl Keyword {
 
     pub fn get(&self, name: &str) -> Option<TokenType> {
         self.keywords.get(name).cloned()
+    }
+
+    pub fn is_keyword(&self, token_type: &TokenType) -> bool {
+        self.keywords.values().any(|val| val == token_type)
     }
 }
 impl Default for Keyword {
