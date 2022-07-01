@@ -1,4 +1,4 @@
-[![Clippy check](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml/badge.svg)](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml)
+[![cargo clippy](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml/badge.svg)](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml)
 # UMPL
 This my compiler and languge made in rust, and also how I'm learning rust.
 <br>
