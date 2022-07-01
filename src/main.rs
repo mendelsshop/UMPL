@@ -12,7 +12,7 @@ fn main() {
     let (index, mut parsed_args) = cli::get_string_args(&args); // get the ile name args and the index of the firrst flag
     if index != 0 {
         // if there are any args after the program name parse them
-        cli::get_dash_args(&args, index, &mut parsed_args);
+        cli::get_dash_args(&args, index.clone), &mut parsed_args);
     }
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
