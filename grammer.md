@@ -20,13 +20,13 @@
 <br>
 
 # code:
-[`<expression>+`](#expression)   `&|`  [`<definitions>+`](#definitions)
+[`<expression>+`](#expression)   `&|`  [`<definitions>+`](#definitions) `&|` [`<statements>+`](#statements)
+
 # expression:
 `"(",` [`<stuff>`](#stuff) `, ")", "<" | ">"` 
 
 # stuff:
-[`<literal>`](#literal) `|` [`<calling>`](#calling)
-
+[`<literal>`](#literal) `|` [`<calling>`](#calling) `|` [`<identifier>`](#identifier)
 # literal:
 [`<number>`](#number) `|` [`<string>`](#string) `| "true" | "false" | "null"`
 
@@ -43,7 +43,10 @@
 [`<fn-keyword>`](#fn-keywords) `,` [`<function-params>`](#function-params)
 
 # function-params: 
-`"[",` [`<stuff>`](#stuff)+ `&|` [`<identifier>`](#identifier)`+ , ":"+,"]"`
+`"[",` [`<stuff>+`](#other-stuff) ` , ":"+,"]"`
+
+# other-stuff:
+[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier)
 
 # functions:
 `"new"` [`<function>`](#function) `,` [`<function-params>`](#function-params)
@@ -52,10 +55,10 @@
 `any single unicode emoji`
 
 # definitions:
-[`<variable-definitions>`](#variable-definitions) `|` [`<function definitions>`]((#function-definitions)) `|` [`<list-definitions>`](#list-definitions) 
+[`<variable-definitions>`](#variable-definitions) `|` [`<function definitions>`](#function-definitions) `|` [`<list-definitions>`](#list-definitions) 
 
 # variable-definitions:
-`"create", ` [`<variable>`](#variable) `,"with",` [`<expression>`](#expression)
+`"create", ` [`<variable>`](#variable) `,"with",` [`<other-stuff>`](#other-stuff)
 
 # variable:
 [`<identifier>`](#identifier)
@@ -72,14 +75,21 @@
 [`<number>`](#number) ` | a-zA-Z`
 
 # function-definitions:
-`"potato,"` [`<function>`](#function) `,` [`<function-args>`](#functions-args) `,"(",` [`<code>`](#code) `,")"`
+`"potato,"` [`<function>`](#function) `,` [`<function-args>`](#functions-args) `,"⧼",` [`<code>`](#code) `&|` [`<return>`](#return) `,` [`"⧽"`
 
 # functions-args:
-`"[",` [`<identifier>+`](#identifier) `,":"+,"]"`
+[`<number of arguments>`](#number) 
 
+# return
+`"return" ,` [`<other-stuff>+`](#other-stuff)
 # list-definitions:
 `"list"` [`<variable>`](#variable) `"with"` [`<list-element>`](#list-elements)
 
 # list-elements:
-`"[",` [`<stuff>`](#stuff)`,":",`[`<stuff>`](#stuff) `,"]", "<" | ">"`
+`"[",` [`<stuff>`](#other-stuff)`,":",`[`<stuff>`](#other-stuff) `,"]", "<" | ">"`
 
+# statements
+[`<loop>`](#loop) `|` [`if-else`](#if-else)
+
+# loop 
+`"loop", "⧼"` [`<code>`](#code) `&| ("break" | "continue") ,"⧽"`
