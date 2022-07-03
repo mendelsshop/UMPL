@@ -28,13 +28,16 @@
 # stuff:
 [`<literal>`](#literal) `|` [`<calling>`](#calling) `|` [`<identifier>`](#identifier)
 # literal:
-[`<number>`](#number) `|` [`<string>`](#string) `| "true" | "false" | "null"`
+[`<number>`](#number) `|` [`<string>`](#string) `|` [`<boolean>`](#boolean) | `"null"`
 
 # number:
 `"0x" &| 0-9A-F`
 
 # string:
 ``"`", Any string of unicode characters, "`"  ``
+
+# boolean:
+`"true" | "false"`
 
 # calling:
 `"(",`[ `<internal>`](#internal) `|` [`<functions>`](#functions) `,")"`
@@ -93,3 +96,7 @@
 
 # loop 
 `"loop", "⧼"` [`<code>`](#code) `&| ("break" | "continue") ,"⧽"`
+
+# if-else
+`"if", "{",` ['<boolean: ](#boolean) [(literal |](#literal)[` expression)>`](#expression) `"}", ⧼",` [`<code>`](#code) `,"⧽",
+"else", "⧼,"` [`<code>`](#code) `,"⧽"`
