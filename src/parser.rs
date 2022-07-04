@@ -117,23 +117,38 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         match tokens[0].token_type {
             TokenType::GreaterThanSymbol => {
                 if paren_count == 0 {
-                    stuff.push(Tree::Leaf(Thing::Other(TokenType::GreaterThanSymbol,tokens[0].line)));
+                    stuff.push(Tree::Leaf(Thing::Other(
+                        TokenType::GreaterThanSymbol,
+                        tokens[0].line,
+                    )));
                     tokens.remove(0);
                 } else {
-                    error::error(tokens[0].line, "greater than symbol (>) no allowed in middle of expression");
+                    error::error(
+                        tokens[0].line,
+                        "greater than symbol (>) no allowed in middle of expression",
+                    );
                 }
             }
             TokenType::LessThanSymbol => {
                 if paren_count == 0 {
-                    stuff.push(Tree::Leaf(Thing::Other(TokenType::LessThanSymbol, tokens[0].line)));
+                    stuff.push(Tree::Leaf(Thing::Other(
+                        TokenType::LessThanSymbol,
+                        tokens[0].line,
+                    )));
                     tokens.remove(0);
                 } else {
-                    error::error(tokens[0].line, "less than symbol (<) no allowed in middle of expression");
+                    error::error(
+                        tokens[0].line,
+                        "less than symbol (<) no allowed in middle of expression",
+                    );
                 }
             }
             _ => {
                 if paren_count == 0 {
-                    error::error(tokens[0].line, "greater than symbol (>) or less than symbol (<) expected");
+                    error::error(
+                        tokens[0].line,
+                        "greater than symbol (>) or less than symbol (<) expected",
+                    );
                 };
             }
         }
@@ -144,7 +159,9 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
     } else {
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
-        } else if token.token_type == TokenType::GreaterThanSymbol || token.token_type == TokenType::LessThanSymbol{
+        } else if token.token_type == TokenType::GreaterThanSymbol
+            || token.token_type == TokenType::LessThanSymbol
+        {
             error::error(token.line, "greater than symbol (>) or less than symbol (<) not allowed in middle of expression");
         }
         Tree::Leaf(atom(token))
