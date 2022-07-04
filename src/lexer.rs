@@ -75,7 +75,7 @@ impl Lexer {
                 } else if emoji::is_emoji(c) {
                     self.add_unicode_token(TokenType::Identifier);
                 } else {
-                    error::error(self.line, "")
+                    error::error(self.line, "uknown character");
                 }
             }
         }
@@ -90,7 +90,7 @@ impl Lexer {
         }
 
         if self.is_at_end() {
-            error::error(self.line, "")
+            error::error(self.line, "unterminated string");
         }
 
         self.advance();

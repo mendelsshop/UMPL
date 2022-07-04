@@ -56,7 +56,7 @@ impl fmt::Display for Tree<Thing> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // let mut level = 0;
         match self {
-            Tree::Leaf(t) => write!(f, "{} ", t),
+            Tree::Leaf(t) => write!(f, "{:?} ", t),
             Tree::Branch(t) => {
                 write!(f, "{{ ",)?;
                 for i in t {
@@ -100,7 +100,7 @@ fn space_for_level(level: usize) -> String {
 
 fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thing> {
     if tokens.is_empty() {
-        error::error(0, "")
+        error::error(55, "no tokens found");
     }
     let token = tokens.remove(0);
     if token.token_type == TokenType::LeftParen {
@@ -115,58 +115,54 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         };
 
         match tokens[0].token_type {
-            // TODO: figure outr how to handle function which have multpiple expressions and we have extra parentheses level
             TokenType::GreaterThanSymbol => {
                 if paren_count == 0 {
-                    stuff.push(Tree::Leaf(Thing::Other(TokenType::GreaterThanSymbol)));
+                    stuff.push(Tree::Leaf(Thing::Other(TokenType::GreaterThanSymbol,tokens[0].line)));
                     tokens.remove(0);
                 } else {
-                    error::error(12, "")
+                    error::error(tokens[0].line, "greater than symbol (>) no allowed in middle of expression");
                 }
             }
             TokenType::LessThanSymbol => {
                 if paren_count == 0 {
-                    stuff.push(Tree::Leaf(Thing::Other(TokenType::LessThanSymbol)));
+                    stuff.push(Tree::Leaf(Thing::Other(TokenType::LessThanSymbol, tokens[0].line)));
                     tokens.remove(0);
                 } else {
-                    error::error(12, "")
+                    error::error(tokens[0].line, "less than symbol (<) no allowed in middle of expression");
                 }
             }
             _ => {
                 if paren_count == 0 {
-                    error::error(12, "")
+                    error::error(tokens[0].line, "greater than symbol (>) or less than symbol (<) expected");
                 };
             }
         }
-
         Tree::Branch(stuff)
     } else if token.token_type == TokenType::RightParen {
-        error::error(0, "");
-        Tree::Leaf(Thing::Other(TokenType::Null))
+        error::error(token.line, "unmatched right parenthesis");
+        Tree::Leaf(Thing::Other(TokenType::Null, token.line))
     } else {
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
-        } else if token.token_type == TokenType::GreaterThanSymbol
-            || token.token_type == TokenType::LessThanSymbol
-        {
-            error::error(1, "")
+        } else if token.token_type == TokenType::GreaterThanSymbol || token.token_type == TokenType::LessThanSymbol{
+            error::error(token.line, "greater than symbol (>) or less than symbol (<) not allowed in middle of expression");
         }
         Tree::Leaf(atom(token))
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Thing {
-    Number(f64),
-    String(String),
-    Other(TokenType),
+    Number(f64, i32),
+    String(String, i32),
+    Other(TokenType, i32),
 }
 
 impl Thing {
     pub fn new(token: Token) -> Thing {
         match token.token_type {
-            TokenType::Number { literal } => Thing::Number(literal),
-            TokenType::String { literal } => Thing::String(literal),
-            _ => Thing::Other(token.token_type),
+            TokenType::Number { literal } => Thing::Number(literal, token.line),
+            TokenType::String { literal } => Thing::String(literal, token.line),
+            _ => Thing::Other(token.token_type, token.line),
         }
     }
 }
@@ -174,16 +170,26 @@ impl Thing {
 impl fmt::Display for Thing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Thing::Number(n) => write!(f, "{}", n),
-            Thing::String(s) => write!(f, "{}", s),
-            Thing::Other(t) => write!(f, "{}", t),
+            Thing::Number(n, _) => write!(f, "{}", n),
+            Thing::String(s, _) => write!(f, "{}", s),
+            Thing::Other(t, _) => write!(f, "{}", t),
+        }
+    }
+}
+
+impl fmt::Debug for Thing {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Thing::Number(n, l) => write!(f, "Number({}) at line: {}", n, l),
+            Thing::String(s, l) => write!(f, "String({}) at line: {}", s, l),
+            Thing::Other(t, l) => write!(f, "TokenType::{:?} at line: {}", t, l),
         }
     }
 }
 fn atom(token: Token) -> Thing {
     match token.token_type {
-        TokenType::Number { literal } => Thing::Number(literal),
-        TokenType::String { literal } => Thing::String(literal),
-        _ => Thing::Other(token.token_type),
+        TokenType::Number { literal } => Thing::Number(literal, token.line),
+        TokenType::String { literal } => Thing::String(literal, token.line),
+        _ => Thing::Other(token.token_type, token.line),
     }
 }
