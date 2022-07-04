@@ -5,7 +5,7 @@ use std::{
     path::Path,
     process::exit,
 };
-use umpl::{cli, error, syntax};
+use umpl::{cli, error, parser};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
@@ -64,6 +64,6 @@ fn main() {
 }
 
 fn run(line: String) {
-    let parsed = syntax::parse(line);
-    syntax::print(parsed, 0, 0);
+    let parsed = parser::parse(line);
+    parser::print(parsed, 0, 0);
 }

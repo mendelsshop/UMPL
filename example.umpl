@@ -1,10 +1,10 @@
 ((plus 1:10))> ! prints 17, the greater than signifies that this should be the printed, the bang symbol signifies a comment, numbers must be in hexadecimal but will be printed in decimal
 
-potato 😂3 ⧼ ! to create a function we use the potato keyword, functions must be nameed with a single emoji, we put the number of args in brackets ([])
+potato 😂2 ⧼ ! to create a function we use the potato keyword, functions must be nameed with a single emoji, we put the number of args and then ⧼⧽ is where the code goes
     create final with ((add $1 $2))< ! ! we use the create keyword to create a variable and the with keyword to assign a value to the variable, to refrence the args from a function use $1 for the first arg and so on
     ! adds both arg1 and arg2, the less than signifies that this should not be the printed and sets it to the final variable
     return final
-}
+⧽
 (new 😂 10:0x1A)> ! we use the new keyword to call a function followed by function names and colon separated args, prints 32, when the first digit of number is a letre prefix with 0x
 
 list it with [1:2]< ! creates a list with the values  1,2 (in hex), list can only have two elements
