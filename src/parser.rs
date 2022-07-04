@@ -103,7 +103,6 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         error::error(0, "")
     }
     let token = tokens.remove(0);
-    println!("f {} at level {}", token, paren_count);
     if token.token_type == TokenType::LeftParen {
         paren_count += 1;
         let mut stuff = Vec::new();
@@ -115,7 +114,6 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
             tokens.remove(0);
         };
 
-        println!("a {} at level {}", tokens[0], paren_count);
         match tokens[0].token_type {
             // TODO: figure outr how to handle function which have multpiple expressions and we have extra parentheses level
             TokenType::GreaterThanSymbol => {
@@ -148,13 +146,11 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
     } else {
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
-            // println!("{:?}", token);
         } else if token.token_type == TokenType::GreaterThanSymbol
             || token.token_type == TokenType::LessThanSymbol
         {
             error::error(1, "")
         }
-        println!("{}", token);
         Tree::Leaf(atom(token))
     }
 }

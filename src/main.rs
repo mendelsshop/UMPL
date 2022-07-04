@@ -37,7 +37,7 @@ fn main() {
             }
         }; // read the file into the string
 
-        run(contents);
+        run(contents); // run the file
 
         if parsed_args.repl && !parsed_args.file.is_empty() {
             // if we are in repl mode and we have a file to write to
@@ -65,5 +65,5 @@ fn main() {
 
 fn run(line: String) {
     let parsed = parser::parse(line);
-    parser::print(parsed, 0, 0);
+    println!("{}", parsed);
 }

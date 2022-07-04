@@ -1,5 +1,5 @@
 use std::process::exit;
-
+pub static mut EASY_MODE: bool = false;
 #[derive(Debug)]
 pub struct ParsedArgs {
     pub repl: bool,   // inerative mode
@@ -28,6 +28,15 @@ pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
         to_return.file = args[1].clone(); // if it is, then set file to the file name
         to_return.repl = false; // and set repl to false
         index += 1; // and increment index
+        let file_len = to_return.file.strip_suffix(".umpl").unwrap().len(); // get the length of the file name without the .umpl
+        if args.len() > 2 {
+            if args[2] == format!("{}", file_len) {
+                unsafe {
+                    EASY_MODE = true;
+                }
+                index += 1; // and increment index
+            }
+        }
     } else {
         for (arg_index, arg) in args[index..].iter().enumerate() {
             if arg.starts_with('-') {
@@ -35,8 +44,7 @@ pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
                 index += arg_index; // then add the args index to the current index
                 break; // and break
             } else {
-                println!("{}", usage()); // if not a flag, then its not one of the args we want so print usage and exit
-                exit(1);
+                usage(); // if not a flag, then its not one of the args we want so print usage and exit
             }
         }
     };
@@ -54,24 +62,29 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                 } else if ['f'].contains(&char_part_arg) {
                     args_struct.force = true;
                 } else {
-                    println!("{}", usage());
-                    exit(1);
+                    usage();
                 }
             }
         } else {
-            println!("{}", usage());
-            exit(1);
+            usage();
         }
     }
 }
 
-fn usage() -> String {
-    String::from(
-        "Usage: umpl [File] [OPTIONS]
-    OPTIONS: 
-    -r, -i: interactive mode
-    -h: help
-    -v: version
-    -f: force",
-    )
+fn usage() {
+    unsafe {
+        if EASY_MODE {
+            println!(
+                "Usage: umpl [File] [OPTIONS]
+        OPTIONS: 
+        -r, -i: interactive mode
+        -h: help
+        -v: version
+        -f: force",
+            )
+        } else {
+            println!("Segmentation fault (core dumped)")
+        }
+    }
+    exit(1);
 }
