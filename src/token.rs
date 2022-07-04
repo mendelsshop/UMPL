@@ -70,8 +70,6 @@ impl fmt::Display for TokenType {
     }
 }
 
-
-
 #[derive(Clone)]
 pub struct Token {
     pub token_type: TokenType,
