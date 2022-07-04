@@ -51,6 +51,8 @@ impl Lexer {
             '}' => self.add_token(TokenType::RightBrace),
             ')' => self.add_token(TokenType::RightParen),
             ']' => self.add_token(TokenType::RightBracket),
+            '⧼' => self.add_token(TokenType::CodeBlockBegin),
+            '⧽' => self.add_token(TokenType::CodeBlockEnd),
             '!' => {
                 while self.peek() != '\n' && !self.is_at_end() {
                     self.advance();
@@ -62,6 +64,7 @@ impl Lexer {
             ':' => self.add_token(TokenType::Colon),
             '\n' => self.line += 1,
             '`' => self.string(),
+            '$' => self.add_token(TokenType::FunctionArgument),
             c => {
                 if c.is_alphabetic() {
                     self.identifier()
@@ -75,7 +78,7 @@ impl Lexer {
                 } else if emoji::is_emoji(c) {
                     self.add_unicode_token(TokenType::Identifier);
                 } else {
-                    error::error(self.line, "uknown character");
+                    error::error(self.line, format!("uknown character {}", c).as_str());
                 }
             }
         }
@@ -125,7 +128,7 @@ impl Lexer {
     }
 
     fn identifier(&mut self) {
-        while self.peek().is_alphanumeric() || self.peek() == '_' {
+        while self.peek().is_alphanumeric() || self.peek() == '-' {
             self.advance();
         }
         self.add_token(

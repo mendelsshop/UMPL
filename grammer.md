@@ -72,10 +72,10 @@
 [`<ident-first>`](#ident-first) `,` [`<ident-other>+`](#ident-other)
 
 # ident-first:
-`!` [`<number>`](#number) `a-zA-Z`
+`!` [`<number>`](#number) `a-zA-Z/-`
 
 # ident-other:
-[`<number>`](#number) ` | a-zA-Z`
+[`<number>`](#number) ` | a-zA-Z/-`
 
 # function-definitions:
 `"potato,"` [`<function>`](#function) `,` [`<function-args>`](#functions-args) `,"⧼",` [`<code>`](#code) `&|` [`<return>`](#return) `,` [`"⧽"`

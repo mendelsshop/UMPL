@@ -56,7 +56,7 @@ impl fmt::Display for Tree<Thing> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // let mut level = 0;
         match self {
-            Tree::Leaf(t) => write!(f, "{:?} ", t),
+            Tree::Leaf(t) => write!(f, "{} ", t),
             Tree::Branch(t) => {
                 write!(f, "{{ ",)?;
                 for i in t {
@@ -172,7 +172,7 @@ impl fmt::Display for Thing {
         match self {
             Thing::Number(n, _) => write!(f, "{}", n),
             Thing::String(s, _) => write!(f, "{}", s),
-            Thing::Other(t, _) => write!(f, "{}", t),
+            Thing::Other(t, _) => write!(f, "{:?}", t),
         }
     }
 }

@@ -32,7 +32,7 @@ fn main() {
         match file.read_to_string(&mut contents) {
             Ok(contents) => contents,
             Err(_) => {
-                error::error(0, "");
+                error::error(0, "could not read file");
                 0
             }
         }; // read the file into the string

@@ -14,6 +14,8 @@ pub enum TokenType {
     LeftBracket,
     RightBrace,
     LeftBrace,
+    CodeBlockBegin,
+    CodeBlockEnd,
     // math operators
     Plus,
     Minus,
@@ -56,6 +58,7 @@ pub enum TokenType {
     False,
     Input,
     New,
+    FunctionArgument,
 
     EOF,
     Program,
