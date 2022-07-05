@@ -76,7 +76,7 @@ impl Lexer {
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
-                    self.add_unicode_token(TokenType::FunctionIdentifier{ name: c });
+                    self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
                 } else {
                     error::error(self.line, format!("uknown character {}", c).as_str());
                 }
@@ -134,7 +134,9 @@ impl Lexer {
         self.add_token(
             self.keywords
                 .get(&self.get_text())
-                .unwrap_or(TokenType::Identifier {name: self.get_text()}),
+                .unwrap_or(TokenType::Identifier {
+                    name: self.get_text(),
+                }),
         );
     }
 

@@ -209,7 +209,9 @@ impl fmt::Debug for Thing {
             Thing::String(s, l) => write!(f, "String({}) at line: {}", s, l),
             Thing::Other(t, l) => write!(f, "TokenType::{:?} at line: {}", t, l),
             Thing::Identifier(t, l) => write!(f, "Identifier({}) at line: {}", t, l),
-            Thing::FunctionIdentifier(t, l) => write!(f, "FunctionIdentifier({}) at line: {}", t, l),
+            Thing::FunctionIdentifier(t, l) => {
+                write!(f, "FunctionIdentifier({}) at line: {}", t, l)
+            }
         }
     }
 }
