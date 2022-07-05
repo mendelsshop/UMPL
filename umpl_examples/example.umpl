@@ -7,7 +7,7 @@ potato 😂2 ⧼ ! to create a function we use the potato keyword, functions mus
 ⧽
 (new 😂 10:0x1A)> ! we use the new keyword to call a function followed by function names and colon separated args, prints 32, when the first digit of number is a letre prefix with 0x
 
-list it with [1:2]< ! creates a list with the values  1,2 (in hex), list can only have two elements
+list it with [((not true))>:2] ! creates a list with the values  1,2 (in hex), list can only have two elements
 (it.first with 2)< ! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
 (it.second with 4)> ! sets the second element of the it list to 4 and print its
 
@@ -29,11 +29,10 @@ if {true} ⧼ ! there is now else, use nested if elses, condotins must be in {} 
 ⧽
 
 loop ⧼
-  create input with (input `continue?`)<
-  if {(eq input `y`)<} ⧼ ! there is now else, use nested if elses, condotins must be in {} and we can use nested () within the 
+  create input with (inputs `continue?`)<
+  if {(eq inputs `y`)<} ⧼ ! there is now else, use nested if elses, condotins must be in {} and we can use nested () within the 
     continue
   ⧽ else ⧼
-  ! what the if/esle do can be nothing if you dont pu anything in the parenthesis
+    break ! what the if/esle do can be nothing if you dont pu anything in the parenthesis
   ⧽
-  break
 ⧽

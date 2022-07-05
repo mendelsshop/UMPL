@@ -33,7 +33,8 @@ pub enum TokenType {
     Or,
     Not,
     // variable stuff
-    Identifier,
+    Identifier { name: String },
+    FunctionIdentifier { name: char },
     String { literal: String },
     Number { literal: f64 },
     Create,

@@ -49,6 +49,7 @@ impl Keyword {
         keywords.insert("input".to_string(), TokenType::Input);
         keywords.insert("negative".to_string(), TokenType::Negative);
         keywords.insert("new".to_string(), TokenType::New);
+        keywords.insert("input".to_string(), TokenType::Input);
         Keyword { keywords }
     }
 

@@ -169,8 +169,12 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
 }
 #[derive(Clone)]
 pub enum Thing {
+    // we have vairants for each type of token that has a value ie number or the name of an identifier
     Number(f64, i32),
     String(String, i32),
+    Identifier(String, i32),
+    FunctionIdentifier(char, i32),
+    // for the rest of the tokens we just have the token type and the line number
     Other(TokenType, i32),
 }
 
@@ -179,6 +183,8 @@ impl Thing {
         match token.token_type {
             TokenType::Number { literal } => Thing::Number(literal, token.line),
             TokenType::String { literal } => Thing::String(literal, token.line),
+            TokenType::Identifier { name } => Thing::Identifier(name, token.line),
+            TokenType::FunctionIdentifier { name } => Thing::FunctionIdentifier(name, token.line),
             _ => Thing::Other(token.token_type, token.line),
         }
     }
@@ -190,6 +196,8 @@ impl fmt::Display for Thing {
             Thing::Number(n, _) => write!(f, "{}", n),
             Thing::String(s, _) => write!(f, "{}", s),
             Thing::Other(t, _) => write!(f, "{:?}", t),
+            Thing::Identifier(s, _) => write!(f, "Identifier({})", s),
+            Thing::FunctionIdentifier(s, _) => write!(f, "FunctionIdentifier({})", s),
         }
     }
 }
@@ -200,6 +208,8 @@ impl fmt::Debug for Thing {
             Thing::Number(n, l) => write!(f, "Number({}) at line: {}", n, l),
             Thing::String(s, l) => write!(f, "String({}) at line: {}", s, l),
             Thing::Other(t, l) => write!(f, "TokenType::{:?} at line: {}", t, l),
+            Thing::Identifier(t, l) => write!(f, "Identifier({}) at line: {}", t, l),
+            Thing::FunctionIdentifier(t, l) => write!(f, "FunctionIdentifier({}) at line: {}", t, l),
         }
     }
 }
@@ -207,6 +217,8 @@ fn atom(token: Token) -> Thing {
     match token.token_type {
         TokenType::Number { literal } => Thing::Number(literal, token.line),
         TokenType::String { literal } => Thing::String(literal, token.line),
+        TokenType::Identifier { name } => Thing::Identifier(name, token.line),
+        TokenType::FunctionIdentifier { name } => Thing::FunctionIdentifier(name, token.line),
         _ => Thing::Other(token.token_type, token.line),
     }
 }

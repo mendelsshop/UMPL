@@ -29,14 +29,13 @@ pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
         to_return.repl = false; // and set repl to false
         index += 1; // and increment index
         let file_len = to_return.file.strip_suffix(".umpl").unwrap().len(); // get the length of the file name without the .umpl
-        if args.len() > 2 {
-            if args[2] == format!("{}", file_len) {
+        if args.len() > 2 &&args[2] == format!("{}", file_len) {
                 unsafe {
                     EASY_MODE = true;
                 }
                 index += 1; // and increment index
             }
-        }
+        
     } else {
         for (arg_index, arg) in args[index..].iter().enumerate() {
             if arg.starts_with('-') {
