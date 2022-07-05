@@ -181,7 +181,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                                 function.add_child(parse_from_token(tokens, paren_count));
                             }
                             return Tree::Leaf(Thing::FunctionIdentifier(
-                                name.clone(),
+                                *name,
                                 Box::new(function),
                                 num_args,
                                 tokens[0].line,
