@@ -12,7 +12,7 @@ fn report(line: i32, where_: &str, message: &str) {
     if message.is_empty() {
         message = "Segmentation fault (core dumped)";
     }
-    println!("[line: {}], Error{}: {}", line, where_, message);
+    eprintln!("[line: {}], Error{}: {}", line, where_, message);
     exit(1);
 }
 
