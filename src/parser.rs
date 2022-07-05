@@ -1,5 +1,4 @@
 use std::fmt::{self, Debug};
-
 use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
@@ -145,9 +144,46 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
             match token.token_type {
-                TokenType::Potato => match &tokens[0].token_type {
+                TokenType::Potato => match &tokens[0].token_type.clone() {
                     TokenType::FunctionIdentifier { name } => {
                         tokens.remove(0);
+                        // check if the next token is a number and save it in a vairable num_args
+                        let num_args = match tokens[0].token_type {
+                            TokenType::Number { literal } => {
+                                tokens.remove(0);
+                                if literal.trunc() == literal {
+                                    // tokens.remove(0);
+                                    literal
+                                }
+                                else {
+                                    error::error(
+                                        tokens[0].line,
+                                        format!("number expected in function declaration found floating point number literal with {}", literal).as_str(),
+                                    );
+                                    0f64
+                                }
+                            }
+                            TokenType::CodeBlockBegin => {0f64}
+                            _ => {error::error(
+                                tokens[0].line,
+                                "number expected after function identifier",
+                            );0f64}
+                        };
+                        if tokens[0].token_type == TokenType::CodeBlockBegin {
+                            println!("{}", tokens[0].line);
+                            let mut function: Tree<Thing> = Tree::new(Token::new(TokenType::Function, "", tokens[0].line));
+                            println!("{}", function);
+                            tokens.remove(0);
+                            while tokens[0].token_type != TokenType::CodeBlockEnd {
+                                function.add_child(parse_from_token(tokens, paren_count));
+                            }
+                            return Tree::Leaf(Thing::FunctionIdentifier(name.clone(), Box::new(function), num_args, tokens[0].line));
+                        } else {
+                            error::error(
+                                tokens[0].line,
+                                "code block expected after function identifier",
+                            );
+                        }
                     }
                     tokentype => {
                         error::error(
@@ -161,6 +197,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                         tokens.remove(0);
                         if tokens[0].token_type == TokenType::With {
                             tokens.remove(0);
+                            
                         } else {
                             error::error(
                                 tokens[0].line,
@@ -226,7 +263,8 @@ pub enum Thing {
     Number(f64, i32),
     String(String, i32),
     Identifier(String, i32),
-    FunctionIdentifier(char, i32),
+    // make this into a custom struct
+    FunctionIdentifier(char, Box<Tree<Thing>>, f64, i32),
     FunctionArgument(String, i32),
     // for the rest of the tokens we just have the token type and the line number
     Other(TokenType, i32),
@@ -238,7 +276,6 @@ impl Thing {
             TokenType::Number { literal } => Thing::Number(literal, token.line),
             TokenType::String { literal } => Thing::String(literal, token.line),
             TokenType::Identifier { name } => Thing::Identifier(name, token.line),
-            TokenType::FunctionIdentifier { name } => Thing::FunctionIdentifier(name, token.line),
             TokenType::FunctionArgument { name } => Thing::FunctionArgument(name, token.line),
             _ => Thing::Other(token.token_type, token.line),
         }
@@ -252,7 +289,7 @@ impl fmt::Display for Thing {
             Thing::String(s, _) => write!(f, "{}", s),
             Thing::Other(t, _) => write!(f, "{:?}", t),
             Thing::Identifier(s, _) => write!(f, "Identifier({})", s),
-            Thing::FunctionIdentifier(s, _) => write!(f, "FunctionIdentifier({})", s),
+            Thing::FunctionIdentifier(s, t, a, _) => write!(f, "FunctionIdentifier({}) {} args with {}", s, a, t),
             Thing::FunctionArgument(s, _) => write!(f, "FunctionArgument({})", s),
         }
     }
@@ -265,8 +302,8 @@ impl fmt::Debug for Thing {
             Thing::String(s, l) => write!(f, "String({}) at line: {}", s, l),
             Thing::Other(t, l) => write!(f, "TokenType::{:?} at line: {}", t, l),
             Thing::Identifier(t, l) => write!(f, "Identifier({}) at line: {}", t, l),
-            Thing::FunctionIdentifier(t, l) => {
-                write!(f, "FunctionIdentifier({}) at line: {}", t, l)
+            Thing::FunctionIdentifier(s,t,a,  l) => {
+                write!(f, "FunctionIdentifier({}) {} args with {} at line: {}", s ,a, t, l)
             }
             Thing::FunctionArgument(t, l) => {
                 write!(f, "FunctionArgument({}) at line: {}", t, l)
@@ -279,7 +316,6 @@ fn atom(token: Token) -> Thing {
         TokenType::Number { literal } => Thing::Number(literal, token.line),
         TokenType::String { literal } => Thing::String(literal, token.line),
         TokenType::Identifier { name } => Thing::Identifier(name, token.line),
-        TokenType::FunctionIdentifier { name } => Thing::FunctionIdentifier(name, token.line),
         TokenType::FunctionArgument { name } => Thing::FunctionArgument(name, token.line),
         _ => Thing::Other(token.token_type, token.line),
     }
