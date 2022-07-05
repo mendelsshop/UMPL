@@ -4,21 +4,6 @@ use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
 
-pub enum Literal {
-    String(String),
-    Number(f64),
-    Boolean(bool),
-    Null,
-}
-pub enum Expr {
-    Literal {
-        l_paren: Token,
-        value: Literal,
-        r_paren: Token,
-        end: Token,
-    },
-}
-
 pub fn parse(src: String) -> Tree<Thing> {
     let mut tokens = Lexer::new(src).scan_tokens().to_vec();
     let mut program: Tree<Thing> = Tree::new(Token::new(TokenType::Program, "", 0));
@@ -159,6 +144,74 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
     } else {
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
+            match token.token_type {
+                TokenType::Potato => match &tokens[0].token_type {
+                    TokenType::FunctionIdentifier { name } => {
+                        tokens.remove(0);
+                    }
+                    tokentype => {
+                        error::error(
+                                tokens[1].line,
+                                format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype).as_str(),
+                            );
+                    }
+                },
+                TokenType::List => match &tokens[0].token_type {
+                    TokenType::Identifier { name } => {
+                        tokens.remove(0);
+                        if tokens[0].token_type == TokenType::With {
+                            tokens.remove(0);
+                        } else {
+                            error::error(
+                                tokens[0].line,
+                                format!(
+                                    "with keyword expected, found TokenType::{:?}",
+                                    tokens[0].token_type
+                                )
+                                .as_str(),
+                            );
+                        }
+                    }
+                    tokentype => {
+                        error::error(
+                            tokens[1].line,
+                            format!(
+                                "identifier expected, after \"list\" found TokenType::{:?}",
+                                tokentype
+                            )
+                            .as_str(),
+                        );
+                    }
+                },
+                TokenType::Create => match &tokens[0].token_type {
+                    TokenType::Identifier { name } => {
+                        tokens.remove(0);
+                        if tokens[0].token_type == TokenType::With {
+                            tokens.remove(0);
+                        } else {
+                            error::error(
+                                tokens[0].line,
+                                format!(
+                                    "with keyword expected, found TokenType::{:?}",
+                                    tokens[0].token_type
+                                )
+                                .as_str(),
+                            );
+                        }
+                    }
+                    tokentype => {
+                        error::error(
+                            tokens[1].line,
+                            format!(
+                                "identifier expected after \"create\", found TokenType::{:?}",
+                                tokentype
+                            )
+                            .as_str(),
+                        );
+                    }
+                },
+                _ => {}
+            }
         } else if token.token_type == TokenType::GreaterThanSymbol
             || token.token_type == TokenType::LessThanSymbol
         {
@@ -174,6 +227,7 @@ pub enum Thing {
     String(String, i32),
     Identifier(String, i32),
     FunctionIdentifier(char, i32),
+    FunctionArgument(String, i32),
     // for the rest of the tokens we just have the token type and the line number
     Other(TokenType, i32),
 }
@@ -185,6 +239,7 @@ impl Thing {
             TokenType::String { literal } => Thing::String(literal, token.line),
             TokenType::Identifier { name } => Thing::Identifier(name, token.line),
             TokenType::FunctionIdentifier { name } => Thing::FunctionIdentifier(name, token.line),
+            TokenType::FunctionArgument { name } => Thing::FunctionArgument(name, token.line),
             _ => Thing::Other(token.token_type, token.line),
         }
     }
@@ -198,6 +253,7 @@ impl fmt::Display for Thing {
             Thing::Other(t, _) => write!(f, "{:?}", t),
             Thing::Identifier(s, _) => write!(f, "Identifier({})", s),
             Thing::FunctionIdentifier(s, _) => write!(f, "FunctionIdentifier({})", s),
+            Thing::FunctionArgument(s, _) => write!(f, "FunctionArgument({})", s),
         }
     }
 }
@@ -212,6 +268,9 @@ impl fmt::Debug for Thing {
             Thing::FunctionIdentifier(t, l) => {
                 write!(f, "FunctionIdentifier({}) at line: {}", t, l)
             }
+            Thing::FunctionArgument(t, l) => {
+                write!(f, "FunctionArgument({}) at line: {}", t, l)
+            }
         }
     }
 }
@@ -221,6 +280,7 @@ fn atom(token: Token) -> Thing {
         TokenType::String { literal } => Thing::String(literal, token.line),
         TokenType::Identifier { name } => Thing::Identifier(name, token.line),
         TokenType::FunctionIdentifier { name } => Thing::FunctionIdentifier(name, token.line),
+        TokenType::FunctionArgument { name } => Thing::FunctionArgument(name, token.line),
         _ => Thing::Other(token.token_type, token.line),
     }
 }

@@ -29,7 +29,7 @@ if {true} ⧼ ! there is now else, use nested if elses, condotins must be in {} 
 ⧽
 
 loop ⧼
-  create input with (inputs `continue?`)<
+  create inputs with (inputs `continue?`)<
   if {(eq inputs `y`)<} ⧼ ! there is now else, use nested if elses, condotins must be in {} and we can use nested () within the 
     continue
   ⧽ else ⧼

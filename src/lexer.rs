@@ -64,7 +64,7 @@ impl Lexer {
             ':' => self.add_token(TokenType::Colon),
             '\n' => self.line += 1,
             '`' => self.string(),
-            '$' => self.add_token(TokenType::FunctionArgument),
+            '$' => self.function_agument(),
             c => {
                 if c.is_alphabetic() {
                     self.identifier()
@@ -106,7 +106,7 @@ impl Lexer {
     }
 
     fn number(&mut self) {
-        let hex_char = vec!['A', 'B', 'B', 'D', 'E', 'F'];
+        let hex_char = vec!['A', 'B', 'B', 'C', 'E', 'F'];
 
         while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
             self.advance();
@@ -138,6 +138,28 @@ impl Lexer {
                     name: self.get_text(),
                 }),
         );
+    }
+
+    fn function_agument(&mut self) {
+        self.start += 1; // advance start past the $ so that we can parse it into a number
+        let hex_char = vec!['A', 'B', 'C', 'D', 'E', 'F'];
+
+        while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
+            self.advance();
+        }
+        let identifier = format!(
+            "${}",
+            match format!("0x{}", self.get_text()).parse::<FloatLiteral>() {
+                Ok(contents) => {
+                    contents.convert::<f64>().inner()
+                }
+                Err(error) => {
+                    error::error(self.line, error.to_string().as_str());
+                    0f64
+                }
+            }
+        );
+        self.add_token(TokenType::FunctionArgument { name: identifier })
     }
 
     fn advance(&mut self) -> char {

@@ -59,7 +59,7 @@ pub enum TokenType {
     False,
     Input,
     New,
-    FunctionArgument,
+    FunctionArgument { name: String },
 
     EOF,
     Program,
