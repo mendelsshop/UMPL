@@ -37,14 +37,12 @@ impl Keyword {
         keywords.insert("second".to_string(), TokenType::Second);
         // misc keywords
         keywords.insert("return".to_string(), TokenType::Return);
-        keywords.insert("true".to_string(), TokenType::True);
         keywords.insert("break".to_string(), TokenType::Break);
         keywords.insert("continue".to_string(), TokenType::Continue);
         keywords.insert("loop".to_string(), TokenType::Loop);
         keywords.insert("potato".to_string(), TokenType::Potato);
         keywords.insert("if".to_string(), TokenType::If);
         keywords.insert("else".to_string(), TokenType::Else);
-        keywords.insert("false".to_string(), TokenType::False);
         keywords.insert("null".to_string(), TokenType::Null);
         keywords.insert("input".to_string(), TokenType::Input);
         keywords.insert("negative".to_string(), TokenType::Negative);

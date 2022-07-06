@@ -49,7 +49,7 @@
 `"[",` [`<stuff>+`](#other-stuff) ` , ":"+,"]"`
 
 # other-stuff:
-[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier)
+[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier) `|` [`<calling>`](#calling)
 
 # functions:
 `"new"` [`<function>`](#function) `,` [`<function-params>`](#function-params)

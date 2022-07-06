@@ -1,3 +1,9 @@
+mod rules;
+use rules::{
+    Expression, Function, IfStatement, List, Literal, LiteralType, LoopStatement,
+    Vairable,
+};
+
 use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
@@ -172,20 +178,20 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             }
                         };
                         if tokens[0].token_type == TokenType::CodeBlockBegin {
-                            println!("{}", tokens[0].line);
+
                             let mut function: Tree<Thing> =
                                 Tree::new(Token::new(TokenType::Function, "", tokens[0].line));
-                            println!("{}", function);
+                            // println!("{}", function);
                             tokens.remove(0);
                             while tokens[0].token_type != TokenType::CodeBlockEnd {
                                 function.add_child(parse_from_token(tokens, paren_count));
                             }
-                            return Tree::Leaf(Thing::FunctionIdentifier(
+                            return Tree::Leaf(Thing::Function(Function::new(
                                 *name,
-                                Box::new(function),
                                 num_args,
+                                Box::new(function),
                                 tokens[0].line,
-                            ));
+                            )));
                         } else {
                             error::error(
                                 tokens[0].line,
@@ -264,15 +270,20 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         Tree::Leaf(atom(token))
     }
 }
+
 #[derive(Clone)]
 pub enum Thing {
     // we have vairants for each type of token that has a value ie number or the name of an identifier
-    Number(f64, i32),
-    String(String, i32),
+    Literal(Literal),
     Identifier(String, i32),
+    Expression(Expression),
+    Function(Function),
+    List(List),
+    Vairable(Vairable),
+    IfStatement(IfStatement),
+    LoopStatement(LoopStatement),
     // make this into a custom struct
-    FunctionIdentifier(char, Box<Tree<Thing>>, f64, i32),
-    FunctionArgument(String, i32),
+
     // for the rest of the tokens we just have the token type and the line number
     Other(TokenType, i32),
 }
@@ -280,10 +291,23 @@ pub enum Thing {
 impl Thing {
     pub fn new(token: Token) -> Thing {
         match token.token_type {
-            TokenType::Number { literal } => Thing::Number(literal, token.line),
-            TokenType::String { literal } => Thing::String(literal, token.line),
+            TokenType::Number { literal } => Thing::Literal(Literal {
+                literal: LiteralType::Number(literal),
+                line: token.line,
+            }),
+            TokenType::String { literal } => Thing::Literal(Literal {
+                literal: LiteralType::String(literal),
+                line: token.line,
+            }),
+            TokenType::Boolean { value } => Thing::Literal(Literal {
+                literal: LiteralType::Boolean(value),
+                line: token.line,
+            }),
+            TokenType::Null => Thing::Literal(Literal {
+                literal: LiteralType::Null,
+                line: token.line,
+            }),
             TokenType::Identifier { name } => Thing::Identifier(name, token.line),
-            TokenType::FunctionArgument { name } => Thing::FunctionArgument(name, token.line),
             _ => Thing::Other(token.token_type, token.line),
         }
     }
@@ -292,14 +316,15 @@ impl Thing {
 impl fmt::Display for Thing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Thing::Number(n, _) => write!(f, "{}", n),
-            Thing::String(s, _) => write!(f, "{}", s),
+            Thing::Expression(expression) => write!(f, "{:?}", expression),
+            Thing::Literal(literal) => write!(f, "{}", literal),
             Thing::Other(t, _) => write!(f, "{:?}", t),
             Thing::Identifier(s, _) => write!(f, "Identifier({})", s),
-            Thing::FunctionIdentifier(s, t, a, _) => {
-                write!(f, "FunctionIdentifier({}) {} args with {}", s, a, t)
-            }
-            Thing::FunctionArgument(s, _) => write!(f, "FunctionArgument({})", s),
+            Thing::Function(function) => write!(f, "{}", function),
+            Thing::List(list) => write!(f, "{}", list),
+            Thing::Vairable(vairable) => write!(f, "{}", vairable),
+            Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
+            Thing::LoopStatement(loop_statement) => write!(f, "{}", loop_statement),
         }
     }
 }
@@ -307,29 +332,40 @@ impl fmt::Display for Thing {
 impl fmt::Debug for Thing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Thing::Number(n, l) => write!(f, "Number({}) at line: {}", n, l),
-            Thing::String(s, l) => write!(f, "String({}) at line: {}", s, l),
-            Thing::Other(t, l) => write!(f, "TokenType::{:?} at line: {}", t, l),
-            Thing::Identifier(t, l) => write!(f, "Identifier({}) at line: {}", t, l),
-            Thing::FunctionIdentifier(s, t, a, l) => {
-                write!(
-                    f,
-                    "FunctionIdentifier({}) {} args with {} at line: {}",
-                    s, a, t, l
-                )
+            Thing::Expression(expression) => write!(f, "{:?}", expression),
+            Thing::Literal(literal) => {
+                write!(f, "[{:?} at line: {}]", literal.literal, literal.line)
             }
-            Thing::FunctionArgument(t, l) => {
-                write!(f, "FunctionArgument({}) at line: {}", t, l)
-            }
+            Thing::Other(t, l) => write!(f, "[TokenType::{:?} at line: {}]", t, l),
+            Thing::Identifier(t, l) => write!(f, "[Identifier({}) at line: {}]", t, l),
+            Thing::Function(function) => write!(f, "{:?}", function),
+            Thing::List(list) => write!(f, "{:?}", list),
+            Thing::Vairable(vairable) => write!(f, "{:?}", vairable),
+            Thing::IfStatement(if_statement) => write!(f, "{:?}", if_statement),
+            Thing::LoopStatement(loop_statement) => write!(f, "{:?}", loop_statement),
         }
     }
 }
 fn atom(token: Token) -> Thing {
     match token.token_type {
-        TokenType::Number { literal } => Thing::Number(literal, token.line),
-        TokenType::String { literal } => Thing::String(literal, token.line),
+        TokenType::Number { literal } => Thing::Literal(Literal {
+            literal: LiteralType::Number(literal),
+            line: token.line,
+        }),
+        TokenType::String { literal } => Thing::Literal(Literal {
+            literal: LiteralType::String(literal),
+            line: token.line,
+        }),
+        TokenType::Boolean { value } => Thing::Literal(Literal {
+            literal: LiteralType::Boolean(value),
+            line: token.line,
+        }),
+        TokenType::Null => Thing::Literal(Literal {
+            literal: LiteralType::Null,
+            line: token.line,
+        }),
         TokenType::Identifier { name } => Thing::Identifier(name, token.line),
-        TokenType::FunctionArgument { name } => Thing::FunctionArgument(name, token.line),
+
         _ => Thing::Other(token.token_type, token.line),
     }
 }

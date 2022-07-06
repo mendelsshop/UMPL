@@ -85,7 +85,7 @@ fn usage() {
         -f: force",
             )
         } else {
-            println!("Segmentation fault (core dumped)")
+            eprintln!("Segmentation fault (core dumped)")
         }
     }
     exit(1);

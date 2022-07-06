@@ -66,8 +66,14 @@ impl Lexer {
             '`' => self.string(),
             '$' => self.function_agument(),
             c => {
-                if c.is_alphabetic() {
-                    self.identifier()
+                if c.is_alphabetic() || c == '-' {
+                    if c == 't' || c == 'f' {
+                        if !self.boolean() {
+                            self.identifier();
+                        }
+                    } else {
+                        self.identifier();
+                    }
                 } else if c.is_ascii_whitespace() {
                 } else if c.is_ascii_digit() {
                     if self.peek() == 'x' {
@@ -82,6 +88,41 @@ impl Lexer {
                 }
             }
         }
+    }
+
+    fn boolean(&mut self) -> bool {
+        if self.peek() == 'r' {
+            self.advance();
+            if self.peek() == 'u' {
+                self.advance();
+                if self.peek() == 'e' {
+                    self.advance();
+                    if self.peek().is_alphanumeric() || self.peek() == '-' {
+                        return false;
+                    }
+                    self.add_token(TokenType::Boolean { value: true });
+                    return true;
+                }
+            }
+        } else if self.peek() == 'a' {
+            self.advance();
+
+            if self.peek() == 'l' {
+                self.advance();
+                if self.peek() == 's' {
+                    self.advance();
+                    if self.peek() == 'e' {
+                        self.advance();
+                        if self.peek().is_alphanumeric() || self.peek() == '-' {
+                            return false;
+                        }
+                        self.add_token(TokenType::Boolean { value: false });
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn string(&mut self) {
