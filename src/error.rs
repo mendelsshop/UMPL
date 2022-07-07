@@ -1,7 +1,7 @@
 use crate::cli::EASY_MODE;
 use std::process::exit;
 
-fn report(line: i32, where_: &str, message: &str) {
+fn report(line: i32, where_: &str, message: &str) -> ! {
     let mut message = message;
     unsafe {
         if EASY_MODE {
@@ -16,6 +16,6 @@ fn report(line: i32, where_: &str, message: &str) {
     exit(1);
 }
 
-pub fn error(line: i32, message: &str) {
+pub fn error(line: i32, message: &str) -> ! {
     report(line, "", message)
 }
