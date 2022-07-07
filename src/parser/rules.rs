@@ -1,6 +1,5 @@
 use std::fmt;
 
-
 use super::{Thing, Tree};
 
 #[derive(Clone, Debug)]

@@ -180,7 +180,6 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             }
                         };
                         if tokens[0].token_type == TokenType::CodeBlockBegin {
-
                             let mut function: Tree<Thing> =
                                 Tree::new(Token::new(TokenType::Function, "", tokens[0].line));
                             // println!("{}", function);
