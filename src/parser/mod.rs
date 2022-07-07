@@ -1,14 +1,13 @@
 mod rules;
 use rules::{
-    Expression, Function, IfStatement, List, Literal, LiteralType, LoopStatement,
-    Vairable, Identifier
+    Expression, Function, Identifier, IfStatement, List, Literal, LiteralType, LoopStatement,
+    Vairable,
 };
 
 use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
 use std::fmt::{self, Debug};
-
 
 pub fn parse(src: String) -> Tree<Thing> {
     let mut tokens = Lexer::new(src).scan_tokens().to_vec();
