@@ -1,7 +1,7 @@
 mod rules;
 use rules::{
-    Expression, Function, Identifier, IfStatement, List, Literal, LiteralType, LoopStatement,
-    Vairable, Call, IdentifierType, OtherStuff, Stuff
+    Call, Expression, Function, Identifier, IdentifierType, IfStatement, List, Literal,
+    LiteralType, LoopStatement, OtherStuff, Stuff, Vairable,
 };
 
 use crate::token::TokenType;
@@ -9,7 +9,6 @@ use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
 
 use std::fmt::{self, Debug};
-
 
 pub fn parse(src: String) -> Tree<Thing> {
     let mut tokens = Lexer::new(src).scan_tokens().to_vec();
@@ -290,7 +289,13 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             tokens.remove(0);
                             return Tree::Leaf(Thing::Identifier(
                                 // TODO: get the actual value and don't just set it to null
-                                Identifier::new(name.clone(),IdentifierType::Vairable(Box::new(Vairable::new_empty(tokens[0].line))), tokens[0].line),
+                                Identifier::new(
+                                    name.clone(),
+                                    IdentifierType::Vairable(Box::new(Vairable::new_empty(
+                                        tokens[0].line,
+                                    ))),
+                                    tokens[0].line,
+                                ),
                             ));
                         } else {
                             error::error(
@@ -322,7 +327,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                     let temp = parse_stuff_from_tokens(tokens, paren_count);
                     let stuff: Vec<Stuff> = temp.0;
                     paren_count = temp.1;
-                    return Tree::Leaf(Thing::Call(Call::new(stuff, tokens[0].line, keyword,)));
+                    return Tree::Leaf(Thing::Call(Call::new(stuff, tokens[0].line, keyword)));
                 }
             }
         } else if token.token_type == TokenType::GreaterThanSymbol
@@ -383,7 +388,7 @@ fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<
                     token.line,
                 ))));
             }
-            TokenType::FunctionIdentifier { name }  => {
+            TokenType::FunctionIdentifier { name } => {
                 stuff.push(Stuff::Identifier(Box::new(Identifier::new(
                     name.to_string(),
                     // TODO: get the actual value and don't just set it to null

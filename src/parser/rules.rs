@@ -1,7 +1,5 @@
-use std::{
-    fmt::{self, Debug},
-};
 use crate::token::TokenType;
+use std::fmt::{self, Debug};
 
 use super::{Thing, Tree};
 // TODO: make proper constructors for each struct/enum
@@ -141,7 +139,11 @@ pub struct Call {
 
 impl Call {
     pub fn new(arguments: Vec<Stuff>, line: i32, keyword: TokenType) -> Call {
-        Call { arguments, line, keyword }
+        Call {
+            arguments,
+            line,
+            keyword,
+        }
     }
 }
 
@@ -150,9 +152,9 @@ impl fmt::Display for Call {
         let mut c = String::from("( ");
         for arg in self.arguments.iter() {
             c.push_str(&format!("{} ", arg));
-        };
+        }
         c.push(')');
-        write!(f, "{:?}: [{}]",self.keyword, c)
+        write!(f, "{:?}: [{}]", self.keyword, c)
     }
 }
 
@@ -221,8 +223,8 @@ pub struct Vairable {
 }
 
 impl Vairable {
-    pub fn new(value: OtherStuff, ) -> Self {
-        Vairable { value, }
+    pub fn new(value: OtherStuff) -> Self {
+        Vairable { value }
     }
 
     pub fn new_empty(line: i32) -> Self {
