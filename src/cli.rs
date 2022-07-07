@@ -1,6 +1,6 @@
 use std::process::exit;
 pub static mut EASY_MODE: bool = false;
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq, Debug)]
 pub struct ParsedArgs {
     pub repl: bool,   // inerative mode
     pub file: String, // file to read/write

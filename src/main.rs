@@ -3,9 +3,12 @@ use std::{
     fs::File,
     io::{self, Read, Write},
     path::Path,
-    process::exit, 
+    process::exit,
 };
-use umpl::{cli, error, parser::{self, Displays}};
+use umpl::{
+    cli, error,
+    parser::{self, Displays},
+};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args

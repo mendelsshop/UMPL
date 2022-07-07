@@ -1,9 +1,9 @@
 use crate::token::TokenType;
 use std::fmt::{self, Debug, Display};
 
-use super::{Thing, Tree, Displays};
+use super::{Displays, Thing, Tree};
 // TODO: make proper constructors for each struct/enum
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Expression {
     pub inside: Tree<Stuff>,
     pub print: bool,
@@ -26,7 +26,7 @@ impl Display for Expression {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Stuff {
     Literal(Literal),
     Identifier(Box<Identifier>),
@@ -43,7 +43,7 @@ impl Display for Stuff {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Literal {
     pub literal: LiteralType,
     pub line: i32,
@@ -53,28 +53,28 @@ impl Literal {
     pub fn new_string(string: String, line: i32) -> Literal {
         Literal {
             literal: LiteralType::String(string),
-            line
+            line,
         }
     }
 
     pub fn new_number(number: f64, line: i32) -> Literal {
         Literal {
             literal: LiteralType::Number(number),
-            line
+            line,
         }
     }
 
     pub fn new_boolean(boolean: bool, line: i32) -> Literal {
         Literal {
             literal: LiteralType::Boolean(boolean),
-            line
+            line,
         }
     }
 
     pub fn new_null(line: i32) -> Literal {
         Literal {
             literal: LiteralType::Null,
-            line
+            line,
         }
     }
 }
@@ -84,7 +84,7 @@ impl Display for Literal {
         write!(f, "{}", self.literal)
     }
 }
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum LiteralType {
     Number(f64),
     String(String),
@@ -92,8 +92,7 @@ pub enum LiteralType {
     Null,
 }
 
-impl LiteralType {
-}
+impl LiteralType {}
 
 impl Display for LiteralType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -106,13 +105,13 @@ impl Display for LiteralType {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum IdentifierType {
     List(Box<List>),
     Vairable(Box<Vairable>),
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Identifier {
     pub name: String,
     pub value: IdentifierType,
@@ -139,7 +138,7 @@ impl Display for Identifier {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Call {
     pub keyword: TokenType,
     pub arguments: Vec<Stuff>,
@@ -166,7 +165,7 @@ impl Display for Call {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum OtherStuff {
     Literal(Literal),
     Identifier(Identifier),
@@ -183,7 +182,7 @@ impl Display for OtherStuff {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Function {
     pub name: char,
     pub num_arguments: f64,
@@ -207,12 +206,14 @@ impl Display for Function {
         write!(
             f,
             "Function: {} with {} arguments and body: {}",
-            self.name, self.num_arguments, self.body.to_strings()
+            self.name,
+            self.num_arguments,
+            self.body.to_strings()
         )
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct List {
     pub line: i32,
     pub first: OtherStuff,
@@ -225,7 +226,7 @@ impl Display for List {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Vairable {
     pub value: OtherStuff,
 }
@@ -248,7 +249,7 @@ impl Display for Vairable {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct IfStatement {
     pub condition: Expression,
     pub body_true: Vec<Tree<Thing>>,
@@ -266,7 +267,7 @@ impl Display for IfStatement {
     }
 }
 
-#[derive(PartialEq,Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct LoopStatement {
     pub body: Vec<Tree<Thing>>,
     pub line: i32,

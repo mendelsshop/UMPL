@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::token::TokenType;
-#[derive(PartialEq,Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Keyword {
     pub keywords: HashMap<String, TokenType>,
 }
