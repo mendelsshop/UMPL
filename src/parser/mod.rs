@@ -1,13 +1,14 @@
 mod rules;
 use rules::{
     Expression, Function, IfStatement, List, Literal, LiteralType, LoopStatement,
-    Vairable,
+    Vairable, Identifier
 };
 
 use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
 use std::fmt::{self, Debug};
+
 
 pub fn parse(src: String) -> Tree<Thing> {
     let mut tokens = Lexer::new(src).scan_tokens().to_vec();
@@ -31,6 +32,7 @@ impl Tree<Thing> {
     pub fn new(token: Token) -> Tree<Thing> {
         Tree::Leaf(Thing::new(token))
     }
+
     pub fn add_child(&mut self, child: Tree<Thing>) {
         match self {
             Tree::Leaf(thing) => {
@@ -186,6 +188,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             while tokens[0].token_type != TokenType::CodeBlockEnd {
                                 function.add_child(parse_from_token(tokens, paren_count));
                             }
+                            tokens.remove(0);
                             return Tree::Leaf(Thing::Function(Function::new(
                                 *name,
                                 num_args,
@@ -233,7 +236,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                         );
                     }
                 },
-                TokenType::Create => match &tokens[0].token_type {
+                TokenType::Create => match &tokens[0].token_type.clone() {
                     TokenType::Identifier { name } => {
                         tokens.remove(0);
                         if tokens[0].token_type == TokenType::With {
@@ -275,7 +278,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
 pub enum Thing {
     // we have vairants for each type of token that has a value ie number or the name of an identifier
     Literal(Literal),
-    Identifier(String, i32),
+    Identifier(Identifier),
     Expression(Expression),
     Function(Function),
     List(List),
@@ -307,7 +310,6 @@ impl Thing {
                 literal: LiteralType::Null,
                 line: token.line,
             }),
-            TokenType::Identifier { name } => Thing::Identifier(name, token.line),
             _ => Thing::Other(token.token_type, token.line),
         }
     }
@@ -319,8 +321,8 @@ impl fmt::Display for Thing {
             Thing::Expression(expression) => write!(f, "{:?}", expression),
             Thing::Literal(literal) => write!(f, "{}", literal),
             Thing::Other(t, _) => write!(f, "{:?}", t),
-            Thing::Identifier(s, _) => write!(f, "Identifier({})", s),
-            Thing::Function(function) => write!(f, "{}", function),
+            Thing::Identifier(s) => write!(f, "Identifier({})", s),
+            Thing::Function(function) => write!(f, "{{{}}}", function),
             Thing::List(list) => write!(f, "{}", list),
             Thing::Vairable(vairable) => write!(f, "{}", vairable),
             Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
@@ -337,7 +339,7 @@ impl fmt::Debug for Thing {
                 write!(f, "[{:?} at line: {}]", literal.literal, literal.line)
             }
             Thing::Other(t, l) => write!(f, "[TokenType::{:?} at line: {}]", t, l),
-            Thing::Identifier(t, l) => write!(f, "[Identifier({}) at line: {}]", t, l),
+            Thing::Identifier(t) => write!(f, "[Identifier({}) at line: {}]", t, t.line),
             Thing::Function(function) => write!(f, "{:?}", function),
             Thing::List(list) => write!(f, "{:?}", list),
             Thing::Vairable(vairable) => write!(f, "{:?}", vairable),
@@ -364,8 +366,6 @@ fn atom(token: Token) -> Thing {
             literal: LiteralType::Null,
             line: token.line,
         }),
-        TokenType::Identifier { name } => Thing::Identifier(name, token.line),
-
         _ => Thing::Other(token.token_type, token.line),
     }
 }

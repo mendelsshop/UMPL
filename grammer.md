@@ -46,11 +46,10 @@
 [`<fn-keyword>`](#fn-keywords) `,` [`<function-params>`](#function-params)
 
 # function-params: 
-`"[",` [`<stuff>+`](#other-stuff) ` , ":"+,"]"`
+`"[",` [`<stuff>+`](#stuff) ` , ":"+,"]"`
 
 # other-stuff:
-[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier) `|` [`<calling>`](#calling)
-
+[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier)
 # functions:
 `"new"` [`<function>`](#function) `,` [`<function-params>`](#function-params)
 

@@ -6,8 +6,13 @@ use super::{Thing, Tree};
 #[derive(Clone, Debug)]
 pub struct Expression {
     pub inside: Tree<Stuff>,
-    pub line: i32,
-    pub print: bool,
+}
+
+impl Expression {
+    pub fn new(inside: Tree<Stuff>) -> Expression {
+        Expression { inside }
+}
+    
 }
 
 impl fmt::Display for Expression {
@@ -19,9 +24,12 @@ impl fmt::Display for Expression {
 #[derive(Clone, Debug)]
 pub enum Stuff {
     Literal(Literal),
-    Identifier(Identifier),
+    Identifier(Box<Identifier>),
     Call(Call),
 }
+
+
+
 
 impl fmt::Display for Stuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -64,10 +72,27 @@ impl fmt::Display for LiteralType {
 }
 
 #[derive(Clone, Debug)]
+pub enum  IdentifierType {
+    List(Box<List>),
+    Vairable(Box<Vairable>),
+}
+
+#[derive(Clone, Debug)]
 pub struct Identifier {
     pub name: String,
-    pub value: String,
+    pub value: IdentifierType,
     pub line: i32,
+}
+
+impl Identifier {
+    pub fn new(name: String, value: IdentifierType, line: i32) -> Identifier {
+        Identifier {
+            name,
+            value,
+            line,
+        }
+    }
+
 }
 
 impl fmt::Display for Identifier {
@@ -76,18 +101,18 @@ impl fmt::Display for Identifier {
             f,
             "{}{}",
             self.name,
-            if self.value.is_empty() {
-                "".to_string()
-            } else {
-                format!(" with value: {}", self.value)
+            match &self.value {
+                IdentifierType::List(list) => format!("{}", list),
+                IdentifierType::Vairable(vairable) => format!("{}", vairable),
             }
+
         )
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, )]
 pub struct Call {
-    pub arguments: Vec<OtherStuff>,
+    pub arguments: Vec<Stuff>,
     pub line: i32,
 }
 
@@ -101,7 +126,6 @@ impl fmt::Display for Call {
 pub enum OtherStuff {
     Literal(Literal),
     Identifier(Identifier),
-    Call(Call),
     Expression(Expression),
 }
 
@@ -110,7 +134,6 @@ impl fmt::Display for OtherStuff {
         match self {
             OtherStuff::Literal(literal) => write!(f, "{}", literal),
             OtherStuff::Identifier(identifier) => write!(f, "{}", identifier),
-            OtherStuff::Call(call) => write!(f, "{}", call),
             OtherStuff::Expression(expression) => write!(f, "{}", expression),
         }
     }
@@ -147,7 +170,6 @@ impl fmt::Display for Function {
 
 #[derive(Clone, Debug)]
 pub struct List {
-    pub name: String,
     pub line: i32,
     pub first: OtherStuff,
     pub second: OtherStuff,
@@ -155,20 +177,29 @@ pub struct List {
 
 impl fmt::Display for List {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "List: {} with {} {}", self.name, self.first, self.second)
+        write!(f, "List: with {} {}",  self.first, self.second)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Vairable {
-    pub name: String,
-    pub value: Expression,
+    pub value: OtherStuff,
     pub line: i32,
+}
+
+impl Vairable {
+    pub fn new(value: OtherStuff, line: i32) -> Self {
+        Vairable {
+            value,
+            line,
+        }
+    }
+    
 }
 
 impl fmt::Display for Vairable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Variable: {} with value: {}", self.name, self.value)
+        write!(f, "Vairable with: {}", self.value)
     }
 }
 
