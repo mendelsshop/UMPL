@@ -1,6 +1,6 @@
-use std::fmt;
+use std::fmt::{self, Debug, Display};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(PartialEq,Debug, Clone)]
 pub enum TokenType {
     // single character tokens
     RightParen,
@@ -64,13 +64,13 @@ pub enum TokenType {
     Program,
 }
 
-impl fmt::Display for TokenType {
+impl Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "TokenType {self:?}",)
     }
 }
 
-#[derive(Clone)]
+#[derive(PartialEq,Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -87,7 +87,7 @@ impl Token {
     }
 }
 
-impl fmt::Display for Token {
+impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.token_type {
             TokenType::String { literal } => {

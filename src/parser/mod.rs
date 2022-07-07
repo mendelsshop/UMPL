@@ -8,21 +8,36 @@ use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
 
-use std::fmt::{self, Debug};
+use std::fmt::{self, Display, Debug};
 
-pub fn parse(src: String) -> Tree<Thing> {
+pub trait Displays {
+    fn to_strings(&self) -> String;
+}
+impl Displays for Vec<Tree<Thing>> {
+    fn to_strings(&self) -> String {
+        let mut s = String::new();
+        for tree in self {
+            match tree {
+                Tree::Branch(thing) => s.push_str(format!("\n{}", thing.to_strings()).as_str()),
+                Tree::Leaf(thing) => s.push_str(format!("{} ", thing).as_str()),
+            }
+        }
+        s
+    }
+}
+pub fn parse(src: String) -> Vec<Tree<Thing>> {
     let mut tokens = Lexer::new(src).scan_tokens().to_vec();
-    let mut program: Tree<Thing> = Tree::new(Token::new(TokenType::Program, "", 0));
+    let mut program: Vec<Tree<Thing>> = Vec::new();
     // loop until we have no more tokens
     // in the loop, we use parse_from_tokens to parse the next expression
     // and add it to the program tree
     while !tokens.is_empty() {
         let expr = parse_from_token(&mut tokens, 0);
-        program.add_child(expr);
+        program.push(expr);
     }
     program
 }
-#[derive(Debug, Clone)]
+#[derive(PartialEq,Debug, Clone)]
 pub enum Tree<T> {
     Leaf(T),
     Branch(Vec<Tree<T>>),
@@ -31,6 +46,54 @@ pub enum Tree<T> {
 impl Tree<Thing> {
     pub fn new(token: Token) -> Tree<Thing> {
         Tree::Leaf(Thing::new(token))
+    }
+
+    pub fn remove_leaf(self, tree: Thing) -> Option<Tree<Thing>>{
+        match self.clone() {
+            Tree::Branch(mut branches) => {
+                for (num, branch, ) in branches.clone().iter().enumerate() {
+                    let clon_branch = branch.clone().remove_leaf(tree.clone());
+                    match clon_branch {
+                        Some(new_branch) => {
+                            branches[num] = new_branch;
+                        }
+                        None => {
+
+                            branches.remove(num);
+                            
+                        }
+                        
+                    }
+
+                    
+                    
+                    }
+
+                Some(Tree::Branch(branches))
+            }
+            Tree::Leaf(leaf) => {
+                match leaf {
+                    Thing::Other(tt, _) => {
+                        if tt ==tree.get_tt() {
+                            println!("removing leaf");
+                            drop(self);
+                            None
+                        } 
+                        else {
+                            Some(self)
+                        }
+
+                    }
+                    _ => {
+
+                        Some(self)
+                    }
+    
+                    
+                }
+            }
+        }
+        
     }
 
     pub fn add_child(&mut self, child: Tree<Thing>) {
@@ -69,6 +132,26 @@ impl Tree<Thing> {
         }
     }
 
+    pub fn check_gt_lt(self) -> (Option<bool>, Tree<Thing>) {
+        let self_clone=self.clone();
+        let leaf_gt = Thing::Other(
+            TokenType::GreaterThanSymbol,
+            0,
+        );
+        let leaf_lt = Thing::Other(
+            TokenType::LessThanSymbol,
+            0,
+        );
+        let self_clone = self_clone.remove_leaf(leaf_gt).unwrap();
+        if self_clone == self {
+            (Some(false), self.remove_leaf(leaf_lt).unwrap())
+        } else {
+            (Some(true), self.remove_leaf(leaf_lt).unwrap())
+        }
+        }
+        
+    
+
     pub fn convert_to_stuff(&mut self) -> Tree<Stuff> {
         match self {
             Tree::Leaf(thing) => {
@@ -77,10 +160,11 @@ impl Tree<Thing> {
                     Thing::Identifier(identifier) => {
                         Stuff::Identifier(Box::new(identifier.clone()))
                     }
+                    Thing::Call(call) => Stuff::Call(call.clone()),
                     // Thing::Call(call) => Stuff::Call(call),
                     _ => error::error(
                         thing.get_line(),
-                        "Thing is not a literal, identifier, or Call",
+                        format!("Thing is not a literal, identifier, or Call: found {}", thing).as_str(),
                     ),
                 })
             }
@@ -94,7 +178,7 @@ impl Tree<Thing> {
         }
     }
 }
-impl fmt::Display for Tree<Thing> {
+impl Display for Tree<Thing> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // let mut level = 0;
         match self {
@@ -227,18 +311,17 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             }
                         };
                         if tokens[0].token_type == TokenType::CodeBlockBegin {
-                            let mut function: Tree<Thing> =
-                                Tree::new(Token::new(TokenType::Function, "", tokens[0].line));
-                            // println!("{}", function);
+                            let mut function: Vec<Tree<Thing>> =
+                                Vec::new();
                             tokens.remove(0);
                             while tokens[0].token_type != TokenType::CodeBlockEnd {
-                                function.add_child(parse_from_token(tokens, paren_count));
+                                function.push(parse_from_token(tokens, paren_count));
                             }
                             tokens.remove(0);
                             return Tree::Leaf(Thing::Function(Function::new(
                                 *name,
                                 num_args,
-                                Box::new(function),
+                                function,
                                 tokens[0].line,
                             )));
                         } else {
@@ -287,12 +370,87 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                         tokens.remove(0);
                         if tokens[0].token_type == TokenType::With {
                             tokens.remove(0);
+                            let thing: OtherStuff;
+                            match tokens[0].token_type.clone() {
+                                TokenType::Number { literal } => {
+                                    thing = OtherStuff::Literal(Literal::new_number(
+                                        literal,
+                                        tokens[0].line,
+                                    ));
+                                    tokens.remove(0);
+
+                                }
+                                TokenType::String { literal } => {
+                                    thing = OtherStuff::Literal(Literal::new_string(
+                                        literal,
+                                        tokens[0].line,
+                                    ));
+                                    tokens.remove(0);
+                                }
+                                TokenType::Null => {
+                                    thing = OtherStuff::Literal(Literal::new_null(
+                                        tokens[0].line,
+                                    ));
+                                    tokens.remove(0);
+                                }
+                                TokenType::Boolean { value } => {
+                                    thing = OtherStuff::Literal(Literal::new_boolean(
+                                        value,
+                                        tokens[0].line,
+                                    ));
+                                    tokens.remove(0);
+                                }
+                                TokenType::LeftParen => {
+                                    // let mut print;
+                                    let mut z = parse_from_token(tokens, paren_count);
+                                    // check whether z contains greater than symbol or less than symbol
+                                    let result = z.check_gt_lt();
+                                    z = result.1;
+                                    // let prints: bool;
+                                    let prints: bool = match result.0 {
+                                        Some(x) => {
+                                            x
+
+                                        }
+                                        None => {
+                                            error::error(
+                                                tokens[0].line,
+                                                "greater than symbol (>) or less than symbol (<) expected",
+                                            );
+                                        }
+                                    };
+                                    thing = OtherStuff::Expression(Expression::new(
+
+                                        z.convert_to_stuff(),
+                                        prints,
+                                      tokens[0].line,
+                                    ));
+                                }
+                                TokenType::Identifier { name } => {
+                                    thing = OtherStuff::Identifier(
+                                        Identifier::new(name, IdentifierType::Vairable(Box::new(Vairable::new_empty(tokens[0].line))), tokens[0].line),
+                                    );
+                                    tokens.remove(0);
+                                }
+                                tokentype => {
+                                    error::error(
+                                        tokens[0].line,
+                                        format!(
+                                            "identifier expected, after \"create\" found TokenType::{:?}",
+                                            tokentype
+                                        )
+                                        .as_str(),
+                                    );
+                                }
+
+                            }
+
                             return Tree::Leaf(Thing::Identifier(
                                 // TODO: get the actual value and don't just set it to null
                                 Identifier::new(
                                     name.clone(),
-                                    IdentifierType::Vairable(Box::new(Vairable::new_empty(
-                                        tokens[0].line,
+                                    IdentifierType::Vairable(Box::new(Vairable::new(
+                                        thing,
                                     ))),
                                     tokens[0].line,
                                 ),
@@ -345,26 +503,19 @@ fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<
         let token = tokens.remove(0);
         match token.token_type {
             TokenType::String { ref literal } => {
-                stuff.push(Stuff::Literal(Literal::new(
-                    LiteralType::new_string(literal.to_string()),
-                    token.line,
+                stuff.push(Stuff::Literal(Literal::new_string(literal.to_string(), token.line,
                 )));
             }
             TokenType::Number { literal } => {
-                stuff.push(Stuff::Literal(Literal::new(
-                    LiteralType::new_number(literal),
-                    token.line,
+                stuff.push(Stuff::Literal(Literal::new_number(literal, token.line,
                 )));
             }
             TokenType::Boolean { value } => {
-                stuff.push(Stuff::Literal(Literal::new(
-                    LiteralType::new_boolean(value),
-                    token.line,
+                stuff.push(Stuff::Literal(Literal::new_boolean(value,token.line,
                 )));
             }
             TokenType::Null => {
-                stuff.push(Stuff::Literal(Literal::new(
-                    LiteralType::new_null(),
+                stuff.push(Stuff::Literal(Literal::new_null(
                     token.line,
                 )));
             }
@@ -404,7 +555,7 @@ fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<
     (stuff, paren_count)
 }
 
-#[derive(Clone)]
+#[derive(PartialEq,Clone)]
 pub enum Thing {
     // we have vairants for each type of token that has a value ie number or the name of an identifier
     Literal(Literal),
@@ -457,12 +608,18 @@ impl Thing {
             Thing::Other(_, line) => *line,
         }
     }
+    fn get_tt(&self) -> TokenType {
+        match self {
+            Thing::Other(tt, _) => {tt.clone()}
+            _ => panic!("get_tt called on non-other thing"),
+        }
+    }
 }
 
-impl fmt::Display for Thing {
+impl Display for Thing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Thing::Expression(expression) => write!(f, "{:?}", expression),
+            Thing::Expression(expression) => write!(f, "e {:?}", expression),
             Thing::Literal(literal) => write!(f, "{}", literal),
             Thing::Other(t, _) => write!(f, "{:?}", t),
             Thing::Identifier(s) => write!(f, "Identifier({})", s),

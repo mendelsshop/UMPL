@@ -1,9 +1,9 @@
 use crate::token::TokenType;
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 
-use super::{Thing, Tree};
+use super::{Thing, Tree, Displays};
 // TODO: make proper constructors for each struct/enum
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct Expression {
     pub inside: Tree<Stuff>,
     pub print: bool,
@@ -20,20 +20,20 @@ impl Expression {
     }
 }
 
-impl fmt::Display for Expression {
+impl Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.inside)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub enum Stuff {
     Literal(Literal),
     Identifier(Box<Identifier>),
     Call(Call),
 }
 
-impl fmt::Display for Stuff {
+impl Display for Stuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stuff::Literal(literal) => write!(f, "{}", literal),
@@ -43,24 +43,48 @@ impl fmt::Display for Stuff {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct Literal {
     pub literal: LiteralType,
     pub line: i32,
 }
 
 impl Literal {
-    pub fn new(literal: LiteralType, line: i32) -> Literal {
-        Literal { literal, line }
+    pub fn new_string(string: String, line: i32) -> Literal {
+        Literal {
+            literal: LiteralType::String(string),
+            line
+        }
+    }
+
+    pub fn new_number(number: f64, line: i32) -> Literal {
+        Literal {
+            literal: LiteralType::Number(number),
+            line
+        }
+    }
+
+    pub fn new_boolean(boolean: bool, line: i32) -> Literal {
+        Literal {
+            literal: LiteralType::Boolean(boolean),
+            line
+        }
+    }
+
+    pub fn new_null(line: i32) -> Literal {
+        Literal {
+            literal: LiteralType::Null,
+            line
+        }
     }
 }
 
-impl fmt::Display for Literal {
+impl Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.literal)
     }
 }
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub enum LiteralType {
     Number(f64),
     String(String),
@@ -69,24 +93,9 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
-    pub fn new_string(string: String) -> LiteralType {
-        LiteralType::String(string)
-    }
-
-    pub fn new_number(number: f64) -> LiteralType {
-        LiteralType::Number(number)
-    }
-
-    pub fn new_boolean(boolean: bool) -> LiteralType {
-        LiteralType::Boolean(boolean)
-    }
-
-    pub fn new_null() -> LiteralType {
-        LiteralType::Null
-    }
 }
 
-impl fmt::Display for LiteralType {
+impl Display for LiteralType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LiteralType::Number(num) => write!(f, "{}", num),
@@ -97,13 +106,13 @@ impl fmt::Display for LiteralType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub enum IdentifierType {
     List(Box<List>),
     Vairable(Box<Vairable>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct Identifier {
     pub name: String,
     pub value: IdentifierType,
@@ -116,7 +125,7 @@ impl Identifier {
     }
 }
 
-impl fmt::Display for Identifier {
+impl Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -130,7 +139,7 @@ impl fmt::Display for Identifier {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct Call {
     pub keyword: TokenType,
     pub arguments: Vec<Stuff>,
@@ -147,25 +156,24 @@ impl Call {
     }
 }
 
-impl fmt::Display for Call {
+impl Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut c = String::from("( ");
+        let mut c = String::from("");
         for arg in self.arguments.iter() {
             c.push_str(&format!("{} ", arg));
         }
-        c.push(')');
         write!(f, "{:?}: [{}]", self.keyword, c)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub enum OtherStuff {
     Literal(Literal),
     Identifier(Identifier),
     Expression(Expression),
 }
 
-impl fmt::Display for OtherStuff {
+impl Display for OtherStuff {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             OtherStuff::Literal(literal) => write!(f, "{}", literal),
@@ -175,16 +183,16 @@ impl fmt::Display for OtherStuff {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct Function {
     pub name: char,
     pub num_arguments: f64,
-    pub body: Box<Tree<Thing>>,
+    pub body: Vec<Tree<Thing>>,
     pub line: i32,
 }
 
 impl Function {
-    pub fn new(name: char, num_arguments: f64, body: Box<Tree<Thing>>, line: i32) -> Self {
+    pub fn new(name: char, num_arguments: f64, body: Vec<Tree<Thing>>, line: i32) -> Self {
         Function {
             name,
             num_arguments,
@@ -194,30 +202,30 @@ impl Function {
     }
 }
 
-impl fmt::Display for Function {
+impl Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "Function: {} with {} arguments and body: {}",
-            self.name, self.num_arguments, self.body
+            self.name, self.num_arguments, self.body.to_strings()
         )
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct List {
     pub line: i32,
     pub first: OtherStuff,
     pub second: OtherStuff,
 }
 
-impl fmt::Display for List {
+impl Display for List {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "with {} {}", self.first, self.second)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct Vairable {
     pub value: OtherStuff,
 }
@@ -229,26 +237,26 @@ impl Vairable {
 
     pub fn new_empty(line: i32) -> Self {
         Vairable {
-            value: OtherStuff::Literal(Literal::new(LiteralType::Null, line)),
+            value: OtherStuff::Literal(Literal::new_null(line)),
         }
     }
 }
 
-impl fmt::Display for Vairable {
+impl Display for Vairable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "with: {}", self.value)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct IfStatement {
     pub condition: Expression,
-    pub body_true: Box<Tree<Thing>>,
-    pub body_false: Box<Tree<Thing>>,
+    pub body_true: Vec<Tree<Thing>>,
+    pub body_false: Vec<Tree<Thing>>,
     pub line: i32,
 }
 
-impl fmt::Display for IfStatement {
+impl Display for IfStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -258,19 +266,19 @@ impl fmt::Display for IfStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq,Clone, Debug)]
 pub struct LoopStatement {
-    pub body: Box<Tree<Thing>>,
+    pub body: Vec<Tree<Thing>>,
     pub line: i32,
 }
 
 impl LoopStatement {
-    pub fn new(body: Box<Tree<Thing>>, line: i32) -> Self {
+    pub fn new(body: Vec<Tree<Thing>>, line: i32) -> Self {
         LoopStatement { body, line }
     }
 }
 
-impl fmt::Display for LoopStatement {
+impl Display for LoopStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "loop statement: {:?}", self.body)
     }
