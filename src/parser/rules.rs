@@ -1,15 +1,24 @@
-use std::fmt;
+use std::{
+    fmt::{self, Debug},
+};
+use crate::token::TokenType;
 
 use super::{Thing, Tree};
-
+// TODO: make proper constructors for each struct/enum
 #[derive(Clone, Debug)]
 pub struct Expression {
     pub inside: Tree<Stuff>,
+    pub print: bool,
+    pub line: i32,
 }
 
 impl Expression {
-    pub fn new(inside: Tree<Stuff>) -> Expression {
-        Expression { inside }
+    pub fn new(inside: Tree<Stuff>, print: bool, line: i32) -> Expression {
+        Expression {
+            inside,
+            print,
+            line,
+        }
     }
 }
 
@@ -42,6 +51,12 @@ pub struct Literal {
     pub line: i32,
 }
 
+impl Literal {
+    pub fn new(literal: LiteralType, line: i32) -> Literal {
+        Literal { literal, line }
+    }
+}
+
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.literal)
@@ -53,6 +68,24 @@ pub enum LiteralType {
     String(String),
     Boolean(bool),
     Null,
+}
+
+impl LiteralType {
+    pub fn new_string(string: String) -> LiteralType {
+        LiteralType::String(string)
+    }
+
+    pub fn new_number(number: f64) -> LiteralType {
+        LiteralType::Number(number)
+    }
+
+    pub fn new_boolean(boolean: bool) -> LiteralType {
+        LiteralType::Boolean(boolean)
+    }
+
+    pub fn new_null() -> LiteralType {
+        LiteralType::Null
+    }
 }
 
 impl fmt::Display for LiteralType {
@@ -89,11 +122,11 @@ impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}{}",
+            "{} {}",
             self.name,
             match &self.value {
-                IdentifierType::List(list) => format!("{}", list),
-                IdentifierType::Vairable(vairable) => format!("{}", vairable),
+                IdentifierType::List(list) => format!("list: {}", list),
+                IdentifierType::Vairable(vairable) => format!("variable: {}", vairable),
             }
         )
     }
@@ -101,13 +134,25 @@ impl fmt::Display for Identifier {
 
 #[derive(Clone, Debug)]
 pub struct Call {
+    pub keyword: TokenType,
     pub arguments: Vec<Stuff>,
     pub line: i32,
 }
 
+impl Call {
+    pub fn new(arguments: Vec<Stuff>, line: i32, keyword: TokenType) -> Call {
+        Call { arguments, line, keyword }
+    }
+}
+
 impl fmt::Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Call: [{:?}]", self.arguments)
+        let mut c = String::from("( ");
+        for arg in self.arguments.iter() {
+            c.push_str(&format!("{} ", arg));
+        };
+        c.push(')');
+        write!(f, "{:?}: [{}]",self.keyword, c)
     }
 }
 
@@ -166,25 +211,30 @@ pub struct List {
 
 impl fmt::Display for List {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "List: with {} {}", self.first, self.second)
+        write!(f, "with {} {}", self.first, self.second)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Vairable {
     pub value: OtherStuff,
-    pub line: i32,
 }
 
 impl Vairable {
-    pub fn new(value: OtherStuff, line: i32) -> Self {
-        Vairable { value, line }
+    pub fn new(value: OtherStuff, ) -> Self {
+        Vairable { value, }
+    }
+
+    pub fn new_empty(line: i32) -> Self {
+        Vairable {
+            value: OtherStuff::Literal(Literal::new(LiteralType::Null, line)),
+        }
     }
 }
 
 impl fmt::Display for Vairable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Vairable with: {}", self.value)
+        write!(f, "with: {}", self.value)
     }
 }
 

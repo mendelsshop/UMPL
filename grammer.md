@@ -46,7 +46,7 @@
 [`<fn-keyword>`](#fn-keywords) `,` [`<function-params>`](#function-params)
 
 # function-params: 
-`"[",` [`<stuff>+`](#stuff) ` , ":"+,"]"`
+`"[",` [`<stuff>+`](#stuff) ` ,"]"`
 
 # other-stuff:
 [`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier)
@@ -88,7 +88,7 @@
 `"list"` [`<variable>`](#variable) `"with"` [`<list-element>`](#list-elements)
 
 # list-elements:
-`"[",` [`<stuff>`](#other-stuff)`,":",`[`<stuff>`](#other-stuff) `,"]", "<" | ">"`
+`"[",` [`<stuff>`](#other-stuff) `,` [`<stuff>`](#other-stuff) `,"]", "<" | ">"`
 
 # statements
 [`<loop>`](#loop) `|` [`if-else`](#if-else)

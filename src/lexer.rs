@@ -61,7 +61,6 @@ impl Lexer {
             '.' => self.add_token(TokenType::Dot),
             '<' => self.add_token(TokenType::LessThanSymbol),
             '>' => self.add_token(TokenType::GreaterThanSymbol),
-            ':' => self.add_token(TokenType::Colon),
             '\n' => self.line += 1,
             '`' => self.string(),
             '$' => self.function_agument(),
@@ -196,7 +195,6 @@ impl Lexer {
                 }
                 Err(error) => {
                     error::error(self.line, error.to_string().as_str());
-                    0f64
                 }
             }
         );

@@ -1,13 +1,15 @@
 mod rules;
 use rules::{
     Expression, Function, Identifier, IfStatement, List, Literal, LiteralType, LoopStatement,
-    Vairable,
+    Vairable, Call, IdentifierType, OtherStuff, Stuff
 };
 
 use crate::token::TokenType;
 use crate::{error, keywords};
 use crate::{lexer::Lexer, token::Token};
+
 use std::fmt::{self, Debug};
+
 
 pub fn parse(src: String) -> Tree<Thing> {
     let mut tokens = Lexer::new(src).scan_tokens().to_vec();
@@ -39,6 +41,56 @@ impl Tree<Thing> {
             }
             Tree::Branch(children) => {
                 children.push(child);
+            }
+        }
+    }
+
+    pub fn convert_to_other_stuff(&self) -> Tree<OtherStuff> {
+        match self {
+            Tree::Leaf(thing) => match thing {
+                Thing::Literal(literal) => Tree::Leaf(OtherStuff::Literal(literal.clone())),
+                Thing::Identifier(identifier) => {
+                    Tree::Leaf(OtherStuff::Identifier(identifier.clone()))
+                }
+                Thing::Expression(expression) => {
+                    Tree::Leaf(OtherStuff::Expression(expression.clone()))
+                }
+                thing => error::error(
+                    thing.get_line(),
+                    "Thing is not a literal, identifier, or expression",
+                ),
+            },
+            Tree::Branch(children) => {
+                let mut new_children: Vec<Tree<OtherStuff>> = Vec::new();
+                for child in children {
+                    new_children.push(child.convert_to_other_stuff());
+                }
+                Tree::Branch(new_children)
+            }
+        }
+    }
+
+    pub fn convert_to_stuff(&mut self) -> Tree<Stuff> {
+        match self {
+            Tree::Leaf(thing) => {
+                Tree::Leaf(match thing {
+                    Thing::Literal(literal) => Stuff::Literal(literal.clone()),
+                    Thing::Identifier(identifier) => {
+                        Stuff::Identifier(Box::new(identifier.clone()))
+                    }
+                    // Thing::Call(call) => Stuff::Call(call),
+                    _ => error::error(
+                        thing.get_line(),
+                        "Thing is not a literal, identifier, or Call",
+                    ),
+                })
+            }
+            Tree::Branch(children) => {
+                let mut new_children = Vec::new();
+                for child in children {
+                    new_children.push(child.convert_to_stuff());
+                }
+                Tree::Branch(new_children)
             }
         }
     }
@@ -146,11 +198,10 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
         Tree::Branch(stuff)
     } else if token.token_type == TokenType::RightParen {
         error::error(token.line, "unmatched right parenthesis");
-        Tree::Leaf(Thing::Other(TokenType::Null, token.line))
     } else {
         let keywords = keywords::Keyword::new();
         if keywords.is_keyword(&token.token_type) {
-            match token.token_type {
+            match token.token_type.clone() {
                 TokenType::Potato => match &tokens[0].token_type.clone() {
                     TokenType::FunctionIdentifier { name } => {
                         tokens.remove(0);
@@ -166,7 +217,6 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                                         tokens[0].line,
                                         format!("number expected in function declaration found floating point number literal with {}", literal).as_str(),
                                     );
-                                    0f64
                                 }
                             }
                             TokenType::CodeBlockBegin => 0f64,
@@ -175,7 +225,6 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                                     tokens[0].line,
                                     "number expected after function identifier",
                                 );
-                                0f64
                             }
                         };
                         if tokens[0].token_type == TokenType::CodeBlockBegin {
@@ -239,6 +288,10 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                         tokens.remove(0);
                         if tokens[0].token_type == TokenType::With {
                             tokens.remove(0);
+                            return Tree::Leaf(Thing::Identifier(
+                                // TODO: get the actual value and don't just set it to null
+                                Identifier::new(name.clone(),IdentifierType::Vairable(Box::new(Vairable::new_empty(tokens[0].line))), tokens[0].line),
+                            ));
                         } else {
                             error::error(
                                 tokens[0].line,
@@ -261,7 +314,16 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                         );
                     }
                 },
-                _ => {}
+                TokenType::Return => {
+                    tokens.remove(0);
+                    // return Tree::Leaf(Thing::Return(Return::new(tokens[0].line)));
+                }
+                keyword => {
+                    let temp = parse_stuff_from_tokens(tokens, paren_count);
+                    let stuff: Vec<Stuff> = temp.0;
+                    paren_count = temp.1;
+                    return Tree::Leaf(Thing::Call(Call::new(stuff, tokens[0].line, keyword,)));
+                }
             }
         } else if token.token_type == TokenType::GreaterThanSymbol
             || token.token_type == TokenType::LessThanSymbol
@@ -272,6 +334,71 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
     }
 }
 
+fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<Stuff>, usize) {
+    let mut stuff: Vec<Stuff> = Vec::new();
+    while tokens[0].token_type != TokenType::RightParen {
+        let token = tokens.remove(0);
+        match token.token_type {
+            TokenType::String { ref literal } => {
+                stuff.push(Stuff::Literal(Literal::new(
+                    LiteralType::new_string(literal.to_string()),
+                    token.line,
+                )));
+            }
+            TokenType::Number { literal } => {
+                stuff.push(Stuff::Literal(Literal::new(
+                    LiteralType::new_number(literal),
+                    token.line,
+                )));
+            }
+            TokenType::Boolean { value } => {
+                stuff.push(Stuff::Literal(Literal::new(
+                    LiteralType::new_boolean(value),
+                    token.line,
+                )));
+            }
+            TokenType::Null => {
+                stuff.push(Stuff::Literal(Literal::new(
+                    LiteralType::new_null(),
+                    token.line,
+                )));
+            }
+            TokenType::New => {
+                tokens.remove(0);
+                return parse_stuff_from_tokens(tokens, paren_count);
+            }
+            TokenType::Identifier { name } => {
+                stuff.push(Stuff::Identifier(Box::new(Identifier::new(
+                    name,
+                    // TODO: get the actual value and don't just set it to null
+                    IdentifierType::Vairable(Box::new(Vairable::new_empty(token.line))),
+                    token.line,
+                ))));
+            }
+            TokenType::FunctionArgument { ref name } => {
+                stuff.push(Stuff::Identifier(Box::new(Identifier::new(
+                    name.to_string(),
+                    // TODO: get the actual value and don't just set it to null
+                    IdentifierType::Vairable(Box::new(Vairable::new_empty(token.line))),
+                    token.line,
+                ))));
+            }
+            TokenType::FunctionIdentifier { name }  => {
+                stuff.push(Stuff::Identifier(Box::new(Identifier::new(
+                    name.to_string(),
+                    // TODO: get the actual value and don't just set it to null
+                    IdentifierType::Vairable(Box::new(Vairable::new_empty(token.line))),
+                    token.line,
+                ))));
+            }
+            a => {
+                error::error(token.line, format!("literal expected {}", a).as_str());
+            }
+        }
+    }
+    (stuff, paren_count)
+}
+
 #[derive(Clone)]
 pub enum Thing {
     // we have vairants for each type of token that has a value ie number or the name of an identifier
@@ -280,9 +407,9 @@ pub enum Thing {
     Expression(Expression),
     Function(Function),
     List(List),
-    Vairable(Vairable),
     IfStatement(IfStatement),
     LoopStatement(LoopStatement),
+    Call(Call),
     // make this into a custom struct
 
     // for the rest of the tokens we just have the token type and the line number
@@ -311,6 +438,20 @@ impl Thing {
             _ => Thing::Other(token.token_type, token.line),
         }
     }
+
+    pub fn get_line(&self) -> i32 {
+        match self {
+            Thing::Literal(literal) => literal.line,
+            Thing::Identifier(identifier) => identifier.line,
+            Thing::Expression(expression) => expression.line,
+            Thing::Function(function) => function.line,
+            Thing::List(list) => list.line,
+            Thing::IfStatement(if_statement) => if_statement.line,
+            Thing::LoopStatement(loop_statement) => loop_statement.line,
+            Thing::Call(call) => call.line,
+            Thing::Other(_, line) => *line,
+        }
+    }
 }
 
 impl fmt::Display for Thing {
@@ -322,9 +463,9 @@ impl fmt::Display for Thing {
             Thing::Identifier(s) => write!(f, "Identifier({})", s),
             Thing::Function(function) => write!(f, "{{{}}}", function),
             Thing::List(list) => write!(f, "{}", list),
-            Thing::Vairable(vairable) => write!(f, "{}", vairable),
             Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{}", loop_statement),
+            Thing::Call(call) => write!(f, "{}", call),
         }
     }
 }
@@ -340,9 +481,9 @@ impl fmt::Debug for Thing {
             Thing::Identifier(t) => write!(f, "[Identifier({}) at line: {}]", t, t.line),
             Thing::Function(function) => write!(f, "{:?}", function),
             Thing::List(list) => write!(f, "{:?}", list),
-            Thing::Vairable(vairable) => write!(f, "{:?}", vairable),
             Thing::IfStatement(if_statement) => write!(f, "{:?}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{:?}", loop_statement),
+            Thing::Call(call) => write!(f, "{:?}", call),
         }
     }
 }

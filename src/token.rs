@@ -7,7 +7,6 @@ pub enum TokenType {
     LeftParen,
     GreaterThanSymbol,
     LessThanSymbol,
-    Colon,
     Dot,
     Bang,
     RightBracket,
