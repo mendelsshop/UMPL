@@ -35,7 +35,6 @@ pub fn parse(src: String) -> Vec<Tree<Thing>> {
         let expr = parse_from_token(&mut tokens, 0);
         println!("{}", expr);
         program.push(expr);
-        
     }
     program
 }
@@ -132,45 +131,38 @@ impl Tree<Thing> {
 
     pub fn convert_to_stuff(&mut self) -> Tree<Stuff> {
         match self {
-            Tree::Leaf(thing) => {
-                Tree::Leaf(match thing {
-                    Thing::Literal(literal) => Stuff::Literal(literal.clone()),
-                    Thing::Identifier(identifier) => {
-                        Stuff::Identifier(Box::new(identifier.clone()))
+            Tree::Leaf(thing) => Tree::Leaf(match thing {
+                Thing::Literal(literal) => Stuff::Literal(literal.clone()),
+                Thing::Identifier(identifier) => Stuff::Identifier(Box::new(identifier.clone())),
+                Thing::Call(call) => Stuff::Call(call.clone()),
+                Thing::Other(tt, l) => match tt {
+                    TokenType::Identifier { name } => {
+                        Stuff::Identifier(Box::new(Identifier::new_empty(name.to_string(), *l)))
                     }
-                    Thing::Call(call) => Stuff::Call(call.clone()),
-                    Thing::Other(tt, l) => {
-                        match tt {
-                            TokenType::Identifier { name } => {
-                                Stuff::Identifier(Box::new(Identifier::new_empty(name.to_string(), *l)
-                                ))
-                            }
-                            TokenType::Number { literal } => {
-                                Stuff::Literal(Literal::new_number(*literal, *l))
-                            }
-                            TokenType::String { literal } => {
-                                Stuff::Literal(Literal::new_string(literal.to_string(), *l))
-                            }
-                            TokenType::Boolean { value } => {
-                                Stuff::Literal(Literal::new_boolean(*value, *l))
-                            }
-                            TokenType::Null => Stuff::Literal(Literal::new_null(*l)),
-                            _ => error::error(
-                                thing.get_line(),
-                                "Thing is not a literal, identifier, or expression",
-                            ),
-                        }
+                    TokenType::Number { literal } => {
+                        Stuff::Literal(Literal::new_number(*literal, *l))
                     }
+                    TokenType::String { literal } => {
+                        Stuff::Literal(Literal::new_string(literal.to_string(), *l))
+                    }
+                    TokenType::Boolean { value } => {
+                        Stuff::Literal(Literal::new_boolean(*value, *l))
+                    }
+                    TokenType::Null => Stuff::Literal(Literal::new_null(*l)),
                     _ => error::error(
                         thing.get_line(),
-                        format!(
-                            "Thing is not a literal, identifier, or Call: found {}",
-                            thing
-                        )
-                        .as_str(),
+                        "Thing is not a literal, identifier, or expression",
                     ),
-                })
-            }
+                },
+                _ => error::error(
+                    thing.get_line(),
+                    format!(
+                        "Thing is not a literal, identifier, or Call: found {}",
+                        thing
+                    )
+                    .as_str(),
+                ),
+            }),
             Tree::Branch(children) => {
                 let mut new_children = Vec::new();
                 for child in children {
@@ -488,13 +480,12 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             loop_body.push(parse_from_token(tokens, paren_count));
                         }
                         tokens.remove(0);
-                        return Tree::Leaf(Thing::LoopStatement(LoopStatement::new(loop_body, tokens[0].line)));
-
-                    } else {
-                        error::error(
+                        return Tree::Leaf(Thing::LoopStatement(LoopStatement::new(
+                            loop_body,
                             tokens[0].line,
-                            "code block expected after \"loop\"",
-                        );
+                        )));
+                    } else {
+                        error::error(tokens[0].line, "code block expected after \"loop\"");
                     }
                 }
                 TokenType::If => {
@@ -557,7 +548,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                                         );
                                     }
                                 };
-                                println!("left paren found in if condition", );
+                                println!("left paren found in if condition",);
                                 thing = OtherStuff::Expression(Expression::new(
                                     z.convert_to_stuff(),
                                     prints,
@@ -589,62 +580,56 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                             tokens.remove(0);
                             if tokens[0].token_type == TokenType::CodeBlockBegin {
                                 tokens.remove(0);
-                            if_body = Vec::new();
-                            while tokens[0].token_type != TokenType::CodeBlockEnd {
-                                if_body.push(parse_from_token(tokens, paren_count));
-                            }
-                            tokens.remove(0);
-                            if tokens[0].token_type == TokenType::Else {
-                                tokens.remove(0);
-                                if tokens[0].token_type == TokenType::CodeBlockBegin {
-                                    println!("else found");
-                                    tokens.remove(0);
-                                    else_body= Vec::new();
-                                    while tokens[0].token_type != TokenType::CodeBlockEnd {
-                                        else_body.push(parse_from_token(tokens, paren_count));
-                                    }
-                                    println!("{} in else_body", tokens[0].token_type);
-                                    tokens.remove(0);
-                                    return Tree::Leaf(Thing::IfStatement(IfStatement::new(
-                                        thing,
-                                        if_body,
-                                        else_body,
-                                        tokens[0].line,
-                                    )));
+                                if_body = Vec::new();
+                                while tokens[0].token_type != TokenType::CodeBlockEnd {
+                                    if_body.push(parse_from_token(tokens, paren_count));
                                 }
-                                else {
+                                tokens.remove(0);
+                                if tokens[0].token_type == TokenType::Else {
+                                    tokens.remove(0);
+                                    if tokens[0].token_type == TokenType::CodeBlockBegin {
+                                        println!("else found");
+                                        tokens.remove(0);
+                                        else_body = Vec::new();
+                                        while tokens[0].token_type != TokenType::CodeBlockEnd {
+                                            else_body.push(parse_from_token(tokens, paren_count));
+                                        }
+                                        println!("{} in else_body", tokens[0].token_type);
+                                        tokens.remove(0);
+                                        return Tree::Leaf(Thing::IfStatement(IfStatement::new(
+                                            thing,
+                                            if_body,
+                                            else_body,
+                                            tokens[0].line,
+                                        )));
+                                    } else {
+                                        error::error(
+                                            tokens[0].line,
+                                            "code block expected after \"else\"",
+                                        );
+                                    }
+                                } else {
                                     error::error(
                                         tokens[0].line,
-                                        "code block expected after \"else\"",
+                                        "else keyword expected after if statement",
                                     );
                                 }
                             } else {
-                                error::error(
-                                    tokens[0].line,
-                                    "else keyword expected after if statement",
-                                );
+                                error::error(tokens[0].line, "code block expected after \"if\"");
                             }
                         } else {
-                            error::error(
-                                tokens[0].line,
-                                "code block expected after \"if\"",
-                            );
-                        }
-                        
-                    }
-                        else {
-                            error::error(
-                                tokens[0].line,
-                                "right brace expected after if condition",
-                            );
+                            error::error(tokens[0].line, "right brace expected after if condition");
                         }
                     } else {
                         error::error(
                             tokens[0].line,
-                            format!("{{ expected after \"if\" found TokenType::{:?}", tokens[0].token_type).as_str(),
+                            format!(
+                                "{{ expected after \"if\" found TokenType::{:?}",
+                                tokens[0].token_type
+                            )
+                            .as_str(),
                         );
                     }
-
                 }
                 TokenType::Return => {
                     tokens.remove(0);
@@ -717,7 +702,10 @@ fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<
                 ))));
             }
             a => {
-                error::error(token.line, format!("literal expected found: {}", a).as_str());
+                error::error(
+                    token.line,
+                    format!("literal expected found: {}", a).as_str(),
+                );
             }
         }
     }
@@ -836,10 +824,9 @@ fn atom(token: Token) -> Thing {
             literal: LiteralType::Null,
             line: token.line,
         }),
-        TokenType::Identifier { name } => Thing::Identifier(Identifier::new_empty(
-            name.to_string(),
-            token.line,
-        )),
-       _ => Thing::Other(token.token_type, token.line),
+        TokenType::Identifier { name } => {
+            Thing::Identifier(Identifier::new_empty(name.to_string(), token.line))
+        }
+        _ => Thing::Other(token.token_type, token.line),
     }
 }

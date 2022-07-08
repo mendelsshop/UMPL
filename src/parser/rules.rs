@@ -278,7 +278,6 @@ impl IfStatement {
             line,
         }
     }
-    
 }
 
 impl Display for IfStatement {
