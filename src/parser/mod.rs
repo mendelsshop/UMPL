@@ -33,7 +33,9 @@ pub fn parse(src: String) -> Vec<Tree<Thing>> {
     // and add it to the program tree
     while !tokens.is_empty() {
         let expr = parse_from_token(&mut tokens, 0);
+        println!("{}", expr);
         program.push(expr);
+        
     }
     program
 }
@@ -137,7 +139,28 @@ impl Tree<Thing> {
                         Stuff::Identifier(Box::new(identifier.clone()))
                     }
                     Thing::Call(call) => Stuff::Call(call.clone()),
-                    // Thing::Call(call) => Stuff::Call(call),
+                    Thing::Other(tt, l) => {
+                        match tt {
+                            TokenType::Identifier { name } => {
+                                Stuff::Identifier(Box::new(Identifier::new_empty(name.to_string(), *l)
+                                ))
+                            }
+                            TokenType::Number { literal } => {
+                                Stuff::Literal(Literal::new_number(*literal, *l))
+                            }
+                            TokenType::String { literal } => {
+                                Stuff::Literal(Literal::new_string(literal.to_string(), *l))
+                            }
+                            TokenType::Boolean { value } => {
+                                Stuff::Literal(Literal::new_boolean(*value, *l))
+                            }
+                            TokenType::Null => Stuff::Literal(Literal::new_null(*l)),
+                            _ => error::error(
+                                thing.get_line(),
+                                "Thing is not a literal, identifier, or expression",
+                            ),
+                        }
+                    }
                     _ => error::error(
                         thing.get_line(),
                         format!(
@@ -216,6 +239,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
             stuff.push(parse_from_token(tokens, paren_count));
         }
         if tokens[0].token_type == TokenType::RightParen {
+            println!("right paren found");
             paren_count -= 1;
             tokens.remove(0);
         };
@@ -267,6 +291,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
             match token.token_type.clone() {
                 TokenType::Potato => match &tokens[0].token_type.clone() {
                     TokenType::FunctionIdentifier { name } => {
+                        println!("function identifier found");
                         tokens.remove(0);
                         // check if the next token is a number and save it in a vairable num_args
                         let num_args = match tokens[0].token_type {
@@ -319,6 +344,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                 },
                 TokenType::List => match &tokens[0].token_type {
                     TokenType::Identifier { name } => {
+                        println!("list identifier found");
                         tokens.remove(0);
                         if tokens[0].token_type == TokenType::With {
                             tokens.remove(0);
@@ -346,6 +372,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                 },
                 TokenType::Create => match &tokens[0].token_type.clone() {
                     TokenType::Identifier { name } => {
+                        println!("create identifier found");
                         tokens.remove(0);
                         if tokens[0].token_type == TokenType::With {
                             tokens.remove(0);
@@ -377,8 +404,9 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                                     tokens.remove(0);
                                 }
                                 TokenType::LeftParen => {
-                                    // let mut print;
+                                    println!("left paren found variable declaration");
                                     let mut z = parse_from_token(tokens, paren_count);
+                                    println!("{:?}", z);
                                     // check whether z contains greater than symbol or less than symbol
                                     let result = z.check_gt_lt();
                                     z = result.1;
@@ -397,6 +425,7 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                                         prints,
                                         tokens[0].line,
                                     ));
+                                    println!("done");
                                 }
                                 TokenType::Identifier { name } => {
                                     thing = OtherStuff::Identifier(Identifier::new(
@@ -450,6 +479,173 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
                         );
                     }
                 },
+                TokenType::Loop => {
+                    println!("loop found");
+                    let mut loop_body: Vec<Tree<Thing>> = Vec::new();
+                    if tokens[0].token_type == TokenType::CodeBlockBegin {
+                        tokens.remove(0);
+                        while tokens[0].token_type != TokenType::CodeBlockEnd {
+                            loop_body.push(parse_from_token(tokens, paren_count));
+                        }
+                        tokens.remove(0);
+                        return Tree::Leaf(Thing::LoopStatement(LoopStatement::new(loop_body, tokens[0].line)));
+
+                    } else {
+                        error::error(
+                            tokens[0].line,
+                            "code block expected after \"loop\"",
+                        );
+                    }
+                }
+                TokenType::If => {
+                    if tokens[0].token_type == TokenType::LeftBrace {
+                        println!("if statement");
+                        let thing: OtherStuff;
+                        tokens.remove(0);
+                        let mut if_body: Vec<Tree<Thing>>;
+                        let mut else_body: Vec<Tree<Thing>>;
+                        match tokens[0].token_type.clone() {
+                            TokenType::Number { literal } => {
+                                error::error(
+                                    tokens[0].line,
+                                    format!(
+                                        "boolean expected, in if statement condition found number wit value {}",
+                                        literal
+                                    )
+                                    .as_str(),
+                                );
+                            }
+                            TokenType::String { literal } => {
+                                error::error(
+                                    tokens[0].line,
+                                    format!(
+                                        "boolean expected, in if statement condition found string wit value {}",
+                                        literal
+                                    )
+                                    .as_str(),
+                                );
+                            }
+                            TokenType::Null => {
+                                error::error(
+                                    tokens[0].line,
+                                    format!(
+                                        "boolean expected, in if statement condition found null"
+                                    )
+                                    .as_str(),
+                                );
+                            }
+                            TokenType::Boolean { value } => {
+                                thing = OtherStuff::Literal(Literal::new_boolean(
+                                    value,
+                                    tokens[0].line,
+                                ));
+                                tokens.remove(0);
+                            }
+                            TokenType::LeftParen => {
+                                // let mut print;
+                                let mut z = parse_from_token(tokens, paren_count);
+                                // check whether z contains greater than symbol or less than symbol
+                                let result = z.check_gt_lt();
+                                z = result.1;
+                                // let prints: bool;
+                                let prints: bool = match result.0 {
+                                    Some(x) => x,
+                                    None => {
+                                        error::error(
+                                            tokens[0].line,
+                                            "greater than symbol (>) or less than symbol (<) expected",
+                                        );
+                                    }
+                                };
+                                println!("left paren found in if condition", );
+                                thing = OtherStuff::Expression(Expression::new(
+                                    z.convert_to_stuff(),
+                                    prints,
+                                    tokens[0].line,
+                                ));
+                            }
+                            TokenType::Identifier { name } => {
+                                thing = OtherStuff::Identifier(Identifier::new(
+                                    name,
+                                    IdentifierType::Vairable(Box::new(Vairable::new_empty(
+                                        tokens[0].line,
+                                    ))),
+                                    tokens[0].line,
+                                ));
+                                tokens.remove(0);
+                            }
+                            tokentype => {
+                                error::error(
+                                    tokens[0].line,
+                                    format!(
+                                        "boolean expected, in if statement condition found TokenType::{:?}",
+                                        tokentype
+                                    )
+                                    .as_str(),
+                                );
+                            }
+                        }
+                        if tokens[0].token_type == TokenType::RightBrace {
+                            tokens.remove(0);
+                            if tokens[0].token_type == TokenType::CodeBlockBegin {
+                                tokens.remove(0);
+                            if_body = Vec::new();
+                            while tokens[0].token_type != TokenType::CodeBlockEnd {
+                                if_body.push(parse_from_token(tokens, paren_count));
+                            }
+                            tokens.remove(0);
+                            if tokens[0].token_type == TokenType::Else {
+                                tokens.remove(0);
+                                if tokens[0].token_type == TokenType::CodeBlockBegin {
+                                    println!("else found");
+                                    tokens.remove(0);
+                                    else_body= Vec::new();
+                                    while tokens[0].token_type != TokenType::CodeBlockEnd {
+                                        else_body.push(parse_from_token(tokens, paren_count));
+                                    }
+                                    println!("{} in else_body", tokens[0].token_type);
+                                    tokens.remove(0);
+                                    return Tree::Leaf(Thing::IfStatement(IfStatement::new(
+                                        thing,
+                                        if_body,
+                                        else_body,
+                                        tokens[0].line,
+                                    )));
+                                }
+                                else {
+                                    error::error(
+                                        tokens[0].line,
+                                        "code block expected after \"else\"",
+                                    );
+                                }
+                            } else {
+                                error::error(
+                                    tokens[0].line,
+                                    "else keyword expected after if statement",
+                                );
+                            }
+                        } else {
+                            error::error(
+                                tokens[0].line,
+                                "code block expected after \"if\"",
+                            );
+                        }
+                        
+                    }
+                        else {
+                            error::error(
+                                tokens[0].line,
+                                "right brace expected after if condition",
+                            );
+                        }
+                    } else {
+                        error::error(
+                            tokens[0].line,
+                            format!("{{ expected after \"if\" found TokenType::{:?}", tokens[0].token_type).as_str(),
+                        );
+                    }
+
+                }
                 TokenType::Return => {
                     tokens.remove(0);
                     // return Tree::Leaf(Thing::Return(Return::new(tokens[0].line)));
@@ -472,7 +668,9 @@ fn parse_from_token(tokens: &mut Vec<Token>, mut paren_count: usize) -> Tree<Thi
 
 fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<Stuff>, usize) {
     let mut stuff: Vec<Stuff> = Vec::new();
+    println!("{:?} convert tokens", tokens[0].token_type);
     while tokens[0].token_type != TokenType::RightParen {
+        println!("{:?} conet tokens in looop", tokens[0].token_type);
         let token = tokens.remove(0);
         match token.token_type {
             TokenType::String { ref literal } => {
@@ -519,7 +717,7 @@ fn parse_stuff_from_tokens(tokens: &mut Vec<Token>, paren_count: usize) -> (Vec<
                 ))));
             }
             a => {
-                error::error(token.line, format!("literal expected {}", a).as_str());
+                error::error(token.line, format!("literal expected found: {}", a).as_str());
             }
         }
     }
@@ -638,6 +836,10 @@ fn atom(token: Token) -> Thing {
             literal: LiteralType::Null,
             line: token.line,
         }),
-        _ => Thing::Other(token.token_type, token.line),
+        TokenType::Identifier { name } => Thing::Identifier(Identifier::new_empty(
+            name.to_string(),
+            token.line,
+        )),
+       _ => Thing::Other(token.token_type, token.line),
     }
 }

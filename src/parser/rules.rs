@@ -122,6 +122,13 @@ impl Identifier {
     pub fn new(name: String, value: IdentifierType, line: i32) -> Identifier {
         Identifier { name, value, line }
     }
+    pub fn new_empty(name: String, line: i32) -> Identifier {
+        Identifier {
+            name,
+            value: IdentifierType::Vairable(Box::new(Vairable::new_empty(line))),
+            line,
+        }
+    }
 }
 
 impl Display for Identifier {
@@ -251,10 +258,27 @@ impl Display for Vairable {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct IfStatement {
-    pub condition: Expression,
+    pub condition: OtherStuff,
     pub body_true: Vec<Tree<Thing>>,
     pub body_false: Vec<Tree<Thing>>,
     pub line: i32,
+}
+
+impl IfStatement {
+    pub fn new(
+        condition: OtherStuff,
+        body_true: Vec<Tree<Thing>>,
+        body_false: Vec<Tree<Thing>>,
+        line: i32,
+    ) -> Self {
+        IfStatement {
+            condition,
+            body_true,
+            body_false,
+            line,
+        }
+    }
+    
 }
 
 impl Display for IfStatement {
