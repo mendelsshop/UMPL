@@ -1,17 +1,17 @@
 use crate::token::TokenType;
 use std::fmt::{self, Debug, Display};
 
-use super::{Displays, Thing, Tree};
+use super::Thing;
 // TODO: make proper constructors for each struct/enum
 #[derive(PartialEq, Clone, Debug)]
 pub struct Expression {
-    pub inside: Tree<Stuff>,
+    pub inside: Stuff,
     pub print: bool,
     pub line: i32,
 }
 
 impl Expression {
-    pub fn new(inside: Tree<Stuff>, print: bool, line: i32) -> Expression {
+    pub fn new(inside: Stuff, print: bool, line: i32) -> Expression {
         Expression {
             inside,
             print,
@@ -193,12 +193,12 @@ impl Display for OtherStuff {
 pub struct Function {
     pub name: char,
     pub num_arguments: f64,
-    pub body: Vec<Tree<Thing>>,
+    pub body: Vec<Thing>,
     pub line: i32,
 }
 
 impl Function {
-    pub fn new(name: char, num_arguments: f64, body: Vec<Tree<Thing>>, line: i32) -> Self {
+    pub fn new(name: char, num_arguments: f64, body: Vec<Thing>, line: i32) -> Self {
         Function {
             name,
             num_arguments,
@@ -212,10 +212,8 @@ impl Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Function: {} with {} arguments and body: {}",
-            self.name,
-            self.num_arguments,
-            self.body.to_strings()
+            "Function: {} with {} arguments and body: {:?}",
+            self.name, self.num_arguments, self.body
         )
     }
 }
@@ -259,16 +257,16 @@ impl Display for Vairable {
 #[derive(PartialEq, Clone, Debug)]
 pub struct IfStatement {
     pub condition: OtherStuff,
-    pub body_true: Vec<Tree<Thing>>,
-    pub body_false: Vec<Tree<Thing>>,
+    pub body_true: Vec<Thing>,
+    pub body_false: Vec<Thing>,
     pub line: i32,
 }
 
 impl IfStatement {
     pub fn new(
         condition: OtherStuff,
-        body_true: Vec<Tree<Thing>>,
-        body_false: Vec<Tree<Thing>>,
+        body_true: Vec<Thing>,
+        body_false: Vec<Thing>,
         line: i32,
     ) -> Self {
         IfStatement {
@@ -292,12 +290,12 @@ impl Display for IfStatement {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct LoopStatement {
-    pub body: Vec<Tree<Thing>>,
+    pub body: Vec<Thing>,
     pub line: i32,
 }
 
 impl LoopStatement {
-    pub fn new(body: Vec<Tree<Thing>>, line: i32) -> Self {
+    pub fn new(body: Vec<Thing>, line: i32) -> Self {
         LoopStatement { body, line }
     }
 }
