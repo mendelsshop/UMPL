@@ -7,8 +7,8 @@ use std::{
 };
 use umpl::{
     cli, error,
+    lexer::Lexer,
     parser::{self, Displays},
-    lexer::{Lexer}
 };
 
 fn main() {
@@ -75,4 +75,3 @@ fn run(line: String) {
         println!("{}", thing);
     }
 }
-

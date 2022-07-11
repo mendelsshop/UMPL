@@ -74,9 +74,7 @@ impl Lexer {
                         if !self.null() {
                             self.identifier();
                         }
-
-                    }
-                    else {
+                    } else {
                         self.identifier();
                     }
                 } else if c.is_ascii_whitespace() {
