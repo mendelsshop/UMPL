@@ -612,9 +612,7 @@ impl Parser {
                                 TokenType::Null => {
                                     error::error(
                                         self.token.line,
-                                        
-                                        "boolean expected, in if statement condition found null"
-                                    
+                                        "boolean expected, in if statement condition found null",
                                     );
                                 }
                                 TokenType::Boolean { value } => {
