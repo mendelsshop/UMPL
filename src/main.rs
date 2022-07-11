@@ -8,7 +8,7 @@ use std::{
 use umpl::{
     cli, error,
     lexer::Lexer,
-    parser::{self, Displays},
+    parser::Parser,
 };
 
 fn main() {
@@ -69,7 +69,7 @@ fn main() {
 fn run(line: String) {
     let mut lexer = Lexer::new(line);
 
-    let mut parsed = parser::Parser::new(lexer.scan_tokens().to_vec());
+    let mut parsed = Parser::new(lexer.scan_tokens().to_vec());
 
     for thing in parsed.parse() {
         println!("{}", thing);

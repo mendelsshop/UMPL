@@ -340,13 +340,13 @@ impl Parser {
                     };
                 }
             }
-            return Some(Tree::Leaf(Thing::Expression(Expression {
+            Some(Tree::Leaf(Thing::Expression(Expression {
                 inside: stuff.convert_to_stuff(),
                 print: prints,
                 line: self.token.line,
-            })));
+            })))
         } else if self.token.token_type == TokenType::CodeBlockEnd {
-            return None;
+            None
         } else {
             let keywords = keywords::Keyword::new();
             if keywords.is_keyword(&self.token.token_type) {
@@ -391,7 +391,7 @@ impl Parser {
                                     }
                                     self.advance();
                                     return Some(Tree::Leaf(Thing::Function(Function::new(
-                                        name.clone(),
+                                        name,
                                         num_args,
                                         function,
                                         self.token.line,
@@ -529,7 +529,7 @@ impl Parser {
                                     return Some(Tree::Leaf(Thing::Identifier(
                                         // TODO: get the actual value and don't just set it to null
                                         Identifier::new(
-                                            name.clone(),
+                                            name,
                                             IdentifierType::Vairable(Box::new(Vairable::new(
                                                 thing,
                                             ))),
@@ -612,10 +612,9 @@ impl Parser {
                                 TokenType::Null => {
                                     error::error(
                                         self.token.line,
-                                        format!(
+                                        
                                         "boolean expected, in if statement condition found null"
-                                    )
-                                        .as_str(),
+                                    
                                     );
                                 }
                                 TokenType::Boolean { value } => {
@@ -767,7 +766,7 @@ impl Parser {
                         return Some(Tree::Leaf(Thing::Call(Call::new(
                             stuff,
                             self.token.line,
-                            keyword.clone(),
+                            keyword,
                         ))));
                     }
                 }
@@ -960,7 +959,7 @@ fn atom(token: Token) -> Thing {
             line: token.line,
         }),
         TokenType::Identifier { name } => {
-            Thing::Identifier(Identifier::new_empty(name.to_string(), token.line))
+            Thing::Identifier(Identifier::new_empty(name, token.line))
         }
         _ => Thing::Other(token.token_type, token.line),
     }
