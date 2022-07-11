@@ -28,14 +28,14 @@ impl Lexer {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> &Vec<Token> {
+    pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token()
         }
         self.token_list
             .push(Token::new(TokenType::EOF, "", self.line));
-        &self.token_list
+        self.token_list.to_owned()
     }
 
     fn is_at_end(&self) -> bool {
@@ -70,7 +70,13 @@ impl Lexer {
                         if !self.boolean() {
                             self.identifier();
                         }
-                    } else {
+                    } else if c == 'n' {
+                        if !self.null() {
+                            self.identifier();
+                        }
+
+                    }
+                    else {
                         self.identifier();
                     }
                 } else if c.is_ascii_whitespace() {
@@ -118,6 +124,24 @@ impl Lexer {
                         self.add_token(TokenType::Boolean { value: false });
                         return true;
                     }
+                }
+            }
+        }
+        false
+    }
+
+    fn null(&mut self) -> bool {
+        if self.peek() == 'u' {
+            self.advance();
+            if self.peek() == 'l' {
+                self.advance();
+                if self.peek() == 'l' {
+                    self.advance();
+                    if self.peek().is_alphanumeric() || self.peek() == '-' {
+                        return false;
+                    }
+                    self.add_token(TokenType::Null);
+                    return true;
                 }
             }
         }
@@ -198,7 +222,7 @@ impl Lexer {
                 }
             }
         );
-        self.add_token(TokenType::FunctionArgument { name: identifier })
+        self.add_token(TokenType::Identifier { name: identifier })
     }
 
     fn advance(&mut self) -> char {

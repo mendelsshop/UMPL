@@ -43,7 +43,6 @@ impl Keyword {
         keywords.insert("potato".to_string(), TokenType::Potato);
         keywords.insert("if".to_string(), TokenType::If);
         keywords.insert("else".to_string(), TokenType::Else);
-        keywords.insert("null".to_string(), TokenType::Null);
         keywords.insert("input".to_string(), TokenType::Input);
         keywords.insert("negative".to_string(), TokenType::Negative);
         keywords.insert("new".to_string(), TokenType::New);

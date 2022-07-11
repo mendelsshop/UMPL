@@ -16,7 +16,7 @@ create other-bool with ((not bool))< ! creates a variable called bool and sets i
 (other-bool)> ! prints false
 (other-bool with true)> ! prints other-bool  true, we set other-bool to true, so it prints true
 
-if {(not bool)<} ⧼ ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
+if {((not bool))<} ⧼ ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
   (`hello`)> ! the bactick (`) is used to encapsulate a string
 ⧽ else ⧼
     (`by`)>
