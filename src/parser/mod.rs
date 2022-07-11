@@ -605,7 +605,7 @@ impl Parser {
                         return Some(Thing::Call(Call::new(stuff, self.token.line, keyword)));
                     }
                 }
-            } 
+            }
             println!("found terminal token {}", self.token.token_type);
             Some(atom(self.token.clone()))
         }
