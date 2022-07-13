@@ -3,8 +3,8 @@ use crate::token::Token;
 use crate::token::TokenType;
 use crate::{error, keywords};
 use rules::{
-    Call, Expression, Function, Identifier, IdentifierType, IfStatement, Literal, LiteralType,
-    LoopStatement, OtherStuff, Stuff, Vairable,
+    Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType,
+    LoopStatement, OtherStuff, Stuff
 };
 use std::fmt::{self, Display};
 
@@ -15,6 +15,8 @@ pub struct Parser {
     tokens: Vec<Token>,
     token: Token,
     done: bool,
+    in_function: bool,
+    in_loop: bool,
 }
 
 impl Parser {
@@ -30,11 +32,35 @@ impl Parser {
             },
             done: false,
             weird_bracket_count: 0,
+            in_function: false,
+            in_loop: false,
         }
     }
 
     pub fn advance(&mut self) {
         match self.tokens[self.current_position].token_type {
+            TokenType::Return => {
+                if self.in_function {
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                else {
+                    error::error(
+                        self.tokens[self.current_position].line,
+                        "Return statement outside of function",
+                    );
+                }
+            }
+            TokenType::Break | TokenType::Continue => {
+                if self.in_loop {
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                else {
+                    error::error(
+                        self.tokens[self.current_position].line,
+                        "Break or continue statement outside of loop",
+                    );
+                }
+            }
             TokenType::EOF => {
                 self.done = true;
                 self.token = self.tokens[self.current_position].clone();
@@ -103,7 +129,9 @@ impl Parser {
         while !self.done {
             let expr = self.parse_from_token();
             match expr {
-                Some(t) => program.push(t),
+                Some(t) => {program.push(t.clone());
+                    println!("{:?}", t);
+                }
                 None => {}
             }
         }
@@ -119,6 +147,7 @@ impl Parser {
             return None;
         }
         self.advance();
+        // TODO: check if self.token is an identifier and see two case a if the next token is with (for setting variables after declaration) or dot (for setting/getting list items)
         println!("PARSEfromTOKEN {}", self.token);
         if self.token.token_type == TokenType::LeftParen {
             self.after_left_paren()
@@ -159,13 +188,14 @@ impl Parser {
                                 println!("int function declaration before code block");
                                 if self.token.token_type == TokenType::CodeBlockBegin {
                                     let mut function: Vec<Thing> = Vec::new();
+                                    self.in_function = true;
                                     while self.token.token_type != TokenType::CodeBlockEnd {
                                         match self.parse_from_token() {
                                             Some(t) => function.push(t),
                                             None => {}
                                         }
                                     }
-                                    self.advance();
+                                    self.in_function = false;
                                     return Some(Thing::Function(Function::new(
                                         name,
                                         num_args,
@@ -194,7 +224,28 @@ impl Parser {
                                 println!("list identifier found");
                                 self.advance();
                                 if self.token.token_type == TokenType::With {
-                                    // TODO: implement
+                                    self.advance();
+                                    if self.token.token_type == TokenType::LeftBracket {
+                                        let thing = OtherStuff::from_thing(self.parse_from_token().unwrap());
+                                        let thing1 = OtherStuff::from_thing(self.parse_from_token().unwrap());
+                                        self.advance();
+                                        if self.token.token_type == TokenType::RightBracket {
+                                            return Some(Thing::Identifier(
+                                                Identifier::new(name, vec![thing, thing1], self.token.line),
+                                            ));
+                                        } else {
+                                            error::error(
+                                            self.token.line,
+                                            format!("right bracket expected after list, found {}", self.token.token_type).as_str(),
+                                        );
+                                        }
+                                    }   
+                                    else {
+                                        error::error(
+                                            self.token.line,
+                                            format!("left bracket expected after \"with\", found {}", self.token.token_type).as_str(),
+                                        );
+                                    }
                                 } else {
                                     error::error(
                                         self.token.line,
@@ -247,9 +298,7 @@ impl Parser {
                                         TokenType::Identifier { name } => {
                                             OtherStuff::Identifier(Identifier::new(
                                                 name,
-                                                IdentifierType::Vairable(Box::new(
-                                                    Vairable::new_empty(self.token.line),
-                                                )),
+                                                vec![OtherStuff::Literal(Literal::new_null(self.token.line))],
                                                 self.token.line,
                                             ))
                                         }
@@ -269,9 +318,7 @@ impl Parser {
                                         // TODO: get the actual value and don't just set it to null
                                         Identifier::new(
                                             name,
-                                            IdentifierType::Vairable(Box::new(Vairable::new(
-                                                thing,
-                                            ))),
+                                            vec![thing],
                                             self.token.line,
                                         ),
                                     ));
@@ -303,6 +350,7 @@ impl Parser {
                         self.advance();
                         let mut loop_body: Vec<Thing> = Vec::new();
                         if self.token.token_type == TokenType::CodeBlockBegin {
+                            self.in_loop = true;
                             while self.token.token_type != TokenType::CodeBlockEnd {
                                 println!("parsing loop body");
                                 match self.parse_from_token() {
@@ -311,6 +359,7 @@ impl Parser {
                                 }
                             }
                             println!("Done parsing loop body");
+                            self.in_loop = false;
                             return Some(Thing::LoopStatement(LoopStatement::new(
                                 loop_body,
                                 self.token.line,
@@ -323,7 +372,6 @@ impl Parser {
                         self.advance();
                         if self.token.token_type == TokenType::LeftBrace {
                             println!("if statement");
-
                             self.advance();
                             let mut if_body: Vec<Thing>;
                             let mut else_body: Vec<Thing>;
@@ -337,9 +385,7 @@ impl Parser {
                                 TokenType::Identifier { name } => {
                                     OtherStuff::Identifier(Identifier::new(
                                         name.to_string(),
-                                        IdentifierType::Vairable(Box::new(Vairable::new_empty(
-                                            self.token.line,
-                                        ))),
+                                        vec![OtherStuff::Literal(Literal::new_null(self.token.line))],
                                         self.token.line,
                                     ))
                                 }
@@ -359,7 +405,6 @@ impl Parser {
                             if self.token.token_type == TokenType::RightBrace {
                                 self.advance();
                                 if self.token.token_type == TokenType::CodeBlockBegin {
-                                    self.advance();
                                     if_body = Vec::new();
                                     while self.token.token_type != TokenType::CodeBlockEnd {
                                         match self.parse_from_token() {
@@ -374,7 +419,6 @@ impl Parser {
                                         self.advance();
                                         if self.token.token_type == TokenType::CodeBlockBegin {
                                             println!("else found");
-                                            self.advance();
                                             else_body = Vec::new();
                                             while self.token.token_type != TokenType::CodeBlockEnd {
                                                 match self.parse_from_token() {
