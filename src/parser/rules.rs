@@ -129,16 +129,10 @@ pub enum IdentifierType {
 impl IdentifierType {
     pub fn new(thing: Vec<OtherStuff>) -> IdentifierType {
         match thing.len() {
-            0 => error::error(
-                0,
-                "expected Identifier, got empty list",
-            ),
+            0 => error::error(0, "expected Identifier, got empty list"),
             1 => IdentifierType::Vairable(Box::new(Vairable::new(thing[0].clone()))),
             2 => IdentifierType::List(Box::new(List::new(thing))),
-            _ => error::error(
-                0,
-                "expected Identifier, got list with more than 2 elements",
-            ),
+            _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
         }
     }
 }
@@ -152,8 +146,11 @@ pub struct Identifier {
 
 impl Identifier {
     pub fn new(name: String, value: Vec<OtherStuff>, line: i32) -> Identifier {
-        Identifier { name, value: IdentifierType::new(value),
-        line }
+        Identifier {
+            name,
+            value: IdentifierType::new(value),
+            line,
+        }
     }
     pub fn new_empty(name: String, line: i32) -> Identifier {
         Identifier {
@@ -278,7 +275,6 @@ pub struct List {
 impl List {
     pub fn new(thing: Vec<OtherStuff>) -> List {
         List {
-
             first: thing[0].clone(),
             second: thing[1].clone(),
         }

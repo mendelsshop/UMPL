@@ -3,8 +3,8 @@ use crate::token::Token;
 use crate::token::TokenType;
 use crate::{error, keywords};
 use rules::{
-    Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType,
-    LoopStatement, OtherStuff, Stuff
+    Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType, LoopStatement,
+    OtherStuff, Stuff,
 };
 use std::fmt::{self, Display};
 
@@ -42,8 +42,7 @@ impl Parser {
             TokenType::Return => {
                 if self.in_function {
                     self.token = self.tokens[self.current_position].clone();
-                }
-                else {
+                } else {
                     error::error(
                         self.tokens[self.current_position].line,
                         "Return statement outside of function",
@@ -53,8 +52,7 @@ impl Parser {
             TokenType::Break | TokenType::Continue => {
                 if self.in_loop {
                     self.token = self.tokens[self.current_position].clone();
-                }
-                else {
+                } else {
                     error::error(
                         self.tokens[self.current_position].line,
                         "Break or continue statement outside of loop",
@@ -129,7 +127,8 @@ impl Parser {
         while !self.done {
             let expr = self.parse_from_token();
             match expr {
-                Some(t) => {program.push(t.clone());
+                Some(t) => {
+                    program.push(t.clone());
                     println!("{:?}", t);
                 }
                 None => {}
@@ -226,24 +225,37 @@ impl Parser {
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
                                     if self.token.token_type == TokenType::LeftBracket {
-                                        let thing = OtherStuff::from_thing(self.parse_from_token().unwrap());
-                                        let thing1 = OtherStuff::from_thing(self.parse_from_token().unwrap());
+                                        let thing = OtherStuff::from_thing(
+                                            self.parse_from_token().unwrap(),
+                                        );
+                                        let thing1 = OtherStuff::from_thing(
+                                            self.parse_from_token().unwrap(),
+                                        );
                                         self.advance();
                                         if self.token.token_type == TokenType::RightBracket {
-                                            return Some(Thing::Identifier(
-                                                Identifier::new(name, vec![thing, thing1], self.token.line),
-                                            ));
+                                            return Some(Thing::Identifier(Identifier::new(
+                                                name,
+                                                vec![thing, thing1],
+                                                self.token.line,
+                                            )));
                                         } else {
                                             error::error(
-                                            self.token.line,
-                                            format!("right bracket expected after list, found {}", self.token.token_type).as_str(),
-                                        );
+                                                self.token.line,
+                                                format!(
+                                                    "right bracket expected after list, found {}",
+                                                    self.token.token_type
+                                                )
+                                                .as_str(),
+                                            );
                                         }
-                                    }   
-                                    else {
+                                    } else {
                                         error::error(
                                             self.token.line,
-                                            format!("left bracket expected after \"with\", found {}", self.token.token_type).as_str(),
+                                            format!(
+                                                "left bracket expected after \"with\", found {}",
+                                                self.token.token_type
+                                            )
+                                            .as_str(),
                                         );
                                     }
                                 } else {
@@ -298,7 +310,9 @@ impl Parser {
                                         TokenType::Identifier { name } => {
                                             OtherStuff::Identifier(Identifier::new(
                                                 name,
-                                                vec![OtherStuff::Literal(Literal::new_null(self.token.line))],
+                                                vec![OtherStuff::Literal(Literal::new_null(
+                                                    self.token.line,
+                                                ))],
                                                 self.token.line,
                                             ))
                                         }
@@ -316,11 +330,7 @@ impl Parser {
 
                                     return Some(Thing::Identifier(
                                         // TODO: get the actual value and don't just set it to null
-                                        Identifier::new(
-                                            name,
-                                            vec![thing],
-                                            self.token.line,
-                                        ),
+                                        Identifier::new(name, vec![thing], self.token.line),
                                     ));
                                 } else {
                                     error::error(
@@ -385,7 +395,9 @@ impl Parser {
                                 TokenType::Identifier { name } => {
                                     OtherStuff::Identifier(Identifier::new(
                                         name.to_string(),
-                                        vec![OtherStuff::Literal(Literal::new_null(self.token.line))],
+                                        vec![OtherStuff::Literal(Literal::new_null(
+                                            self.token.line,
+                                        ))],
                                         self.token.line,
                                     ))
                                 }
