@@ -1,86 +1,12 @@
 mod rules;
+use crate::token::Token;
+use crate::token::TokenType;
+use crate::{error, keywords};
 use rules::{
     Call, Expression, Function, Identifier, IdentifierType, IfStatement, Literal, LiteralType,
     LoopStatement, OtherStuff, Stuff, Vairable,
 };
-
-use crate::token::Token;
-use crate::token::TokenType;
-use crate::{error, keywords};
-
-use std::fmt::{self, Debug, Display};
-
-pub trait Displays {
-    fn to_strings(&self) -> String;
-}
-impl Displays for Vec<Tree<Thing>> {
-    fn to_strings(&self) -> String {
-        let mut s = String::new();
-        for tree in self {
-            match tree {
-                Tree::Branch(thing) => s.push_str(format!("\n{}", thing.to_strings()).as_str()),
-                Tree::Leaf(thing) => s.push_str(format!("{} ", thing).as_str()),
-            }
-        }
-        s
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Tree<T> {
-    Leaf(T),
-    Branch(Vec<Tree<T>>),
-}
-
-impl Tree<Thing> {
-    pub fn convert_to_stuff(&mut self) -> Tree<Stuff> {
-        match self {
-            Tree::Leaf(thing) => Tree::Leaf(match thing {
-                Thing::Literal(literal) => Stuff::Literal(literal.clone()),
-                Thing::Identifier(identifier) => Stuff::Identifier(Box::new(identifier.clone())),
-                Thing::Call(call) => Stuff::Call(call.clone()),
-                Thing::Other(tt, l) => match tt {
-                    TokenType::Identifier { name } => {
-                        Stuff::Identifier(Box::new(Identifier::new_empty(name.to_string(), *l)))
-                    }
-                    TokenType::Number { literal } => {
-                        Stuff::Literal(Literal::new_number(*literal, *l))
-                    }
-                    TokenType::String { literal } => {
-                        Stuff::Literal(Literal::new_string(literal.to_string(), *l))
-                    }
-                    TokenType::Boolean { value } => {
-                        Stuff::Literal(Literal::new_boolean(*value, *l))
-                    }
-                    TokenType::Null => Stuff::Literal(Literal::new_null(*l)),
-                    _ => error::error(
-                        thing.get_line(),
-                        format!(
-                            "Thing {} is not a literal, identifier, or expression",
-                            thing
-                        )
-                        .as_str(),
-                    ),
-                },
-                _ => error::error(
-                    thing.get_line(),
-                    format!(
-                        "Thing is not a literal, identifier, or Call: found {}",
-                        thing
-                    )
-                    .as_str(),
-                ),
-            }),
-            Tree::Branch(children) => {
-                let mut new_children = Vec::new();
-                for child in children {
-                    new_children.push(child.convert_to_stuff());
-                }
-                Tree::Branch(new_children)
-            }
-        }
-    }
-}
+use std::fmt::{self, Display};
 
 pub struct Parser {
     paren_count: usize,
@@ -111,12 +37,19 @@ impl Parser {
         match self.tokens[self.current_position].token_type {
             TokenType::EOF => {
                 self.done = true;
+                self.token = self.tokens[self.current_position].clone();
             }
             TokenType::LeftParen => {
                 self.paren_count += 1;
                 self.token = self.tokens[self.current_position].clone();
             }
             TokenType::RightParen => {
+                if self.paren_count == 0 {
+                    error::error(
+                        self.tokens[self.current_position].line,
+                        "unmatched right parenthesis",
+                    );
+                }
                 self.paren_count -= 1;
                 if self.paren_count == 0
                     && !(vec![TokenType::GreaterThanSymbol, TokenType::LessThanSymbol]
@@ -178,6 +111,7 @@ impl Parser {
         program
     }
     fn parse_from_token(&mut self) -> Option<Thing> {
+        println!("new iteration");
         if self.tokens.is_empty() {
             error::error(0, "no self.tokens found");
         }
@@ -187,35 +121,7 @@ impl Parser {
         self.advance();
         println!("PARSEfromTOKEN {}", self.token);
         if self.token.token_type == TokenType::LeftParen {
-            println!("went down first if");
-            // let mut stuff = Vec::new();
-            // while self.token.token_type != TokenType::RightParen {
-            //     let expr = self.parse_from_token();
-            //     match expr {
-            //         Some(t) => stuff.push(t),
-            //         None => {}
-            //     }
-            // }
-            let stuff = self.parse_from_token().unwrap();
-            self.advance();
-            if self.token.token_type == TokenType::RightParen {
-                println!("right paren found");
-            };
-            self.advance();
-            let mut prints = false;
-            match self.token.token_type {
-                TokenType::GreaterThanSymbol => {
-                    println!("went down second if {}", self.paren_count);
-                    prints = true;
-                }
-                TokenType::LessThanSymbol => {}
-                _ => {}
-            }
-            Some(Thing::Expression(Expression {
-                inside: stuff.convert_to_stuff(),
-                print: prints,
-                line: self.token.line,
-            }))
+            self.after_left_paren()
         } else if self.token.token_type == TokenType::CodeBlockEnd {
             None
         } else {
@@ -253,7 +159,6 @@ impl Parser {
                                 println!("int function declaration before code block");
                                 if self.token.token_type == TokenType::CodeBlockBegin {
                                     let mut function: Vec<Thing> = Vec::new();
-                                    self.advance();
                                     while self.token.token_type != TokenType::CodeBlockEnd {
                                         match self.parse_from_token() {
                                             Some(t) => function.push(t),
@@ -289,7 +194,7 @@ impl Parser {
                                 println!("list identifier found");
                                 self.advance();
                                 if self.token.token_type == TokenType::With {
-                                    self.advance();
+                                    // TODO: implement
                                 } else {
                                     error::error(
                                         self.token.line,
@@ -321,59 +226,32 @@ impl Parser {
                                 self.advance();
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
-                                    let thing: OtherStuff;
+
                                     println!("create identifier with {}", self.token.token_type);
-                                    match self.token.token_type.clone() {
-                                        TokenType::Number { literal } => {
-                                            thing = OtherStuff::Literal(Literal::new_number(
-                                                literal,
-                                                self.token.line,
-                                            ));
-                                            self.advance();
-                                        }
-                                        TokenType::String { literal } => {
-                                            thing = OtherStuff::Literal(Literal::new_string(
-                                                literal,
-                                                self.token.line,
-                                            ));
-                                            self.advance()
-                                        }
+                                    let thing: OtherStuff = match self.token.token_type.clone() {
+                                        TokenType::Number { literal } => OtherStuff::Literal(
+                                            Literal::new_number(literal, self.token.line),
+                                        ),
+                                        TokenType::String { literal } => OtherStuff::Literal(
+                                            Literal::new_string(literal, self.token.line),
+                                        ),
                                         TokenType::Null => {
-                                            thing = OtherStuff::Literal(Literal::new_null(
-                                                self.token.line,
-                                            ));
-                                            self.advance();
+                                            OtherStuff::Literal(Literal::new_null(self.token.line))
                                         }
-                                        TokenType::Boolean { value } => {
-                                            thing = OtherStuff::Literal(Literal::new_boolean(
-                                                value,
-                                                self.token.line,
-                                            ));
-                                            self.advance();
-                                        }
+                                        TokenType::Boolean { value } => OtherStuff::Literal(
+                                            Literal::new_boolean(value, self.token.line),
+                                        ),
                                         TokenType::LeftParen => {
-                                            println!("left paren found variable declaration");
-                                            let z = self.parse_from_token().unwrap();
-                                            println!("problem: {:?}", z);
-                                            // check whether z contains greater than symbol or less than symbol
-                                            // let prints: bool;
-                                            let prints: bool = true;
-                                            thing = OtherStuff::Expression(Expression::new(
-                                                z.convert_to_stuff(),
-                                                prints,
-                                                self.token.line,
-                                            ));
-                                            println!("done");
+                                            OtherStuff::from_thing(self.after_left_paren().unwrap())
                                         }
                                         TokenType::Identifier { name } => {
-                                            thing = OtherStuff::Identifier(Identifier::new(
+                                            OtherStuff::Identifier(Identifier::new(
                                                 name,
                                                 IdentifierType::Vairable(Box::new(
                                                     Vairable::new_empty(self.token.line),
                                                 )),
                                                 self.token.line,
-                                            ));
-                                            self.advance();
+                                            ))
                                         }
                                         tokentype => {
                                             error::error(
@@ -385,7 +263,7 @@ impl Parser {
                                         .as_str(),
                                     );
                                         }
-                                    }
+                                    };
 
                                     return Some(Thing::Identifier(
                                         // TODO: get the actual value and don't just set it to null
@@ -445,65 +323,25 @@ impl Parser {
                         self.advance();
                         if self.token.token_type == TokenType::LeftBrace {
                             println!("if statement");
-                            let thing: OtherStuff;
+
                             self.advance();
                             let mut if_body: Vec<Thing>;
                             let mut else_body: Vec<Thing>;
-                            match &self.token.token_type {
-                                TokenType::Number { literal } => {
-                                    error::error(
-                                    self.token.line,
-                                    format!(
-                                        "boolean expected, in if statement condition found number wit value {}",
-                                        literal
-                                    )
-                                    .as_str(),
-                                );
-                                }
-                                TokenType::String { literal } => {
-                                    error::error(
-                                    self.token.line,
-                                    format!(
-                                        "boolean expected, in if statement condition found string wit value {}",
-                                        literal
-                                    )
-                                    .as_str(),
-                                );
-                                }
-                                TokenType::Null => {
-                                    error::error(
-                                        self.token.line,
-                                        "boolean expected, in if statement condition found null",
-                                    );
-                                }
-                                TokenType::Boolean { value } => {
-                                    thing = OtherStuff::Literal(Literal::new_boolean(
-                                        *value,
-                                        self.token.line,
-                                    ));
-                                    self.advance();
-                                }
+                            let thing: OtherStuff = match &self.token.token_type {
+                                TokenType::Boolean { value } => OtherStuff::Literal(
+                                    Literal::new_boolean(*value, self.token.line),
+                                ),
                                 TokenType::LeftParen => {
-                                    // let mut print;
-                                    println!("left paren in if statement condition");
-                                    let z = self.parse_from_token().unwrap();
-                                    let prints: bool = true;
-                                    println!("left paren found in if condition",);
-                                    thing = OtherStuff::Expression(Expression::new(
-                                        z.convert_to_stuff(),
-                                        prints,
-                                        self.token.line,
-                                    ));
+                                    OtherStuff::from_thing(self.after_left_paren().unwrap())
                                 }
                                 TokenType::Identifier { name } => {
-                                    thing = OtherStuff::Identifier(Identifier::new(
+                                    OtherStuff::Identifier(Identifier::new(
                                         name.to_string(),
                                         IdentifierType::Vairable(Box::new(Vairable::new_empty(
                                             self.token.line,
                                         ))),
-                                        self.tokens[0].line,
-                                    ));
-                                    self.advance();
+                                        self.token.line,
+                                    ))
                                 }
                                 tokentype => {
                                     error::error(
@@ -515,8 +353,9 @@ impl Parser {
                                     .as_str(),
                                 );
                                 }
-                            }
+                            };
                             println!("after conditon if statement");
+                            self.advance();
                             if self.token.token_type == TokenType::RightBrace {
                                 self.advance();
                                 if self.token.token_type == TokenType::CodeBlockBegin {
@@ -587,8 +426,8 @@ impl Parser {
                         }
                     }
                     TokenType::Return => {
-                        self.advance();
-                        // return Tree::Leaf(Thing::Return(Return::new(self.tokens[0].line)));
+                        // TODO: capture the value returned if any
+                        return Some(Thing::Other(self.token.token_type.clone(), self.token.line));
                     }
                     TokenType::Break => {
                         println!("break statement");
@@ -598,11 +437,11 @@ impl Parser {
                         println!("continue statement");
                         return Some(Thing::Other(self.token.token_type.clone(), self.token.line));
                     }
-                    keyword => {
-                        println!("keyword");
-                        let stuff: Vec<Stuff> = self.parse_stuff_from_tokens();
-                        println!("after ");
-                        return Some(Thing::Call(Call::new(stuff, self.token.line, keyword)));
+                    _ => {
+                        error::error(
+                            self.token.line,
+                            "keyword not allowed in expression before left parenthesis",
+                        );
                     }
                 }
             }
@@ -611,68 +450,52 @@ impl Parser {
         }
     }
 
-    fn parse_stuff_from_tokens(&mut self) -> Vec<Stuff> {
-        let mut stuff: Vec<Stuff> = Vec::new();
-        println!("{:?} convert self.tokens", self.token.token_type);
-        while self.token.token_type != TokenType::RightParen {
-            println!("{:?} conet self.tokens in looop", self.token.token_type);
+    fn after_left_paren(&mut self) -> Option<Thing> {
+        if self.paren_count == 1 {
+            println!("found expresssion");
+            let stuff = self.parse_from_token().unwrap();
             self.advance();
-            match self.token.token_type.clone() {
-                TokenType::String { ref literal } => {
-                    stuff.push(Stuff::Literal(Literal::new_string(
-                        literal.to_string(),
-                        self.token.line,
-                    )));
-                }
-                TokenType::Number { literal } => {
-                    stuff.push(Stuff::Literal(Literal::new_number(
-                        literal,
-                        self.token.line,
-                    )));
-                }
-                TokenType::Boolean { value } => {
-                    stuff.push(Stuff::Literal(Literal::new_boolean(value, self.token.line)));
-                }
-                TokenType::Null => {
-                    stuff.push(Stuff::Literal(Literal::new_null(self.token.line)));
-                }
-                TokenType::New => {
-                    self.advance();
-                    return self.parse_stuff_from_tokens();
-                }
-                TokenType::Identifier { name } => {
-                    stuff.push(Stuff::Identifier(Box::new(Identifier::new(
-                        name,
-                        // TODO: get the actual value and don't just set it to null
-                        IdentifierType::Vairable(Box::new(Vairable::new_empty(self.token.line))),
-                        self.token.line,
-                    ))));
-                }
-                TokenType::FunctionArgument { ref name } => {
-                    stuff.push(Stuff::Identifier(Box::new(Identifier::new(
-                        name.to_string(),
-                        // TODO: get the actual value and don't just set it to null
-                        IdentifierType::Vairable(Box::new(Vairable::new_empty(self.token.line))),
-                        self.token.line,
-                    ))));
-                }
-                TokenType::FunctionIdentifier { name } => {
-                    stuff.push(Stuff::Identifier(Box::new(Identifier::new(
-                        name.to_string(),
-                        // TODO: get the actual value and don't just set it to null
-                        IdentifierType::Vairable(Box::new(Vairable::new_empty(self.token.line))),
-                        self.token.line,
-                    ))));
-                }
-                a => {
-                    error::error(
-                        self.token.line,
-                        format!("literal expected found: {}", a).as_str(),
-                    );
-                }
+            if self.token.token_type == TokenType::RightParen {
+                println!("right paren found");
+            } else {
+                error::error(self.token.line, "right parenthesis expected");
             }
+            self.advance();
+            println!("found express");
+            let mut prints = false;
+            match self.token.token_type {
+                TokenType::GreaterThanSymbol => {
+                    prints = true;
+                }
+                TokenType::LessThanSymbol => {
+                    prints = false;
+                }
+                _ => {}
+            }
+            Some(Thing::Expression(Expression {
+                inside: stuff.convert_to_stuff(),
+                print: prints,
+                line: self.token.line,
+            }))
+        } else {
+            self.advance();
+            if self.token.token_type == TokenType::New {
+                self.advance();
+            }
+            let keyword = self.token.token_type.clone();
+            let line = self.token.line;
+            println!("found call");
+            let mut args = Vec::new();
+            while self.tokens[self.current_position].token_type != TokenType::RightParen {
+                args.push(Stuff::from_thing(self.parse_from_token().unwrap()));
+            }
+            self.advance();
+            Some(Thing::Call(Call {
+                keyword,
+                arguments: args,
+                line,
+            }))
         }
-        stuff
     }
 }
 
@@ -728,6 +551,7 @@ impl Thing {
             Thing::Other(_, line) => *line,
         }
     }
+    #[allow(dead_code)]
     fn get_tt(&self) -> TokenType {
         match self {
             Thing::Other(tt, _) => tt.clone(),

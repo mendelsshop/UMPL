@@ -1,4 +1,4 @@
-use crate::token::TokenType;
+use crate::{error, token::TokenType};
 use std::fmt::{self, Debug, Display};
 
 use super::Thing;
@@ -33,6 +33,23 @@ pub enum Stuff {
     Call(Call),
 }
 
+impl Stuff {
+    pub fn from_thing(thing: Thing) -> Stuff {
+        match thing {
+            Thing::Literal(ref lit) => Stuff::Literal(lit.clone()),
+            Thing::Identifier(ref ident) => Stuff::Identifier(Box::new(ident.clone())),
+            Thing::Call(ref call) => Stuff::Call(call.clone()),
+            thing => error::error(
+                thing.get_line(),
+                format!(
+                    "expected Literal, Identifier, or function call, got {:?}",
+                    thing
+                )
+                .as_str(),
+            ),
+        }
+    }
+}
 impl Display for Stuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -91,8 +108,6 @@ pub enum LiteralType {
     Boolean(bool),
     Null,
 }
-
-impl LiteralType {}
 
 impl Display for LiteralType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -177,6 +192,24 @@ pub enum OtherStuff {
     Literal(Literal),
     Identifier(Identifier),
     Expression(Expression),
+}
+
+impl OtherStuff {
+    pub fn from_thing(thing: Thing) -> Self {
+        match thing {
+            Thing::Identifier(ref ident) => Self::Identifier(ident.clone()),
+            Thing::Literal(ref lit) => Self::Literal(lit.clone()),
+            Thing::Expression(ref expr) => Self::Expression(expr.clone()),
+            _ => error::error(
+                thing.get_line(),
+                format!(
+                    "expected Identifier, Literal, or Expression, got {:?}",
+                    thing
+                )
+                .as_str(),
+            ),
+        }
+    }
 }
 
 impl Display for OtherStuff {
