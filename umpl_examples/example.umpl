@@ -5,16 +5,16 @@ potato 😂2 ⧼ ! to create a function we use the potato keyword, functions mus
     ! adds both arg1 and arg2, the less than signifies that this should not be the printed and sets it to the final variable
     return final
 ⧽
-(new 😂 10 0x1A)> ! we use the new keyword to call a function followed by function names, prints 32, when the first digit of number is a letre prefix with 0x
+((new 😂 10 0x1A))> ! we use the new keyword to call a function followed by function names, prints 32, when the first digit of number is a letre prefix with 0x
 
 list it with [((not true))> 2] ! creates a list with the values  1,2 (in hex), list can only have two elements
-(it.first with 2)< ! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
-(it.second with 4)> ! sets the second element of the it list to 4 and print its
+it.first with 2! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
+it.second with 4 ! sets the second element of the it list to 4 and print its
 
 create bool with true
 create other-bool with ((not bool))< ! creates a variable called bool and sets it to true, then creates a variable called other-bool and sets it to the opposite of bool, when we call a function in a variable defenition we must use an expression to call the function
 (other-bool)> ! prints false
-(other-bool with true)> ! prints other-bool  true, we set other-bool to true, so it prints true
+other-bool with true ! we set other-bool to true
 
 if {((not bool))<} ⧼ ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
   (`hello`)> ! the bactick (`) is used to encapsulate a string
