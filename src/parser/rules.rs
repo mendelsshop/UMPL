@@ -33,20 +33,13 @@ pub struct IdentifierPointer {
     pub line: i32,
 }
 
-impl IdentifierPointer
-{
-    pub fn new(name: String, line: i32) -> IdentifierPointer
-    {
-        IdentifierPointer {
-            name,
-
-            line,
-        }
+impl IdentifierPointer {
+    pub fn new(name: String, line: i32) -> IdentifierPointer {
+        IdentifierPointer { name, line }
     }
 }
 
-impl Display for IdentifierPointer
-{
+impl Display for IdentifierPointer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
     }

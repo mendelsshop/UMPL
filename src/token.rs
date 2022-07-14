@@ -1,5 +1,5 @@
-use std::fmt::{self, Debug, Display};
 use crate::parser::rules::OtherStuff;
+use std::fmt::{self, Debug, Display};
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
     // single character tokens
@@ -46,7 +46,7 @@ pub enum TokenType {
     First,
     Second,
     // other keywords
-    Return { value: Box<OtherStuff>},
+    Return { value: Box<OtherStuff> },
     Colon,
     Break,
     Continue,
