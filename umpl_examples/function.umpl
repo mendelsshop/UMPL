@@ -3,7 +3,7 @@ potato 😀 2 ⧼ ! to create a custom function first we use the potato keyword 
     (`HELLO`)> ! prints HELLO
     ($1)> ! to acces function args we use $1 for the first args and so on
     create z with ((plus 0xA9 $1 $2))< ! new variable z with the value of the sum of the first two arguments and 169 (0xA9 in hex)
-    return z ! at the end we return z
+    return z ! at the end we return z notice there is no colon b/c were returning something
 ⧽
 ((new 😀 1 0xA))> ! to call custom function we must use the new keyword followed by the function name seperated arguments
 ! prints HELLO and on a new line 1 and on a new line 180

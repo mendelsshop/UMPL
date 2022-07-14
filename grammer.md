@@ -83,7 +83,7 @@
 [`<number of arguments>`](#number) 
 
 # return
-`"return" ,` [`<other-stuff>+`](#other-stuff)
+`"return" ,` [`<other-stuff>+`](#other-stuff) `| ":"`
 # list-definitions:
 `"list"` [`<variable>`](#variable) `"with"` [`<list-element>`](#list-elements)
 

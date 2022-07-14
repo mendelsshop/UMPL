@@ -46,7 +46,7 @@ pub enum TokenType {
     First,
     Second,
     // other keywords
-    Return { value: Box<OtherStuff> },
+    Return { value: Option<Box<OtherStuff>> },
     Colon,
     Break,
     Continue,

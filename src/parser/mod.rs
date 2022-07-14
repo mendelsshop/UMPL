@@ -1,15 +1,13 @@
 pub(crate) mod rules;
-use crate::token::Token;
-use crate::token::TokenType;
-use crate::{error, keywords};
+use crate::{token::{Token,TokenType}, error, keywords};
 use rules::{
     Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType, LoopStatement,
-    OtherStuff, Stuff,
+    OtherStuff, Stuff, IdentifierPointer,
 };
-use std::collections::HashMap;
-use std::fmt::{self, Display};
 
-use self::rules::IdentifierPointer;
+use std::{collections::HashMap,fmt::{self, Display}};
+
+
 
 pub struct Parser {
     paren_count: usize,
@@ -502,12 +500,7 @@ impl Parser {
                             self.advance();
                             return Some(Thing::Other(
                                 TokenType::Return {
-                                    value: Box::new(OtherStuff::Identifier(
-                                        IdentifierPointer::new(
-                                            "".to_string(),
-                                            self.tokens[self.current_position].line,
-                                        ),
-                                    )),
+                                    value: None
                                 },
                                 self.token.line,
                             ));
@@ -516,7 +509,7 @@ impl Parser {
                         let thing = OtherStuff::from_thing(self.parse_from_token().unwrap());
                         Some(Thing::Other(
                             TokenType::Return {
-                                value: Box::new(thing),
+                                value: Some(Box::new(thing)),
                             },
                             self.token.line,
                         ))

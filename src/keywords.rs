@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use crate::{
-    parser::rules::{IdentifierPointer, OtherStuff},
     token::TokenType,
 };
 #[derive(PartialEq, Clone)]
@@ -42,10 +41,7 @@ impl Keyword {
         keywords.insert(
             "return".to_string(),
             TokenType::Return {
-                value: Box::new(OtherStuff::Identifier(IdentifierPointer::new(
-                    "".to_string(),
-                    0,
-                ))),
+                value: None,
             },
         );
         keywords.insert("break".to_string(), TokenType::Break);
