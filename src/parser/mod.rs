@@ -1,13 +1,17 @@
 pub(crate) mod rules;
-use crate::{token::{Token,TokenType}, error, keywords};
+use crate::{
+    error, keywords,
+    token::{Token, TokenType},
+};
 use rules::{
-    Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType, LoopStatement,
-    OtherStuff, Stuff, IdentifierPointer,
+    Call, Expression, Function, Identifier, IdentifierPointer, IfStatement, Literal, LiteralType,
+    LoopStatement, OtherStuff, Stuff,
 };
 
-use std::{collections::HashMap,fmt::{self, Display}};
-
-
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+};
 
 pub struct Parser {
     paren_count: usize,
@@ -499,9 +503,7 @@ impl Parser {
                         if self.tokens[self.current_position].token_type == TokenType::Colon {
                             self.advance();
                             return Some(Thing::Other(
-                                TokenType::Return {
-                                    value: None
-                                },
+                                TokenType::Return { value: None },
                                 self.token.line,
                             ));
                         }
