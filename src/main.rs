@@ -1,3 +1,5 @@
+use log::info;
+use log4rs;
 use std::{
     env,
     fs::File,
@@ -6,11 +8,8 @@ use std::{
     process::exit,
 };
 use umpl::{cli, error, lexer::Lexer, parser::Parser};
-use log::{info};
-use log4rs;
 
 fn main() {
-    
     let args: Vec<String> = env::args().collect(); // get the args
     let (index, mut parsed_args) = cli::get_string_args(&args); // get the ile name args and the index of the firrst flag
     if index != 0 {

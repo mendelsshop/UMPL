@@ -3,14 +3,12 @@ use crate::{
     error, keywords,
     token::{Token, TokenType},
 };
-use log::{info};
+use log::info;
 use rules::{
     Call, Expression, Function, Identifier, IdentifierPointer, IfStatement, Literal, LiteralType,
     LoopStatement, OtherStuff, Stuff,
 };
-use std::{
-    fmt::{self, Display},
-};
+use std::fmt::{self, Display};
 
 pub struct Parser {
     paren_count: usize,
@@ -245,9 +243,7 @@ impl Parser {
                                         );
                                         self.advance();
                                         if self.token.token_type == TokenType::RightBracket {
-                                            self.variables.push(
-                                                name.clone(),
-                                            );
+                                            self.variables.push(name.clone());
                                             Some(Thing::Identifier(Identifier::new(
                                                 name,
                                                 vec![thing, thing1],
@@ -322,9 +318,9 @@ impl Parser {
                                         TokenType::LeftParen => {
                                             OtherStuff::from_thing(self.after_left_paren().unwrap())
                                         }
-                                        TokenType::Identifier { name } => {
-                                            OtherStuff::Identifier(self.var(name).get_identifier_P().clone())
-                                        }
+                                        TokenType::Identifier { name } => OtherStuff::Identifier(
+                                            self.var(name).get_identifier_P().clone(),
+                                        ),
                                         tokentype => {
                                             error::error(
                                         self.token.line,
@@ -336,9 +332,7 @@ impl Parser {
                                     );
                                         }
                                     };
-                                    self.variables.push(
-                                        name.clone(),
-                                    );
+                                    self.variables.push(name.clone());
                                     Some(Thing::Identifier(Identifier::new(
                                         name,
                                         vec![thing],
@@ -404,9 +398,9 @@ impl Parser {
                                 TokenType::LeftParen => {
                                     OtherStuff::from_thing(self.after_left_paren().unwrap())
                                 }
-                                TokenType::Identifier { name } => {
-                                    OtherStuff::Identifier(self.var(name).get_identifier_P().clone())
-                                }
+                                TokenType::Identifier { name } => OtherStuff::Identifier(
+                                    self.var(name).get_identifier_P().clone(),
+                                ),
                                 tokentype => {
                                     error::error(
                                     self.token.line,
@@ -762,9 +756,9 @@ impl Parser {
                                 TokenType::LeftParen => {
                                     Some(OtherStuff::from_thing(self.after_left_paren().unwrap()))
                                 }
-                                TokenType::Identifier { name } => {
-                                    Some(OtherStuff::Identifier(self.var(name).get_identifier_P().clone()))
-                                }
+                                TokenType::Identifier { name } => Some(OtherStuff::Identifier(
+                                    self.var(name).get_identifier_P().clone(),
+                                )),
                                 tokentype => {
                                     error::error(
                                         self.token.line,
@@ -809,19 +803,18 @@ impl Parser {
                             }
                         };
                         match thing_list {
-                            Some(list) => {
-                                PointerOrIdentifier::Identifier(Identifier::new(
-                                    name,
-                                    vec![list, thing],
-                                    self.token.line,
-                                ))
-                            }
+                            Some(list) => PointerOrIdentifier::Identifier(Identifier::new(
+                                name,
+                                vec![list, thing],
+                                self.token.line,
+                            )),
 
-                            None => PointerOrIdentifier::Identifier(
-                                Identifier::new(name, vec![thing], self.token.line),
-                            ),
+                            None => PointerOrIdentifier::Identifier(Identifier::new(
+                                name,
+                                vec![thing],
+                                self.token.line,
+                            )),
                         }
-
                     }
                 }
                 _ => PointerOrIdentifier::Pointer(IdentifierPointer::new(name, self.token.line)),
