@@ -832,21 +832,13 @@ impl Parser {
                             Some(list) => {
                                 self.variables.insert(
                                     name.clone(),
-                                    Identifier::new(
-                                        name,
-                                        vec![list, thing],
-                                        self.token.line,
-                                    ),
+                                    Identifier::new(name, vec![list, thing], self.token.line),
                                 );
                             }
                             None => {
                                 self.variables.insert(
                                     name.clone(),
-                                    Identifier::new(
-                                        name,
-                                        vec![thing],
-                                        self.token.line,
-                                    ),
+                                    Identifier::new(name, vec![thing], self.token.line),
                                 );
                             }
                         }
