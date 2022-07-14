@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::token::TokenType;
+use crate::{token::TokenType, parser::rules::{OtherStuff, IdentifierPointer}};
 #[derive(PartialEq, Clone)]
 pub struct Keyword {
     pub keywords: HashMap<String, TokenType>,
@@ -36,7 +36,7 @@ impl Keyword {
         keywords.insert("first".to_string(), TokenType::First);
         keywords.insert("second".to_string(), TokenType::Second);
         // misc keywords
-        keywords.insert("return".to_string(), TokenType::Return);
+        keywords.insert("return".to_string(), TokenType::Return { value: Box::new(OtherStuff::Identifier(IdentifierPointer::new("".to_string(), 0))) });
         keywords.insert("break".to_string(), TokenType::Break);
         keywords.insert("continue".to_string(), TokenType::Continue);
         keywords.insert("loop".to_string(), TokenType::Loop);

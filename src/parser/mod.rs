@@ -1,12 +1,15 @@
-mod rules;
+pub(crate) mod rules;
 use crate::token::Token;
 use crate::token::TokenType;
 use crate::{error, keywords};
 use rules::{
-    Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType,
-    LoopStatement, OtherStuff, Stuff
+    Call, Expression, Function, Identifier, IfStatement, Literal, LiteralType, LoopStatement,
+    OtherStuff, Stuff,
 };
+use std::collections::HashMap;
 use std::fmt::{self, Display};
+
+use self::rules::IdentifierPointer;
 
 pub struct Parser {
     paren_count: usize,
@@ -17,6 +20,8 @@ pub struct Parser {
     done: bool,
     in_function: bool,
     in_loop: bool,
+    keywords: keywords::Keyword,
+    variables: HashMap<String, Identifier>,
 }
 
 impl Parser {
@@ -34,16 +39,17 @@ impl Parser {
             weird_bracket_count: 0,
             in_function: false,
             in_loop: false,
+            keywords: keywords::Keyword::new(),
+            variables: HashMap::new(),
         }
     }
 
     pub fn advance(&mut self) {
         match self.tokens[self.current_position].token_type {
-            TokenType::Return => {
+            TokenType::Return{..} => {
                 if self.in_function {
                     self.token = self.tokens[self.current_position].clone();
-                }
-                else {
+                } else {
                     error::error(
                         self.tokens[self.current_position].line,
                         "Return statement outside of function",
@@ -53,8 +59,7 @@ impl Parser {
             TokenType::Break | TokenType::Continue => {
                 if self.in_loop {
                     self.token = self.tokens[self.current_position].clone();
-                }
-                else {
+                } else {
                     error::error(
                         self.tokens[self.current_position].line,
                         "Break or continue statement outside of loop",
@@ -129,7 +134,8 @@ impl Parser {
         while !self.done {
             let expr = self.parse_from_token();
             match expr {
-                Some(t) => {program.push(t.clone());
+                Some(t) => {
+                    program.push(t.clone());
                     println!("{:?}", t);
                 }
                 None => {}
@@ -147,15 +153,18 @@ impl Parser {
             return None;
         }
         self.advance();
-        // TODO: check if self.token is an identifier and see two case a if the next token is with (for setting variables after declaration) or dot (for setting/getting list items)
         println!("PARSEfromTOKEN {}", self.token);
-        if self.token.token_type == TokenType::LeftParen {
-            self.after_left_paren()
-        } else if self.token.token_type == TokenType::CodeBlockEnd {
-            None
-        } else {
-            let keywords = keywords::Keyword::new();
-            if keywords.is_keyword(&self.token.token_type) {
+        match self.token.token_type.clone() {
+            TokenType::LeftParen => self.after_left_paren(),
+            TokenType::CodeBlockEnd => None,
+            TokenType::Identifier { name } =>  {
+                let temp = self.var(name.clone());
+                match temp {
+                    Some(value) => {Some(Thing::IdentifierPointer(value))}
+                    None => {Some(Thing::Identifier(self.variables.get(&name).unwrap().clone()))}
+                }
+            },
+            keyword if self.keywords.is_keyword(&keyword) => {
                 println!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
                     TokenType::Potato => {
@@ -196,12 +205,12 @@ impl Parser {
                                         }
                                     }
                                     self.in_function = false;
-                                    return Some(Thing::Function(Function::new(
+                                    Some(Thing::Function(Function::new(
                                         name,
                                         num_args,
                                         function,
                                         self.token.line,
-                                    )));
+                                    )))
                                 } else {
                                     error::error(
                                 self.token.line,
@@ -226,24 +235,44 @@ impl Parser {
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
                                     if self.token.token_type == TokenType::LeftBracket {
-                                        let thing = OtherStuff::from_thing(self.parse_from_token().unwrap());
-                                        let thing1 = OtherStuff::from_thing(self.parse_from_token().unwrap());
+                                        let thing = OtherStuff::from_thing(
+                                            self.parse_from_token().unwrap(),
+                                        );
+                                        let thing1 = OtherStuff::from_thing(
+                                            self.parse_from_token().unwrap(),
+                                        );
                                         self.advance();
                                         if self.token.token_type == TokenType::RightBracket {
-                                            return Some(Thing::Identifier(
-                                                Identifier::new(name, vec![thing, thing1], self.token.line),
+                                            self.variables.insert(
+                                                name.clone(),
+                                                Identifier::new(
+                                                name.clone(),
+                                                vec![thing.clone(), thing1.clone()],
+                                                self.token.line,
                                             ));
+                                            Some(Thing::Identifier(Identifier::new(
+                                                name,
+                                                vec![thing, thing1],
+                                                self.token.line,
+                                            )))
                                         } else {
                                             error::error(
-                                            self.token.line,
-                                            format!("right bracket expected after list, found {}", self.token.token_type).as_str(),
-                                        );
+                                                self.token.line,
+                                                format!(
+                                                    "right bracket expected after list, found {}",
+                                                    self.token.token_type
+                                                )
+                                                .as_str(),
+                                            );
                                         }
-                                    }   
-                                    else {
+                                    } else {
                                         error::error(
                                             self.token.line,
-                                            format!("left bracket expected after \"with\", found {}", self.token.token_type).as_str(),
+                                            format!(
+                                                "left bracket expected after \"with\", found {}",
+                                                self.token.token_type
+                                            )
+                                            .as_str(),
                                         );
                                     }
                                 } else {
@@ -296,11 +325,7 @@ impl Parser {
                                             OtherStuff::from_thing(self.after_left_paren().unwrap())
                                         }
                                         TokenType::Identifier { name } => {
-                                            OtherStuff::Identifier(Identifier::new(
-                                                name,
-                                                vec![OtherStuff::Literal(Literal::new_null(self.token.line))],
-                                                self.token.line,
-                                            ))
+                                            OtherStuff::Identifier(self.var(name).unwrap())
                                         }
                                         tokentype => {
                                             error::error(
@@ -313,15 +338,10 @@ impl Parser {
                                     );
                                         }
                                     };
-
-                                    return Some(Thing::Identifier(
-                                        // TODO: get the actual value and don't just set it to null
-                                        Identifier::new(
-                                            name,
-                                            vec![thing],
-                                            self.token.line,
-                                        ),
-                                    ));
+                                    self.variables.insert(name.clone(), Identifier::new(name.clone(), vec![thing.clone()], self.token.line));
+                                    Some(Thing::Identifier(
+                                        Identifier::new(name, vec![thing], self.token.line),
+                                    ))
                                 } else {
                                     error::error(
                                         self.token.line,
@@ -360,10 +380,10 @@ impl Parser {
                             }
                             println!("Done parsing loop body");
                             self.in_loop = false;
-                            return Some(Thing::LoopStatement(LoopStatement::new(
+                            Some(Thing::LoopStatement(LoopStatement::new(
                                 loop_body,
                                 self.token.line,
-                            )));
+                            )))
                         } else {
                             error::error(self.token.line, "code block expected after \"loop\"");
                         }
@@ -375,19 +395,15 @@ impl Parser {
                             self.advance();
                             let mut if_body: Vec<Thing>;
                             let mut else_body: Vec<Thing>;
-                            let thing: OtherStuff = match &self.token.token_type {
+                            let thing: OtherStuff = match self.token.clone().token_type {
                                 TokenType::Boolean { value } => OtherStuff::Literal(
-                                    Literal::new_boolean(*value, self.token.line),
+                                    Literal::new_boolean(value, self.token.line),
                                 ),
                                 TokenType::LeftParen => {
                                     OtherStuff::from_thing(self.after_left_paren().unwrap())
                                 }
                                 TokenType::Identifier { name } => {
-                                    OtherStuff::Identifier(Identifier::new(
-                                        name.to_string(),
-                                        vec![OtherStuff::Literal(Literal::new_null(self.token.line))],
-                                        self.token.line,
-                                    ))
+                                    OtherStuff::Identifier(self.var(name).unwrap())
                                 }
                                 tokentype => {
                                     error::error(
@@ -427,13 +443,13 @@ impl Parser {
                                                 }
                                             }
                                             println!("in else_body");
-                                            self.advance();
-                                            return Some(Thing::IfStatement(IfStatement::new(
+
+                                            Some(Thing::IfStatement(IfStatement::new(
                                                 thing,
                                                 if_body,
                                                 else_body,
                                                 self.token.line,
-                                            )));
+                                            )))
                                         } else {
                                             error::error(
                                                 self.token.line,
@@ -469,17 +485,24 @@ impl Parser {
                             );
                         }
                     }
-                    TokenType::Return => {
+                    TokenType::Return {..}=> {
+                        if self.tokens[self.current_position].token_type == TokenType::Colon {
+                            self.advance();
+                            return Some(Thing::Other(TokenType::Return{value: Box::new(OtherStuff::Identifier(IdentifierPointer::new("".to_string(), self.tokens[self.current_position].line)))},  self.token.line));
+                        }
                         // TODO: capture the value returned if any
-                        return Some(Thing::Other(self.token.token_type.clone(), self.token.line));
+                        let thing = OtherStuff::from_thing(
+                            self.parse_from_token().unwrap(),
+                        );
+                        Some(Thing::Other(TokenType::Return { value: Box::new(thing) }, self.token.line))
                     }
                     TokenType::Break => {
                         println!("break statement");
-                        return Some(Thing::Other(self.token.token_type.clone(), self.token.line));
+                        Some(Thing::Other(self.token.token_type.clone(), self.token.line))
                     }
                     TokenType::Continue => {
                         println!("continue statement");
-                        return Some(Thing::Other(self.token.token_type.clone(), self.token.line));
+                        Some(Thing::Other(self.token.token_type.clone(), self.token.line))
                     }
                     _ => {
                         error::error(
@@ -489,8 +512,10 @@ impl Parser {
                     }
                 }
             }
-            println!("found terminal token {}", self.token.token_type);
-            Some(atom(self.token.clone()))
+            _ => {
+                println!("found terminal token {}", self.token.token_type);
+                Some(atom(self.token.clone()))
+            }
         }
     }
 
@@ -541,6 +566,218 @@ impl Parser {
             }))
         }
     }
+
+    fn var(&mut self, name: String) -> Option<IdentifierPointer> {
+        if name.starts_with('$') && self.in_function {
+            if self.tokens[self.current_position].token_type == TokenType::With {
+                error::error(self.tokens[self.current_position].line, "function arguments are immutable");
+            }
+            else {
+                Some(IdentifierPointer::new(name,  self.token.line))
+            }
+        } else {
+            match self.tokens[self.current_position].token_type {
+                TokenType::Dot => {
+                    self.advance();
+                    self.advance();
+                    match self.token.token_type {
+                        TokenType::First | TokenType::Second => {
+                            self.advance();
+                            match self.token.token_type {
+                                TokenType::With =>{ // do the samething as descried in other With block
+                                    if self.paren_count > 0 {
+                                        error::error(self.tokens[self.current_position].line, "variables cannot be mutated with keyword: \"with\" in an expression");
+                                    } else {
+                                        // check if the identifier is in variables
+                                        // get new value 
+                                        // set the identifier with the name from string in variables to the new value
+                                        // return none
+                                        if !self.variables.contains_key(&name) {
+                                            error::error(self.token.line, format!("variables {} not found, therefore it cannot be mutated", name).as_str());
+                                        }
+                                        println!("in with");
+                                        self.advance();
+                                        let mut thing_list: Option<OtherStuff> = None;
+                                        if self.token.token_type == TokenType::LeftBracket {
+                                            println!("left bracket");
+                                            thing_list = match self.token.token_type.clone() {
+                                                TokenType::Number { literal } => Some(OtherStuff::Literal(
+                                                    Literal::new_number(literal, self.token.line),
+                                                )),
+                                                TokenType::String { literal } => Some(OtherStuff::Literal(
+                                                    Literal::new_string(literal, self.token.line),
+                                                )),
+                                                TokenType::Null => {
+                                                    Some(OtherStuff::Literal(Literal::new_null(self.token.line)))
+                                                }
+                                                TokenType::Boolean { value } => Some(OtherStuff::Literal(
+                                                    Literal::new_boolean(value, self.token.line),
+                                                )),
+                                                TokenType::LeftParen => {
+                                                    Some(OtherStuff::from_thing(self.after_left_paren().unwrap()))
+                                                }
+                                                TokenType::Identifier { name } => {
+                                                    Some(OtherStuff::Identifier(self.var(name).unwrap()))
+                                                }
+                                                tokentype => {
+                                                    error::error(
+                                                self.token.line,
+                                                format!(
+                                                    "identifier expected, after \"create\" found TokenType::{:?}",
+                                                    tokentype
+                                                )
+                                                .as_str(),
+                                            );
+                                                }
+                                            };
+                                            self.advance();
+                                        }
+                                        
+                                        println!("{} get token", self.token);
+                                        let thing: OtherStuff = match self.token.token_type.clone() {
+                                            TokenType::Number { literal } => OtherStuff::Literal(
+                                                Literal::new_number(literal, self.token.line),
+                                            ),
+                                            TokenType::String { literal } => OtherStuff::Literal(
+                                                Literal::new_string(literal, self.token.line),
+                                            ),
+                                            TokenType::Null => {
+                                                OtherStuff::Literal(Literal::new_null(self.token.line))
+                                            }
+                                            TokenType::Boolean { value } => OtherStuff::Literal(
+                                                Literal::new_boolean(value, self.token.line),
+                                            ),
+                                            TokenType::LeftParen => {
+                                                OtherStuff::from_thing(self.after_left_paren().unwrap())
+                                            }
+                                            TokenType::Identifier { name } => {
+                                                OtherStuff::Identifier(self.var(name).unwrap())
+                                            }
+                                            tokentype => {
+                                                error::error(
+                                            self.token.line,
+                                            format!(
+                                                "identifier expected, after \"create\" found TokenType::{:?}",
+                                                tokentype
+                                            )
+                                            .as_str(),
+                                        );
+                                            }
+                                        };
+                                        match thing_list {
+                                            Some(list) => {self.variables.insert(name.clone(), Identifier::new(name.clone(), vec![list, thing.clone()], self.token.line));
+                                            }
+                                            None => { self.variables.insert(name.clone(), Identifier::new(name.clone(), vec![thing.clone()], self.token.line));}
+                                        }
+                                    }
+                                    None
+                                }
+                                _ => {
+                                    // make a string with the name + . and 
+                                    let name = name + "." + self.token.token_type.to_string().as_str();
+                                    Some(IdentifierPointer::new(name,  self.token.line))
+                                }
+                            }
+                        }
+                        _ => {
+                            error::error(
+                                self.token.line,
+                                "first or second expected after dot",
+                            );
+                    }
+                }
+            }
+                TokenType::With => {
+                    if self.paren_count > 0 {
+                        error::error(self.tokens[self.current_position].line, "variables cannot be mutated with keyword: \"with\" in an expression");
+                    } else {
+                        // check if the identifier is in variables
+                        // get new value 
+                        // set the identifier with the name from string in variables to the new value
+                        // return none
+                        if !self.variables.contains_key(&name) {
+                            error::error(self.token.line, format!("variables {} not found, therefore it cannot be mutated", name).as_str());
+                        }
+                        self.advance();
+                        let mut thing_list: Option<OtherStuff> = None;
+                        if self.token.token_type == TokenType::LeftBracket {
+                            thing_list = match self.token.token_type.clone() {
+                                TokenType::Number { literal } => Some(OtherStuff::Literal(
+                                    Literal::new_number(literal, self.token.line),
+                                )),
+                                TokenType::String { literal } => Some(OtherStuff::Literal(
+                                    Literal::new_string(literal, self.token.line),
+                                )),
+                                TokenType::Null => {
+                                    Some(OtherStuff::Literal(Literal::new_null(self.token.line)))
+                                }
+                                TokenType::Boolean { value } => Some(OtherStuff::Literal(
+                                    Literal::new_boolean(value, self.token.line),
+                                )),
+                                TokenType::LeftParen => {
+                                    Some(OtherStuff::from_thing(self.after_left_paren().unwrap()))
+                                }
+                                TokenType::Identifier { name } => {
+                                    Some(OtherStuff::Identifier(self.var(name).unwrap()))
+                                }
+                                tokentype => {
+                                    error::error(
+                                self.token.line,
+                                format!(
+                                    "identifier expected, after \"create\" found TokenType::{:?}",
+                                    tokentype
+                                )
+                                .as_str(),
+                            );
+                                }
+                            };
+                        }
+                        self.advance();
+                        let thing: OtherStuff = match self.token.token_type.clone() {
+                            TokenType::Number { literal } => OtherStuff::Literal(
+                                Literal::new_number(literal, self.token.line),
+                            ),
+                            TokenType::String { literal } => OtherStuff::Literal(
+                                Literal::new_string(literal, self.token.line),
+                            ),
+                            TokenType::Null => {
+                                OtherStuff::Literal(Literal::new_null(self.token.line))
+                            }
+                            TokenType::Boolean { value } => OtherStuff::Literal(
+                                Literal::new_boolean(value, self.token.line),
+                            ),
+                            TokenType::LeftParen => {
+                                OtherStuff::from_thing(self.after_left_paren().unwrap())
+                            }
+                            TokenType::Identifier { name } => {
+                                OtherStuff::Identifier(self.var(name).unwrap())
+                            }
+                            tokentype => {
+                                error::error(
+                            self.token.line,
+                            format!(
+                                "identifier expected, after \"create\" found TokenType::{:?}",
+                                tokentype
+                            )
+                            .as_str(),
+                        );
+                            }
+                        };
+                        match thing_list {
+                            Some(list) => { self.variables.insert(name.clone(), Identifier::new(name.clone(), vec![list, thing.clone()], self.token.line));
+                            }
+                            None => {self.variables.insert(name.clone(), Identifier::new(name.clone(), vec![thing.clone()], self.token.line));
+                         }
+                        }
+                        None
+                    }
+                }
+                _ => {
+                    Some(IdentifierPointer::new(name, self.token.line))
+                }
+            }
+        } 
+    }
 }
 
 #[derive(PartialEq, Clone)]
@@ -550,7 +787,7 @@ pub enum Thing {
     Identifier(Identifier),
     Expression(Expression),
     Function(Function),
-
+    IdentifierPointer(IdentifierPointer),
     IfStatement(IfStatement),
     LoopStatement(LoopStatement),
     Call(Call),
@@ -593,6 +830,7 @@ impl Thing {
             Thing::LoopStatement(loop_statement) => loop_statement.line,
             Thing::Call(call) => call.line,
             Thing::Other(_, line) => *line,
+            Thing::IdentifierPointer(identifier_pointer) => identifier_pointer.line,
         }
     }
     #[allow(dead_code)]
@@ -606,7 +844,7 @@ impl Thing {
     fn convert_to_stuff(&self) -> Stuff {
         match self {
             Thing::Literal(literal) => Stuff::Literal(literal.clone()),
-            Thing::Identifier(identifier) => Stuff::Identifier(Box::new(identifier.clone())),
+            Thing::IdentifierPointer(identifier) => Stuff::Identifier(identifier.clone()),
             Thing::Call(call) => Stuff::Call(call.clone()),
             other => error::error(
                 other.get_line(),
@@ -627,6 +865,7 @@ impl Display for Thing {
             Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{}", loop_statement),
             Thing::Call(call) => write!(f, "{}", call),
+            Thing::IdentifierPointer(identifier_pointer) => write!(f, "{}", identifier_pointer),
         }
     }
 }
@@ -644,6 +883,9 @@ impl fmt::Debug for Thing {
             Thing::IfStatement(if_statement) => write!(f, "{:?}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{:?}", loop_statement),
             Thing::Call(call) => write!(f, "{:?}", call),
+            Thing::IdentifierPointer(identifier_pointer) => {
+                write!(f, "{:?}", identifier_pointer)
+            }
         }
     }
 }
@@ -665,9 +907,6 @@ fn atom(token: Token) -> Thing {
             literal: LiteralType::Null,
             line: token.line,
         }),
-        TokenType::Identifier { name } => {
-            Thing::Identifier(Identifier::new_empty(name, token.line))
-        }
         _ => Thing::Other(token.token_type, token.line),
     }
 }

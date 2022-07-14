@@ -58,6 +58,7 @@ impl Lexer {
                     self.advance();
                 }
             }
+            ':' => self.add_token(TokenType::Colon),
             '.' => self.add_token(TokenType::Dot),
             '<' => self.add_token(TokenType::LessThanSymbol),
             '>' => self.add_token(TokenType::GreaterThanSymbol),

@@ -27,9 +27,35 @@ impl Display for Expression {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+pub struct IdentifierPointer {
+    pub name: String,
+
+    pub line: i32,
+}
+
+impl IdentifierPointer
+{
+    pub fn new(name: String, line: i32) -> IdentifierPointer
+    {
+        IdentifierPointer {
+            name,
+
+            line,
+        }
+    }
+}
+
+impl Display for IdentifierPointer
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
 pub enum Stuff {
     Literal(Literal),
-    Identifier(Box<Identifier>),
+    Identifier(IdentifierPointer),
     Call(Call),
 }
 
@@ -37,7 +63,7 @@ impl Stuff {
     pub fn from_thing(thing: Thing) -> Stuff {
         match thing {
             Thing::Literal(ref lit) => Stuff::Literal(lit.clone()),
-            Thing::Identifier(ref ident) => Stuff::Identifier(Box::new(ident.clone())),
+            Thing::IdentifierPointer(ref ident) => Stuff::Identifier(ident.clone()),
             Thing::Call(ref call) => Stuff::Call(call.clone()),
             thing => error::error(
                 thing.get_line(),
@@ -129,16 +155,10 @@ pub enum IdentifierType {
 impl IdentifierType {
     pub fn new(thing: Vec<OtherStuff>) -> IdentifierType {
         match thing.len() {
-            0 => error::error(
-                0,
-                "expected Identifier, got empty list",
-            ),
+            0 => error::error(0, "expected Identifier, got empty list"),
             1 => IdentifierType::Vairable(Box::new(Vairable::new(thing[0].clone()))),
             2 => IdentifierType::List(Box::new(List::new(thing))),
-            _ => error::error(
-                0,
-                "expected Identifier, got list with more than 2 elements",
-            ),
+            _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
         }
     }
 }
@@ -152,8 +172,11 @@ pub struct Identifier {
 
 impl Identifier {
     pub fn new(name: String, value: Vec<OtherStuff>, line: i32) -> Identifier {
-        Identifier { name, value: IdentifierType::new(value),
-        line }
+        Identifier {
+            name,
+            value: IdentifierType::new(value),
+            line,
+        }
     }
     pub fn new_empty(name: String, line: i32) -> Identifier {
         Identifier {
@@ -208,14 +231,14 @@ impl Display for Call {
 #[derive(PartialEq, Clone, Debug)]
 pub enum OtherStuff {
     Literal(Literal),
-    Identifier(Identifier),
+    Identifier(IdentifierPointer),
     Expression(Expression),
 }
 
 impl OtherStuff {
     pub fn from_thing(thing: Thing) -> Self {
         match thing {
-            Thing::Identifier(ref ident) => Self::Identifier(ident.clone()),
+            Thing::IdentifierPointer(ref ident) => Self::Identifier(ident.clone()),
             Thing::Literal(ref lit) => Self::Literal(lit.clone()),
             Thing::Expression(ref expr) => Self::Expression(expr.clone()),
             _ => error::error(
@@ -278,7 +301,6 @@ pub struct List {
 impl List {
     pub fn new(thing: Vec<OtherStuff>) -> List {
         List {
-
             first: thing[0].clone(),
             second: thing[1].clone(),
         }
