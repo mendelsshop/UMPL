@@ -709,8 +709,8 @@ impl Parser {
                                                 self.variables.insert(
                                                     name.clone(),
                                                     Identifier::new(
-                                                        name.clone(),
-                                                        vec![list, thing.clone()],
+                                                        name,
+                                                        vec![list, thing],
                                                         self.token.line,
                                                     ),
                                                 );
@@ -719,8 +719,8 @@ impl Parser {
                                                 self.variables.insert(
                                                     name.clone(),
                                                     Identifier::new(
-                                                        name.clone(),
-                                                        vec![thing.clone()],
+                                                        name,
+                                                        vec![thing],
                                                         self.token.line,
                                                     ),
                                                 );
@@ -833,8 +833,8 @@ impl Parser {
                                 self.variables.insert(
                                     name.clone(),
                                     Identifier::new(
-                                        name.clone(),
-                                        vec![list, thing.clone()],
+                                        name,
+                                        vec![list, thing],
                                         self.token.line,
                                     ),
                                 );
@@ -843,8 +843,8 @@ impl Parser {
                                 self.variables.insert(
                                     name.clone(),
                                     Identifier::new(
-                                        name.clone(),
-                                        vec![thing.clone()],
+                                        name,
+                                        vec![thing],
                                         self.token.line,
                                     ),
                                 );
