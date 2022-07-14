@@ -3,13 +3,12 @@ use crate::{
     error, keywords,
     token::{Token, TokenType},
 };
+use log::{info};
 use rules::{
     Call, Expression, Function, Identifier, IdentifierPointer, IfStatement, Literal, LiteralType,
     LoopStatement, OtherStuff, Stuff,
 };
-
 use std::{
-    collections::HashMap,
     fmt::{self, Display},
 };
 
@@ -23,7 +22,7 @@ pub struct Parser {
     in_function: bool,
     in_loop: bool,
     keywords: keywords::Keyword,
-    variables: HashMap<String, Identifier>,
+    variables: Vec<String>,
 }
 
 impl Parser {
@@ -41,8 +40,9 @@ impl Parser {
             weird_bracket_count: 0,
             in_function: false,
             in_loop: false,
+
             keywords: keywords::Keyword::new(),
-            variables: HashMap::new(),
+            variables: Vec::new(),
         }
     }
 
@@ -121,8 +121,8 @@ impl Parser {
                 self.token = self.tokens[self.current_position].clone();
             }
         };
-        println!("{}", self.paren_count); //
-        println!("new token: {}", self.token);
+        info!("{}", self.paren_count); //
+        info!("new token: {}", self.token);
 
         self.current_position += 1;
     }
@@ -132,22 +132,22 @@ impl Parser {
         // loop until we have no more self.tokens
         // in the loop, we use parse_from_tokens to parse the next expression
         // and add it to the program tree
-        println!("{:?}", self.tokens);
+        info!("{:?}", self.tokens);
         while !self.done {
             let expr = self.parse_from_token();
             match expr {
                 Some(t) => {
                     program.push(t.clone());
-                    println!("{:?}", t);
+                    info!("{:?}", t);
                 }
                 None => {}
             }
         }
-        println!("Done parsing");
+        info!("Done parsing");
         program
     }
     fn parse_from_token(&mut self) -> Option<Thing> {
-        println!("new iteration");
+        info!("new iteration");
         if self.tokens.is_empty() {
             error::error(0, "no self.tokens found");
         }
@@ -155,27 +155,25 @@ impl Parser {
             return None;
         }
         self.advance();
-        println!("PARSEfromTOKEN {}", self.token);
+        info!("PARSEfromTOKEN {}", self.token);
         match self.token.token_type.clone() {
             TokenType::LeftParen => self.after_left_paren(),
             TokenType::CodeBlockEnd => None,
             TokenType::Identifier { name } => {
                 let temp = self.var(name.clone());
                 match temp {
-                    Some(value) => Some(Thing::IdentifierPointer(value)),
-                    None => Some(Thing::Identifier(
-                        self.variables.get(&name).unwrap().clone(),
-                    )),
+                    PointerOrIdentifier::Identifier(value) => Some(Thing::Identifier(value)),
+                    PointerOrIdentifier::Pointer(value) => Some(Thing::IdentifierPointer(value)),
                 }
             }
             keyword if self.keywords.is_keyword(&keyword) => {
-                println!("found keyword {}", self.token.token_type);
+                info!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
                     TokenType::Potato => {
                         self.advance();
                         match self.token.token_type.clone() {
                             TokenType::FunctionIdentifier { name } => {
-                                println!("function identifier found");
+                                info!("function identifier found");
                                 self.advance();
                                 // check if the next token is a number and save it in a vairable num_args
                                 let num_args = match self.token.token_type {
@@ -198,7 +196,7 @@ impl Parser {
                                 );
                                     }
                                 };
-                                println!("int function declaration before code block");
+                                info!("int function declaration before code block");
                                 if self.token.token_type == TokenType::CodeBlockBegin {
                                     let mut function: Vec<Thing> = Vec::new();
                                     self.in_function = true;
@@ -234,7 +232,7 @@ impl Parser {
                         self.advance();
                         match self.token.token_type.clone() {
                             TokenType::Identifier { name } => {
-                                println!("list identifier found");
+                                info!("list identifier found");
                                 self.advance();
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
@@ -247,13 +245,8 @@ impl Parser {
                                         );
                                         self.advance();
                                         if self.token.token_type == TokenType::RightBracket {
-                                            self.variables.insert(
+                                            self.variables.push(
                                                 name.clone(),
-                                                Identifier::new(
-                                                    name.clone(),
-                                                    vec![thing.clone(), thing1.clone()],
-                                                    self.token.line,
-                                                ),
                                             );
                                             Some(Thing::Identifier(Identifier::new(
                                                 name,
@@ -307,12 +300,12 @@ impl Parser {
                         self.advance();
                         match self.token.token_type.clone() {
                             TokenType::Identifier { name } => {
-                                println!("create identifier found");
+                                info!("create identifier found");
                                 self.advance();
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
 
-                                    println!("create identifier with {}", self.token.token_type);
+                                    info!("create identifier with {}", self.token.token_type);
                                     let thing: OtherStuff = match self.token.token_type.clone() {
                                         TokenType::Number { literal } => OtherStuff::Literal(
                                             Literal::new_number(literal, self.token.line),
@@ -330,7 +323,7 @@ impl Parser {
                                             OtherStuff::from_thing(self.after_left_paren().unwrap())
                                         }
                                         TokenType::Identifier { name } => {
-                                            OtherStuff::Identifier(self.var(name).unwrap())
+                                            OtherStuff::Identifier(self.var(name).get_identifier_P().clone())
                                         }
                                         tokentype => {
                                             error::error(
@@ -343,13 +336,8 @@ impl Parser {
                                     );
                                         }
                                     };
-                                    self.variables.insert(
+                                    self.variables.push(
                                         name.clone(),
-                                        Identifier::new(
-                                            name.clone(),
-                                            vec![thing.clone()],
-                                            self.token.line,
-                                        ),
                                     );
                                     Some(Thing::Identifier(Identifier::new(
                                         name,
@@ -380,19 +368,19 @@ impl Parser {
                         }
                     }
                     TokenType::Loop => {
-                        println!("loop found");
+                        info!("loop found");
                         self.advance();
                         let mut loop_body: Vec<Thing> = Vec::new();
                         if self.token.token_type == TokenType::CodeBlockBegin {
                             self.in_loop = true;
                             while self.token.token_type != TokenType::CodeBlockEnd {
-                                println!("parsing loop body");
+                                info!("parsing loop body");
                                 match self.parse_from_token() {
                                     Some(t) => loop_body.push(t),
                                     None => {}
                                 }
                             }
-                            println!("Done parsing loop body");
+                            info!("Done parsing loop body");
                             self.in_loop = false;
                             Some(Thing::LoopStatement(LoopStatement::new(
                                 loop_body,
@@ -405,7 +393,7 @@ impl Parser {
                     TokenType::If => {
                         self.advance();
                         if self.token.token_type == TokenType::LeftBrace {
-                            println!("if statement");
+                            info!("if statement");
                             self.advance();
                             let mut if_body: Vec<Thing>;
                             let mut else_body: Vec<Thing>;
@@ -417,7 +405,7 @@ impl Parser {
                                     OtherStuff::from_thing(self.after_left_paren().unwrap())
                                 }
                                 TokenType::Identifier { name } => {
-                                    OtherStuff::Identifier(self.var(name).unwrap())
+                                    OtherStuff::Identifier(self.var(name).get_identifier_P().clone())
                                 }
                                 tokentype => {
                                     error::error(
@@ -430,7 +418,7 @@ impl Parser {
                                 );
                                 }
                             };
-                            println!("after conditon if statement");
+                            info!("after conditon if statement");
                             self.advance();
                             if self.token.token_type == TokenType::RightBrace {
                                 self.advance();
@@ -448,7 +436,7 @@ impl Parser {
                                     if self.token.token_type == TokenType::Else {
                                         self.advance();
                                         if self.token.token_type == TokenType::CodeBlockBegin {
-                                            println!("else found");
+                                            info!("else found");
                                             else_body = Vec::new();
                                             while self.token.token_type != TokenType::CodeBlockEnd {
                                                 match self.parse_from_token() {
@@ -456,7 +444,7 @@ impl Parser {
                                                     None => {}
                                                 }
                                             }
-                                            println!("in else_body");
+                                            info!("in else_body");
 
                                             Some(Thing::IfStatement(IfStatement::new(
                                                 thing,
@@ -517,11 +505,11 @@ impl Parser {
                         ))
                     }
                     TokenType::Break => {
-                        println!("break statement");
+                        info!("break statement");
                         Some(Thing::Other(self.token.token_type.clone(), self.token.line))
                     }
                     TokenType::Continue => {
-                        println!("continue statement");
+                        info!("continue statement");
                         Some(Thing::Other(self.token.token_type.clone(), self.token.line))
                     }
                     _ => {
@@ -533,7 +521,7 @@ impl Parser {
                 }
             }
             _ => {
-                println!("found terminal token {}", self.token.token_type);
+                info!("found terminal token {}", self.token.token_type);
                 Some(atom(self.token.clone()))
             }
         }
@@ -541,16 +529,16 @@ impl Parser {
 
     fn after_left_paren(&mut self) -> Option<Thing> {
         if self.paren_count == 1 {
-            println!("found expresssion");
+            info!("found expresssion");
             let stuff = self.parse_from_token().unwrap();
             self.advance();
             if self.token.token_type == TokenType::RightParen {
-                println!("right paren found");
+                info!("right paren found");
             } else {
                 error::error(self.token.line, "right parenthesis expected");
             }
             self.advance();
-            println!("found express");
+            info!("found express");
             let mut prints = false;
             match self.token.token_type {
                 TokenType::GreaterThanSymbol => {
@@ -573,7 +561,7 @@ impl Parser {
             }
             let keyword = self.token.token_type.clone();
             let line = self.token.line;
-            println!("found call");
+            info!("found call");
             let mut args = Vec::new();
             while self.tokens[self.current_position].token_type != TokenType::RightParen {
                 args.push(Stuff::from_thing(self.parse_from_token().unwrap()));
@@ -587,7 +575,7 @@ impl Parser {
         }
     }
 
-    fn var(&mut self, name: String) -> Option<IdentifierPointer> {
+    fn var(&mut self, name: String) -> PointerOrIdentifier {
         if name.starts_with('$') && self.in_function {
             if self.tokens[self.current_position].token_type == TokenType::With {
                 error::error(
@@ -595,7 +583,7 @@ impl Parser {
                     "function arguments are immutable",
                 );
             } else {
-                Some(IdentifierPointer::new(name, self.token.line))
+                PointerOrIdentifier::Pointer(IdentifierPointer::new(name, self.token.line))
             }
         } else {
             match self.tokens[self.current_position].token_type {
@@ -615,14 +603,14 @@ impl Parser {
                                         // get new value
                                         // set the identifier with the name from string in variables to the new value
                                         // return none
-                                        if !self.variables.contains_key(&name) {
+                                        if !self.variables.contains(&name) {
                                             error::error(self.token.line, format!("variables {} not found, therefore it cannot be mutated", name).as_str());
                                         }
-                                        println!("in with");
+                                        info!("in with");
                                         self.advance();
                                         let mut thing_list: Option<OtherStuff> = None;
                                         if self.token.token_type == TokenType::LeftBracket {
-                                            println!("left bracket");
+                                            info!("left bracket");
                                             thing_list = match self.token.token_type.clone() {
                                                 TokenType::Number { literal } => {
                                                     Some(OtherStuff::Literal(Literal::new_number(
@@ -650,9 +638,11 @@ impl Parser {
                                                         self.after_left_paren().unwrap(),
                                                     ))
                                                 }
-                                                TokenType::Identifier { name } => Some(
-                                                    OtherStuff::Identifier(self.var(name).unwrap()),
-                                                ),
+                                                TokenType::Identifier { name } => {
+                                                    Some(OtherStuff::Identifier(
+                                                        self.var(name).get_identifier_P().clone(),
+                                                    ))
+                                                }
                                                 tokentype => {
                                                     error::error(
                                                 self.token.line,
@@ -667,7 +657,7 @@ impl Parser {
                                             self.advance();
                                         }
 
-                                        println!("{} get token", self.token);
+                                        info!("{} get token", self.token);
                                         let thing: OtherStuff = match self.token.token_type.clone()
                                         {
                                             TokenType::Number { literal } => OtherStuff::Literal(
@@ -686,7 +676,9 @@ impl Parser {
                                                 self.after_left_paren().unwrap(),
                                             ),
                                             TokenType::Identifier { name } => {
-                                                OtherStuff::Identifier(self.var(name).unwrap())
+                                                OtherStuff::Identifier(
+                                                    self.var(name).get_identifier_P().clone(),
+                                                )
                                             }
                                             tokentype => {
                                                 error::error(
@@ -701,34 +693,27 @@ impl Parser {
                                         };
                                         match thing_list {
                                             Some(list) => {
-                                                self.variables.insert(
-                                                    name.clone(),
-                                                    Identifier::new(
-                                                        name,
-                                                        vec![list, thing],
-                                                        self.token.line,
-                                                    ),
-                                                );
+                                                PointerOrIdentifier::Identifier(Identifier::new(
+                                                    name,
+                                                    vec![list, thing],
+                                                    self.token.line,
+                                                ))
                                             }
-                                            None => {
-                                                self.variables.insert(
-                                                    name.clone(),
-                                                    Identifier::new(
-                                                        name,
-                                                        vec![thing],
-                                                        self.token.line,
-                                                    ),
-                                                );
-                                            }
+
+                                            None => PointerOrIdentifier::Identifier(
+                                                Identifier::new(name, vec![thing], self.token.line),
+                                            ),
                                         }
                                     }
-                                    None
                                 }
                                 _ => {
                                     // make a string with the name + . and
                                     let name =
                                         name + "." + self.token.token_type.to_string().as_str();
-                                    Some(IdentifierPointer::new(name, self.token.line))
+                                    PointerOrIdentifier::Pointer(IdentifierPointer::new(
+                                        name,
+                                        self.token.line,
+                                    ))
                                 }
                             }
                         }
@@ -748,7 +733,7 @@ impl Parser {
                         // get new value
                         // set the identifier with the name from string in variables to the new value
                         // return none
-                        if !self.variables.contains_key(&name) {
+                        if !self.variables.contains(&name) {
                             error::error(
                                 self.token.line,
                                 format!(
@@ -778,7 +763,7 @@ impl Parser {
                                     Some(OtherStuff::from_thing(self.after_left_paren().unwrap()))
                                 }
                                 TokenType::Identifier { name } => {
-                                    Some(OtherStuff::Identifier(self.var(name).unwrap()))
+                                    Some(OtherStuff::Identifier(self.var(name).get_identifier_P().clone()))
                                 }
                                 tokentype => {
                                     error::error(
@@ -810,7 +795,7 @@ impl Parser {
                                 OtherStuff::from_thing(self.after_left_paren().unwrap())
                             }
                             TokenType::Identifier { name } => {
-                                OtherStuff::Identifier(self.var(name).unwrap())
+                                OtherStuff::Identifier(self.var(name).get_identifier_P().clone())
                             }
                             tokentype => {
                                 error::error(
@@ -825,23 +810,36 @@ impl Parser {
                         };
                         match thing_list {
                             Some(list) => {
-                                self.variables.insert(
-                                    name.clone(),
-                                    Identifier::new(name, vec![list, thing], self.token.line),
-                                );
+                                PointerOrIdentifier::Identifier(Identifier::new(
+                                    name,
+                                    vec![list, thing],
+                                    self.token.line,
+                                ))
                             }
-                            None => {
-                                self.variables.insert(
-                                    name.clone(),
-                                    Identifier::new(name, vec![thing], self.token.line),
-                                );
-                            }
+
+                            None => PointerOrIdentifier::Identifier(
+                                Identifier::new(name, vec![thing], self.token.line),
+                            ),
                         }
-                        None
+
                     }
                 }
-                _ => Some(IdentifierPointer::new(name, self.token.line)),
+                _ => PointerOrIdentifier::Pointer(IdentifierPointer::new(name, self.token.line)),
             }
+        }
+    }
+}
+
+pub enum PointerOrIdentifier {
+    Identifier(Identifier),
+    Pointer(IdentifierPointer),
+}
+
+impl PointerOrIdentifier {
+    pub fn get_identifier_P(&self) -> &IdentifierPointer {
+        match self {
+            PointerOrIdentifier::Pointer(identifier_pointer) => identifier_pointer,
+            _ => panic!("PointerOrIdentifier::get_identifier_P() called on non-Pointer"),
         }
     }
 }

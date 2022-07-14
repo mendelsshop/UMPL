@@ -6,22 +6,35 @@ use std::{
     process::exit,
 };
 use umpl::{cli, error, lexer::Lexer, parser::Parser};
+use log::{info};
+use log4rs;
 
 fn main() {
+    
     let args: Vec<String> = env::args().collect(); // get the args
     let (index, mut parsed_args) = cli::get_string_args(&args); // get the ile name args and the index of the firrst flag
     if index != 0 {
         // if there are any args after the program name parse them
         cli::get_dash_args(&args, index, &mut parsed_args);
     }
+    if parsed_args.log {
+        log4rs::init_file("log.yaml", Default::default()).unwrap();
+        info!("Starting up...");
+    }
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
         // if we are in repl mode
+
         loop {
             let mut input = String::new();
             print!(">> "); // print the prompt
             io::stdout().flush().unwrap();
             io::stdin().read_line(&mut input).unwrap(); // read the input
+            if input.trim() == "exit" {
+                // if the input is exit, then exit
+                info!("Exiting...");
+                break;
+            }
             run(input.to_string());
             full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
         }

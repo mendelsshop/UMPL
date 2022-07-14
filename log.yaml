@@ -1,0 +1,11 @@
+refresh_rate: 30 seconds
+appenders:
+  filelog:
+    kind: file
+    path: "logs/umpl.log"
+    encoder:
+      pattern: "{h({d(%Y-%m-%d %H:%M:%S)(utc)} - {l}: {m}{n})}"
+root:
+  level: debug
+  appenders:
+    - filelog

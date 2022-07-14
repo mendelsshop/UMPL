@@ -5,6 +5,7 @@ pub struct ParsedArgs {
     pub repl: bool,   // inerative mode
     pub file: String, // file to read/write
     pub force: bool,  // if true, overwrites file
+    pub log: bool,    // if true, logs to file
 }
 
 impl ParsedArgs {
@@ -13,6 +14,7 @@ impl ParsedArgs {
             repl,
             file,
             force: false,
+            log: false,
         }
     }
 }
@@ -40,6 +42,7 @@ pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
             exit(1);
         }
     } else {
+        to_return.repl = true; // if it's not a .umpl file, then set repl to true
         for (arg_index, arg) in args[index..].iter().enumerate() {
             if arg.starts_with('-') {
                 // if it starts with a dash
@@ -63,6 +66,8 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     args_struct.repl = true;
                 } else if ['f'].contains(&char_part_arg) {
                     args_struct.force = true;
+                } else if ['l'].contains(&char_part_arg) {
+                    args_struct.log = true;
                 } else {
                     usage();
                 }
