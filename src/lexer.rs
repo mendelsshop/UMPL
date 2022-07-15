@@ -110,7 +110,6 @@ impl Lexer {
             }
         } else if self.peek() == 'a' {
             self.advance();
-
             if self.peek() == 'l' {
                 self.advance();
                 if self.peek() == 's' {

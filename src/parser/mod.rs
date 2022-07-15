@@ -302,36 +302,7 @@ impl Parser {
                                     self.advance();
 
                                     info!("create identifier with {}", self.token.token_type);
-                                    let thing: OtherStuff = match self.token.token_type.clone() {
-                                        TokenType::Number { literal } => OtherStuff::Literal(
-                                            Literal::new_number(literal, self.token.line),
-                                        ),
-                                        TokenType::String { literal } => OtherStuff::Literal(
-                                            Literal::new_string(literal, self.token.line),
-                                        ),
-                                        TokenType::Null => {
-                                            OtherStuff::Literal(Literal::new_null(self.token.line))
-                                        }
-                                        TokenType::Boolean { value } => OtherStuff::Literal(
-                                            Literal::new_boolean(value, self.token.line),
-                                        ),
-                                        TokenType::LeftParen => {
-                                            OtherStuff::from_thing(self.after_left_paren().unwrap())
-                                        }
-                                        TokenType::Identifier { name } => OtherStuff::Identifier(
-                                            self.var(name).get_identifier_p().clone(),
-                                        ),
-                                        tokentype => {
-                                            error::error(
-                                                self.token.line,
-                                                format!(
-                                                    "identifier expected, after \"create\" found TokenType::{:?}",
-                                                    tokentype
-                                                )
-                                                    .as_str(),
-                                            );
-                                        }
-                                    };
+                                    let thing = self.get_value();
                                     self.variables.push(name.clone());
                                     Some(Thing::Identifier(Identifier::new(
                                         name,
@@ -605,86 +576,12 @@ impl Parser {
                                         let mut thing_list: Option<OtherStuff> = None;
                                         if self.token.token_type == TokenType::LeftBracket {
                                             info!("left bracket");
-                                            thing_list = match self.token.token_type.clone() {
-                                                TokenType::Number { literal } => {
-                                                    Some(OtherStuff::Literal(Literal::new_number(
-                                                        literal,
-                                                        self.token.line,
-                                                    )))
-                                                }
-                                                TokenType::String { literal } => {
-                                                    Some(OtherStuff::Literal(Literal::new_string(
-                                                        literal,
-                                                        self.token.line,
-                                                    )))
-                                                }
-                                                TokenType::Null => Some(OtherStuff::Literal(
-                                                    Literal::new_null(self.token.line),
-                                                )),
-                                                TokenType::Boolean { value } => {
-                                                    Some(OtherStuff::Literal(Literal::new_boolean(
-                                                        value,
-                                                        self.token.line,
-                                                    )))
-                                                }
-                                                TokenType::LeftParen => {
-                                                    Some(OtherStuff::from_thing(
-                                                        self.after_left_paren().unwrap(),
-                                                    ))
-                                                }
-                                                TokenType::Identifier { name } => {
-                                                    Some(OtherStuff::Identifier(
-                                                        self.var(name).get_identifier_p().clone(),
-                                                    ))
-                                                }
-                                                tokentype => {
-                                                    error::error(
-                                                        self.token.line,
-                                                        format!(
-                                                            "identifier expected, after \"create\" found TokenType::{:?}",
-                                                            tokentype
-                                                        )
-                                                            .as_str(),
-                                                    );
-                                                }
-                                            };
+                                            thing_list = Some(self.get_value());
                                             self.advance();
                                         }
 
                                         info!("{} get token", self.token);
-                                        let thing: OtherStuff = match self.token.token_type.clone()
-                                        {
-                                            TokenType::Number { literal } => OtherStuff::Literal(
-                                                Literal::new_number(literal, self.token.line),
-                                            ),
-                                            TokenType::String { literal } => OtherStuff::Literal(
-                                                Literal::new_string(literal, self.token.line),
-                                            ),
-                                            TokenType::Null => OtherStuff::Literal(
-                                                Literal::new_null(self.token.line),
-                                            ),
-                                            TokenType::Boolean { value } => OtherStuff::Literal(
-                                                Literal::new_boolean(value, self.token.line),
-                                            ),
-                                            TokenType::LeftParen => OtherStuff::from_thing(
-                                                self.after_left_paren().unwrap(),
-                                            ),
-                                            TokenType::Identifier { name } => {
-                                                OtherStuff::Identifier(
-                                                    self.var(name).get_identifier_p().clone(),
-                                                )
-                                            }
-                                            tokentype => {
-                                                error::error(
-                                                    self.token.line,
-                                                    format!(
-                                                        "identifier expected, after \"create\" found TokenType::{:?}",
-                                                        tokentype
-                                                    )
-                                                        .as_str(),
-                                                );
-                                            }
-                                        };
+                                        let thing = self.get_value();
                                         match thing_list {
                                             Some(list) => {
                                                 PointerOrIdentifier::Identifier(Identifier::new(
@@ -818,6 +715,34 @@ impl Parser {
                     }
                 }
                 _ => PointerOrIdentifier::Pointer(IdentifierPointer::new(name, self.token.line)),
+            }
+        }
+    }
+    fn get_value(&mut self) -> OtherStuff {
+        match self.token.token_type.clone() {
+            TokenType::Number { literal } => {
+                OtherStuff::Literal(Literal::new_number(literal, self.token.line))
+            }
+            TokenType::String { literal } => {
+                OtherStuff::Literal(Literal::new_string(literal, self.token.line))
+            }
+            TokenType::Null => OtherStuff::Literal(Literal::new_null(self.token.line)),
+            TokenType::Boolean { value } => {
+                OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
+            }
+            TokenType::LeftParen => OtherStuff::from_thing(self.after_left_paren().unwrap()),
+            TokenType::Identifier { name } => {
+                OtherStuff::Identifier(self.var(name).get_identifier_p().clone())
+            }
+            tokentype => {
+                error::error(
+                    self.token.line,
+                    format!(
+                        "identifier expected, after \"create\" found TokenType::{:?}",
+                        tokentype
+                    )
+                    .as_str(),
+                );
             }
         }
     }
