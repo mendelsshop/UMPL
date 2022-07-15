@@ -181,17 +181,17 @@ impl Parser {
                                             literal
                                         } else {
                                             error::error(
-                                        self.token.line,
-                                        format!("number expected in function declaration found floating point number literal with {}", literal).as_str(),
-                                    );
+                                                self.token.line,
+                                                format!("number expected in function declaration found floating point number literal with {}", literal).as_str(),
+                                            );
                                         }
                                     }
                                     TokenType::CodeBlockBegin => 0f64,
                                     _ => {
                                         error::error(
-                                    self.token.line,
-                                    format!("number expected after function identifier, found {}", self.token).as_str(),
-                                );
+                                            self.token.line,
+                                            format!("number expected after function identifier, found {}", self.token).as_str(),
+                                        );
                                     }
                                 };
                                 info!("int function declaration before code block");
@@ -213,16 +213,16 @@ impl Parser {
                                     )))
                                 } else {
                                     error::error(
-                                self.token.line,
-                                format!("code block expected after function identifier, found {}", self.token.token_type).as_str(),
-                            );
+                                        self.token.line,
+                                        format!("code block expected after function identifier, found {}", self.token.token_type).as_str(),
+                                    );
                                 }
                             }
                             tokentype => {
                                 error::error(
-                                self.token.line,
-                                format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype).as_str(),
-                            );
+                                    self.token.line,
+                                    format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype).as_str(),
+                                );
                             }
                         }
                     }
@@ -319,17 +319,17 @@ impl Parser {
                                             OtherStuff::from_thing(self.after_left_paren().unwrap())
                                         }
                                         TokenType::Identifier { name } => OtherStuff::Identifier(
-                                            self.var(name).get_identifier_P().clone(),
+                                            self.var(name).get_identifier_p().clone(),
                                         ),
                                         tokentype => {
                                             error::error(
-                                        self.token.line,
-                                        format!(
-                                            "identifier expected, after \"create\" found TokenType::{:?}",
-                                            tokentype
-                                        )
-                                        .as_str(),
-                                    );
+                                                self.token.line,
+                                                format!(
+                                                    "identifier expected, after \"create\" found TokenType::{:?}",
+                                                    tokentype
+                                                )
+                                                    .as_str(),
+                                            );
                                         }
                                     };
                                     self.variables.push(name.clone());
@@ -353,10 +353,10 @@ impl Parser {
                                 error::error(
                                     self.token.line,
                                     format!(
-                                "identifier expected after \"create\", found TokenType::{:?}",
-                                tokentype
-                            )
-                                    .as_str(),
+                                        "identifier expected after \"create\", found TokenType::{:?}",
+                                        tokentype
+                                    )
+                                        .as_str(),
                                 );
                             }
                         }
@@ -399,17 +399,17 @@ impl Parser {
                                     OtherStuff::from_thing(self.after_left_paren().unwrap())
                                 }
                                 TokenType::Identifier { name } => OtherStuff::Identifier(
-                                    self.var(name).get_identifier_P().clone(),
+                                    self.var(name).get_identifier_p().clone(),
                                 ),
                                 tokentype => {
                                     error::error(
-                                    self.token.line,
-                                    format!(
-                                        "boolean expected, in if statement condition found TokenType::{:?}",
-                                        tokentype
-                                    )
-                                    .as_str(),
-                                );
+                                        self.token.line,
+                                        format!(
+                                            "boolean expected, in if statement condition found TokenType::{:?}",
+                                            tokentype
+                                        )
+                                            .as_str(),
+                                    );
                                 }
                             };
                             info!("after conditon if statement");
@@ -634,18 +634,18 @@ impl Parser {
                                                 }
                                                 TokenType::Identifier { name } => {
                                                     Some(OtherStuff::Identifier(
-                                                        self.var(name).get_identifier_P().clone(),
+                                                        self.var(name).get_identifier_p().clone(),
                                                     ))
                                                 }
                                                 tokentype => {
                                                     error::error(
-                                                self.token.line,
-                                                format!(
-                                                    "identifier expected, after \"create\" found TokenType::{:?}",
-                                                    tokentype
-                                                )
-                                                .as_str(),
-                                            );
+                                                        self.token.line,
+                                                        format!(
+                                                            "identifier expected, after \"create\" found TokenType::{:?}",
+                                                            tokentype
+                                                        )
+                                                            .as_str(),
+                                                    );
                                                 }
                                             };
                                             self.advance();
@@ -671,18 +671,18 @@ impl Parser {
                                             ),
                                             TokenType::Identifier { name } => {
                                                 OtherStuff::Identifier(
-                                                    self.var(name).get_identifier_P().clone(),
+                                                    self.var(name).get_identifier_p().clone(),
                                                 )
                                             }
                                             tokentype => {
                                                 error::error(
-                                            self.token.line,
-                                            format!(
-                                                "identifier expected, after \"create\" found TokenType::{:?}",
-                                                tokentype
-                                            )
-                                            .as_str(),
-                                        );
+                                                    self.token.line,
+                                                    format!(
+                                                        "identifier expected, after \"create\" found TokenType::{:?}",
+                                                        tokentype
+                                                    )
+                                                        .as_str(),
+                                                );
                                             }
                                         };
                                         match thing_list {
@@ -757,16 +757,16 @@ impl Parser {
                                     Some(OtherStuff::from_thing(self.after_left_paren().unwrap()))
                                 }
                                 TokenType::Identifier { name } => Some(OtherStuff::Identifier(
-                                    self.var(name).get_identifier_P().clone(),
+                                    self.var(name).get_identifier_p().clone(),
                                 )),
                                 tokentype => {
                                     error::error(
                                         self.token.line,
                                         format!(
-                                    "identifier expected, after \"create\" found TokenType::{:?}",
-                                    tokentype
-                                )
-                                        .as_str(),
+                                            "identifier expected, after \"create\" found TokenType::{:?}",
+                                            tokentype
+                                        )
+                                            .as_str(),
                                     );
                                 }
                             };
@@ -789,16 +789,16 @@ impl Parser {
                                 OtherStuff::from_thing(self.after_left_paren().unwrap())
                             }
                             TokenType::Identifier { name } => {
-                                OtherStuff::Identifier(self.var(name).get_identifier_P().clone())
+                                OtherStuff::Identifier(self.var(name).get_identifier_p().clone())
                             }
                             tokentype => {
                                 error::error(
                                     self.token.line,
                                     format!(
-                                "identifier expected, after \"create\" found TokenType::{:?}",
-                                tokentype
-                            )
-                                    .as_str(),
+                                        "identifier expected, after \"create\" found TokenType::{:?}",
+                                        tokentype
+                                    )
+                                        .as_str(),
                                 );
                             }
                         };
@@ -829,10 +829,10 @@ pub enum PointerOrIdentifier {
 }
 
 impl PointerOrIdentifier {
-    pub fn get_identifier_P(&self) -> &IdentifierPointer {
+    pub fn get_identifier_p(&self) -> &IdentifierPointer {
         match self {
             PointerOrIdentifier::Pointer(identifier_pointer) => identifier_pointer,
-            _ => panic!("PointerOrIdentifier::get_identifier_P() called on non-Pointer"),
+            _ => panic!("PointerOrIdentifier::get_identifier_p() called on non-Pointer"),
         }
     }
 }
@@ -856,25 +856,7 @@ pub enum Thing {
 
 impl Thing {
     pub fn new(token: Token) -> Thing {
-        match token.token_type {
-            TokenType::Number { literal } => Thing::Literal(Literal {
-                literal: LiteralType::Number(literal),
-                line: token.line,
-            }),
-            TokenType::String { literal } => Thing::Literal(Literal {
-                literal: LiteralType::String(literal),
-                line: token.line,
-            }),
-            TokenType::Boolean { value } => Thing::Literal(Literal {
-                literal: LiteralType::Boolean(value),
-                line: token.line,
-            }),
-            TokenType::Null => Thing::Literal(Literal {
-                literal: LiteralType::Null,
-                line: token.line,
-            }),
-            _ => Thing::Other(token.token_type, token.line),
-        }
+        atom(token)
     }
 
     pub fn get_line(&self) -> i32 {
