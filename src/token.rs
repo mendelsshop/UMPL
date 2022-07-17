@@ -38,6 +38,7 @@ pub enum TokenType {
     Number { literal: f64 },
     Create,
     With,
+    Set,
     AddWith,
     SubtractWith,
     DivideWith,
@@ -61,6 +62,8 @@ pub enum TokenType {
     Function,
     FunctionArgument { name: String },
 
+    Exit,
+    Error,
     EOF,
     Program,
 }

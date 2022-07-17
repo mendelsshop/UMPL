@@ -27,7 +27,6 @@ impl Keyword {
         keywords.insert("ge".to_string(), TokenType::GreaterEqual);
         // variable stuff
         keywords.insert("create".to_string(), TokenType::Create);
-        keywords.insert("with".to_string(), TokenType::With);
         keywords.insert("addwith".to_string(), TokenType::AddWith);
         keywords.insert("dividewith".to_string(), TokenType::DivideWith);
         keywords.insert("subtractwith".to_string(), TokenType::SubtractWith);
@@ -47,6 +46,9 @@ impl Keyword {
         keywords.insert("negative".to_string(), TokenType::Negative);
         keywords.insert("new".to_string(), TokenType::New);
         keywords.insert("input".to_string(), TokenType::Input);
+        keywords.insert("set-with".to_string(), TokenType::Set);
+        keywords.insert("exit".to_string(), TokenType::Exit);
+        keywords.insert("error".to_string(), TokenType::Error);
         Keyword { keywords }
     }
 
