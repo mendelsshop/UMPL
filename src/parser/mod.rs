@@ -677,7 +677,7 @@ impl Display for Thing {
             Thing::Literal(literal) => write!(f, "{}", literal),
             Thing::Other(t, _) => write!(f, "{}", t),
             Thing::Identifier(s) => write!(f, "Identifier({})", s),
-            Thing::Function(function) => write!(f, "{{{}}}", function),
+            Thing::Function(function) => write!(f, "{}", function),
             Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{}", loop_statement),
             Thing::Call(call) => write!(f, "{}", call),

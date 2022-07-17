@@ -22,7 +22,7 @@ impl Expression {
 
 impl Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.inside)
+        write!(f, "expr({})", self.inside)
     }
 }
 
@@ -214,8 +214,14 @@ impl Call {
 impl Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut c = String::from("");
-        for arg in self.arguments.iter() {
-            c.push_str(&format!("{} ", arg));
+        for arg in self.arguments.iter().enumerate() {
+            c.push_str(&format!("{}{}", arg.1, {
+                if arg.0 < self.arguments.len() - 1 {
+                    ", "
+                } else {
+                    ""
+                }
+            }));
         }
         write!(f, "{:?}: [{}]", self.keyword, c)
     }
@@ -279,8 +285,8 @@ impl Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Function: {} with {} arguments and body: {:?}",
-            self.name, self.num_arguments, self.body
+            "Function: {} with {} arguments and body: [\n\t{}\n]",
+            self.name, self.num_arguments, self.body.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t")
         )
     }
 }
@@ -357,8 +363,8 @@ impl Display for IfStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "if statement: {} when true: {:?} and when false: {:?}",
-            self.condition, self.body_true, self.body_false
+            "if statement: with condition: [{}] when true: [\n\t{}\n] and when false: [\n\t{}\n]",
+            self.condition, self.body_true.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t"), self.body_false.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t")
         )
     }
 }
@@ -377,6 +383,6 @@ impl LoopStatement {
 
 impl Display for LoopStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "loop statement: {:?}", self.body)
+        write!(f, "loop statement: [\n\t{}\n]", self.body.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t"))
     }
 }
