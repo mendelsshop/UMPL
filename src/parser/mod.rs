@@ -365,9 +365,9 @@ impl Parser {
                                 TokenType::LeftParen => {
                                     OtherStuff::from_thing(self.after_left_paren().unwrap())
                                 }
-                                TokenType::Identifier { name } => OtherStuff::Identifier(
-                                    self.var(name).clone(),
-                                ),
+                                TokenType::Identifier { name } => {
+                                    OtherStuff::Identifier(self.var(name).clone())
+                                }
                                 tokentype => {
                                     error::error(
                                         self.token.line,
@@ -555,15 +555,11 @@ impl Parser {
                         TokenType::First | TokenType::Second => {
                             self.advance();
                             match self.token.token_type {
-
                                 _ => {
                                     // make a string with the name + . and
                                     let name =
                                         name + "." + self.token.token_type.to_string().as_str();
-                                    IdentifierPointer::new(
-                                        name,
-                                        self.token.line,
-                                    )
+                                    IdentifierPointer::new(name, self.token.line)
                                 }
                             }
                         }
@@ -572,7 +568,7 @@ impl Parser {
                         }
                     }
                 }
-             _ => IdentifierPointer::new(name, self.token.line),
+                _ => IdentifierPointer::new(name, self.token.line),
             }
         }
     }
@@ -589,9 +585,7 @@ impl Parser {
                 OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
             }
             TokenType::LeftParen => OtherStuff::from_thing(self.after_left_paren().unwrap()),
-            TokenType::Identifier { name } => {
-                OtherStuff::Identifier(self.var(name))
-            }
+            TokenType::Identifier { name } => OtherStuff::Identifier(self.var(name)),
             tokentype => {
                 error::error(
                     self.token.line,
