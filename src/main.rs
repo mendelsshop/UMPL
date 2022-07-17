@@ -7,7 +7,7 @@ use std::{
     path::Path,
     process::exit,
 };
-use umpl::{cli, error, lexer::Lexer, parser::Parser};
+use umpl::{cli, error, lexer::Lexer, parser::Parser, eval::Scope};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
@@ -83,7 +83,12 @@ fn run(line: String) {
 
     let mut parsed = Parser::new(lexer.scan_tokens().to_vec());
 
-    for thing in parsed.parse() {
-        println!("{}", thing);
+    let thing = parsed.parse();
+    for things in thing.iter() {
+        println!("{:?}", things);
     }
+    let mut scope = Scope::new(thing);
+    scope.find_functions();
+    scope.find_variables();
+    println!("{}", scope);
 }

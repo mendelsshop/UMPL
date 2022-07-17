@@ -314,7 +314,7 @@ impl List {
 
 impl Display for List {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "with {} {}", self.first, self.second)
+        write!(f, "with: [{}, {}]", self.first, self.second)
     }
 }
 
