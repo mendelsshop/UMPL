@@ -23,7 +23,7 @@ fn main() {
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
         // if we are in repl mode
-    let mut current_repl = String::new(); // create a string to hold the current line of the repl
+        let mut current_repl = String::new(); // create a string to hold the current line of the repl
         loop {
             let mut input = String::new();
             print!(">> "); // print the prompt
@@ -40,8 +40,6 @@ fn main() {
             } else {
                 current_repl.push_str(&input); // add the input to the current line of the repl
             }
-            
-            
         }
     } else {
         // if we are not in repl mode ie we are reading a file
