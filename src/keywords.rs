@@ -49,6 +49,7 @@ impl Keyword {
         keywords.insert("set-with".to_string(), TokenType::Set);
         keywords.insert("exit".to_string(), TokenType::Exit);
         keywords.insert("error".to_string(), TokenType::Error);
+        keywords.insert("with".to_string(), TokenType::With);
         Keyword { keywords }
     }
 
