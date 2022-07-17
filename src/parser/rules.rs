@@ -286,7 +286,13 @@ impl Display for Function {
         write!(
             f,
             "Function: {} with {} arguments and body: [\n\t{}\n]",
-            self.name, self.num_arguments, self.body.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t")
+            self.name,
+            self.num_arguments,
+            self.body
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join("\n\t")
         )
     }
 }
@@ -364,7 +370,17 @@ impl Display for IfStatement {
         write!(
             f,
             "if statement: with condition: [{}] when true: [\n\t{}\n] and when false: [\n\t{}\n]",
-            self.condition, self.body_true.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t"), self.body_false.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t")
+            self.condition,
+            self.body_true
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join("\n\t"),
+            self.body_false
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join("\n\t")
         )
     }
 }
@@ -383,6 +399,14 @@ impl LoopStatement {
 
 impl Display for LoopStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "loop statement: [\n\t{}\n]", self.body.iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t"))
+        write!(
+            f,
+            "loop statement: [\n\t{}\n]",
+            self.body
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join("\n\t")
+        )
     }
 }
