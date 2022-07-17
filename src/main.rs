@@ -23,19 +23,25 @@ fn main() {
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
         // if we are in repl mode
-
+    let mut current_repl = String::new(); // create a string to hold the current line of the repl
         loop {
             let mut input = String::new();
             print!(">> "); // print the prompt
             io::stdout().flush().unwrap();
             io::stdin().read_line(&mut input).unwrap(); // read the input
+            full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
             if input.trim() == "exit" {
                 // if the input is exit, then exit
                 info!("Exiting...");
                 break;
+            } else if input.trim() == "run" {
+                run(current_repl.clone()); // run the current repl
+                input.clear();
+            } else {
+                current_repl.push_str(&input); // add the input to the current line of the repl
             }
-            run(input.to_string());
-            full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
+            
+            
         }
     } else {
         // if we are not in repl mode ie we are reading a file
