@@ -1,4 +1,4 @@
-use crate::{error, token::TokenType};
+use crate::{error, eval::Scope, token::TokenType};
 use std::fmt::{self, Debug, Display};
 
 use super::Thing;
@@ -52,23 +52,6 @@ pub enum Stuff {
     Call(Call),
 }
 
-impl Stuff {
-    pub fn from_thing(thing: Thing) -> Stuff {
-        match thing {
-            Thing::Literal(ref lit) => Stuff::Literal(lit.clone()),
-            Thing::IdentifierPointer(ref ident) => Stuff::Identifier(ident.clone()),
-            Thing::Call(ref call) => Stuff::Call(call.clone()),
-            thing => error::error(
-                thing.get_line(),
-                format!(
-                    "expected Literal, Identifier, or function call, got {:?}",
-                    thing
-                )
-                .as_str(),
-            ),
-        }
-    }
-}
 impl Display for Stuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -234,24 +217,6 @@ pub enum OtherStuff {
     Expression(Expression),
 }
 
-impl OtherStuff {
-    pub fn from_thing(thing: Thing) -> Self {
-        match thing {
-            Thing::IdentifierPointer(ref ident) => Self::Identifier(ident.clone()),
-            Thing::Literal(ref lit) => Self::Literal(lit.clone()),
-            Thing::Expression(ref expr) => Self::Expression(expr.clone()),
-            _ => error::error(
-                thing.get_line(),
-                format!(
-                    "expected Identifier, Literal, or Expression, got {:?}",
-                    thing
-                )
-                .as_str(),
-            ),
-        }
-    }
-}
-
 impl Display for OtherStuff {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -266,7 +231,7 @@ impl Display for OtherStuff {
 pub struct Function {
     pub name: char,
     pub num_arguments: f64,
-    pub body: Vec<Thing>,
+    pub body: Scope,
     pub line: i32,
 }
 
@@ -275,7 +240,7 @@ impl Function {
         Function {
             name,
             num_arguments,
-            body,
+            body: Scope::new(body),
             line,
         }
     }
@@ -286,13 +251,7 @@ impl Display for Function {
         write!(
             f,
             "Function: {} with {} arguments and body: [\n\t{}\n]",
-            self.name,
-            self.num_arguments,
-            self.body
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join("\n\t")
+            self.name, self.num_arguments, self.body
         )
     }
 }
@@ -344,8 +303,8 @@ impl Display for Vairable {
 #[derive(PartialEq, Clone, Debug)]
 pub struct IfStatement {
     pub condition: OtherStuff,
-    pub body_true: Vec<Thing>,
-    pub body_false: Vec<Thing>,
+    pub body_true: Scope,
+    pub body_false: Scope,
     pub line: i32,
 }
 
@@ -358,8 +317,8 @@ impl IfStatement {
     ) -> Self {
         IfStatement {
             condition,
-            body_true,
-            body_false,
+            body_true: Scope::new(body_true),
+            body_false: Scope::new(body_false),
             line,
         }
     }
@@ -369,44 +328,29 @@ impl Display for IfStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "if statement: with condition: [{}] when true: [\n\t{}\n] and when false: [\n\t{}\n]",
-            self.condition,
-            self.body_true
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join("\n\t"),
-            self.body_false
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join("\n\t")
+            "if statement: with condition: [{}] when true: [\n{}\n] and when false: [\n{}\n]",
+            self.condition, self.body_true, self.body_false,
         )
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct LoopStatement {
-    pub body: Vec<Thing>,
+    pub body: Scope,
     pub line: i32,
 }
 
 impl LoopStatement {
     pub fn new(body: Vec<Thing>, line: i32) -> Self {
-        LoopStatement { body, line }
+        LoopStatement {
+            body: Scope::new(body),
+            line,
+        }
     }
 }
 
 impl Display for LoopStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "loop statement: [\n\t{}\n]",
-            self.body
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join("\n\t")
-        )
+        write!(f, "loop statement: [\n{}\n]", self.body)
     }
 }

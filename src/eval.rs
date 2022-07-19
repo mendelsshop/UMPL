@@ -1,28 +1,37 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::parser::{rules::IdentifierType, Thing};
-
+use crate::parser::{
+    rules::{IdentifierType, Stuff},
+    Thing,
+};
+#[derive(PartialEq, Clone, Debug)]
 pub struct Scope {
     pub vars: HashMap<String, IdentifierType>,
     pub function: HashMap<char, (Vec<Thing>, f64)>,
     pub body: Vec<Thing>,
+    pub level: i32,
 }
 
 impl Scope {
     pub fn new(body: Vec<Thing>) -> Scope {
-        Scope {
+        let mut scope = Self {
             vars: HashMap::new(),
             function: HashMap::new(),
             body,
-        }
+            level: 0,
+        };
+        scope.find_functions();
+        scope.find_variables();
+        scope
     }
 
     pub fn find_functions(&mut self) {
         for thing in &self.body {
             if let Thing::Function(function) = thing {
+                // self.body.remove(index);
                 self.function.insert(
                     function.name,
-                    (function.body.clone(), function.num_arguments),
+                    (function.body.body.clone(), function.num_arguments),
                 );
             }
         }
@@ -30,9 +39,13 @@ impl Scope {
 
     pub fn find_variables(&mut self) {
         for thing in &self.body {
-            if let Thing::Identifier(variable) = thing {
-                self.vars
-                    .insert(variable.name.clone(), variable.value.clone());
+            match thing {
+                Thing::Identifier(variable) => {
+                    self.vars
+                        .insert(variable.name.clone(), variable.value.clone());
+                }
+
+                _ => {}
             }
         }
     }
@@ -56,6 +69,18 @@ impl Display for Scope {
         for (key, value) in &self.function {
             write!(f, "\t{}: {:?}\n", key, value)?;
         }
+
+        write!(
+            f,
+            "Body: \n{}",
+            self.body
+                .iter()
+                .map(|thing| thing.to_string())
+                .collect::<Vec<String>>()
+                .join("\n")
+        );
+
+        // .join("\n\t")?;
         Ok(())
     }
 }

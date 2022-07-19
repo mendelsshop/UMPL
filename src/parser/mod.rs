@@ -155,10 +155,13 @@ impl Parser {
         self.advance();
         info!("PARSEfromTOKEN {}", self.token);
         match self.token.token_type.clone() {
-            TokenType::LeftParen => self.after_left_paren(),
+            TokenType::LeftParen => match self.after_left_paren() {
+                Callorexpression::Expression(e) => Some(Thing::Expression(e)),
+                _ => error::error(self.token.line, "expected expression"),
+            },
             TokenType::CodeBlockEnd => None,
             TokenType::Identifier { name } => {
-                Some(Thing::IdentifierPointer(self.var(name.clone())))
+                error::error(self.token.line, "variable not allowed in this context");
             }
             keyword if self.keywords.is_keyword(&keyword) => {
                 info!("found keyword {}", self.token.token_type);
@@ -231,12 +234,8 @@ impl Parser {
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
                                     if self.token.token_type == TokenType::LeftBracket {
-                                        let thing = OtherStuff::from_thing(
-                                            self.parse_from_token().unwrap(),
-                                        );
-                                        let thing1 = OtherStuff::from_thing(
-                                            self.parse_from_token().unwrap(),
-                                        );
+                                        let thing = self.parse_to_other_stuff();
+                                        let thing1 = self.parse_to_other_stuff();
                                         self.advance();
                                         if self.token.token_type == TokenType::RightBracket {
                                             self.variables.push(name.clone());
@@ -362,9 +361,17 @@ impl Parser {
                                 TokenType::Boolean { value } => OtherStuff::Literal(
                                     Literal::new_boolean(value, self.token.line),
                                 ),
-                                TokenType::LeftParen => {
-                                    OtherStuff::from_thing(self.after_left_paren().unwrap())
-                                }
+                                TokenType::LeftParen => match self.after_left_paren() {
+                                    Callorexpression::Expression(thing) => {
+                                        OtherStuff::Expression(thing)
+                                    }
+                                    _ => {
+                                        error::error(
+                                            self.token.line,
+                                            "call found expected expression",
+                                        );
+                                    }
+                                },
                                 TokenType::Identifier { name } => {
                                     OtherStuff::Identifier(self.var(name).clone())
                                 }
@@ -451,27 +458,19 @@ impl Parser {
                     TokenType::Return { .. } => {
                         if self.tokens[self.current_position].token_type == TokenType::Colon {
                             self.advance();
-                            return Some(Thing::Other(
-                                TokenType::Return { value: None },
-                                self.token.line,
-                            ));
+                            return Some(Thing::Return(None, self.token.line));
                         }
                         // TODO: capture the value returned if any
-                        let thing = OtherStuff::from_thing(self.parse_from_token().unwrap());
-                        Some(Thing::Other(
-                            TokenType::Return {
-                                value: Some(Box::new(thing)),
-                            },
-                            self.token.line,
-                        ))
+                        let thing = self.parse_to_other_stuff();
+                        Some(Thing::Return(Some(thing), self.token.line))
                     }
                     TokenType::Break => {
                         info!("break statement");
-                        Some(Thing::Other(self.token.token_type.clone(), self.token.line))
+                        Some(Thing::Break(self.token.line))
                     }
                     TokenType::Continue => {
                         info!("continue statement");
-                        Some(Thing::Other(self.token.token_type.clone(), self.token.line))
+                        Some(Thing::Continue(self.token.line))
                     }
                     _ => {
                         error::error(
@@ -488,7 +487,7 @@ impl Parser {
         }
     }
 
-    fn after_left_paren(&mut self) -> Option<Thing> {
+    fn after_left_paren(&mut self) -> Callorexpression {
         if self.paren_count == 1 {
             info!("found expresssion");
             let stuff = self.parse_from_token().unwrap();
@@ -510,11 +509,11 @@ impl Parser {
                 }
                 _ => {}
             }
-            Some(Thing::Expression(Expression {
+            Callorexpression::Expression(Expression {
                 inside: stuff.convert_to_stuff(),
                 print: prints,
                 line: self.token.line,
-            }))
+            })
         } else {
             self.advance();
             if self.token.token_type == TokenType::New {
@@ -525,14 +524,14 @@ impl Parser {
             info!("found call");
             let mut args = Vec::new();
             while self.tokens[self.current_position].token_type != TokenType::RightParen {
-                args.push(Stuff::from_thing(self.parse_from_token().unwrap()));
+                args.push(self.parse_to_stuff());
             }
             self.advance();
-            Some(Thing::Call(Call {
+            Callorexpression::Call(Call {
                 keyword,
                 arguments: args,
                 line,
-            }))
+            })
         }
     }
 
@@ -584,7 +583,13 @@ impl Parser {
             TokenType::Boolean { value } => {
                 OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
             }
-            TokenType::LeftParen => OtherStuff::from_thing(self.after_left_paren().unwrap()),
+            TokenType::LeftParen => match self.after_left_paren() {
+                Callorexpression::Expression(expression) => OtherStuff::Expression(expression),
+                _ => error::error(
+                    self.token.line,
+                    "expression expected after left parenthesis, found call",
+                ),
+            },
             TokenType::Identifier { name } => OtherStuff::Identifier(self.var(name)),
             tokentype => {
                 error::error(
@@ -598,37 +603,61 @@ impl Parser {
             }
         }
     }
-}
 
-pub enum PointerOrIdentifier {
-    Identifier(Identifier),
-    Pointer(IdentifierPointer),
-}
-
-impl PointerOrIdentifier {
-    pub fn get_identifier_p(&self) -> &IdentifierPointer {
-        match self {
-            PointerOrIdentifier::Pointer(identifier_pointer) => identifier_pointer,
-            _ => panic!("PointerOrIdentifier::get_identifier_p() called on non-Pointer"),
+    fn parse_to_stuff(&mut self) -> Stuff {
+        match self.token.token_type {
+            TokenType::LeftParen => {
+                self.advance();
+                match self.after_left_paren() {
+                    Callorexpression::Call(call) => Stuff::Call(call),
+                    _ => error::error(self.token.line, "call expected after left parenthesis"),
+                }
+            }
+            TokenType::Number { literal } => {
+                self.advance();
+                Stuff::Literal(Literal::new_number(literal, self.token.line))
+            }
+            TokenType::String { literal } => {
+                self.advance();
+                Stuff::Literal(Literal::new_string(literal, self.token.line))
+            }
+            TokenType::Null => {
+                self.advance();
+                Stuff::Literal(Literal::new_null(self.token.line))
+            }
+            TokenType::Boolean { value } => {
+                self.advance();
+                Stuff::Literal(Literal::new_boolean(value, self.token.line))
+            }
+            _ => {
+                error::error(self.token.line, "");
+            }
         }
     }
+
+    fn parse_to_other_stuff(&mut self) -> OtherStuff {}
+}
+
+#[derive(PartialEq, Clone)]
+pub enum Callorexpression {
+    Call(Call),
+    Expression(Expression),
 }
 
 #[derive(PartialEq, Clone)]
 pub enum Thing {
     // we have vairants for each type of token that has a value ie number or the name of an identifier
-    Literal(Literal),
     Identifier(Identifier),
     Expression(Expression),
     Function(Function),
-    IdentifierPointer(IdentifierPointer),
     IfStatement(IfStatement),
     LoopStatement(LoopStatement),
-    Call(Call),
+    Break(i32),
+    Continue(i32),
+    Return(Option<OtherStuff>, i32),
     // make this into a custom struct
 
     // for the rest of the self.tokens we just have the token type and the line number
-    Other(TokenType, i32),
 }
 
 impl Thing {
@@ -638,30 +667,18 @@ impl Thing {
 
     pub fn get_line(&self) -> i32 {
         match self {
-            Thing::Literal(literal) => literal.line,
             Thing::Identifier(identifier) => identifier.line,
             Thing::Expression(expression) => expression.line,
             Thing::Function(function) => function.line,
             Thing::IfStatement(if_statement) => if_statement.line,
             Thing::LoopStatement(loop_statement) => loop_statement.line,
-            Thing::Call(call) => call.line,
-            Thing::Other(_, line) => *line,
-            Thing::IdentifierPointer(identifier_pointer) => identifier_pointer.line,
+            Thing::Break(line) => *line,
+            Thing::Continue(line) => *line,
+            Thing::Return(_, line) => *line,
         }
     }
-    #[allow(dead_code)]
-    fn get_tt(&self) -> TokenType {
-        match self {
-            Thing::Other(tt, _) => tt.clone(),
-            _ => panic!("get_tt called on non-other thing"),
-        }
-    }
-
     fn convert_to_stuff(&self) -> Stuff {
         match self {
-            Thing::Literal(literal) => Stuff::Literal(literal.clone()),
-            Thing::IdentifierPointer(identifier) => Stuff::Identifier(identifier.clone()),
-            Thing::Call(call) => Stuff::Call(call.clone()),
             other => error::error(
                 other.get_line(),
                 format!("convert_to_stuff called on non-literal: {:?}", other).as_str(),
@@ -674,14 +691,20 @@ impl Display for Thing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Thing::Expression(expression) => write!(f, "{}", expression),
-            Thing::Literal(literal) => write!(f, "{}", literal),
-            Thing::Other(t, _) => write!(f, "{}", t),
             Thing::Identifier(s) => write!(f, "Identifier({})", s),
             Thing::Function(function) => write!(f, "{}", function),
             Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{}", loop_statement),
-            Thing::Call(call) => write!(f, "{}", call),
-            Thing::IdentifierPointer(identifier_pointer) => write!(f, "{}", identifier_pointer),
+            Thing::Break(line) => write!(f, "Break"),
+            Thing::Continue(line) => write!(f, "Continue"),
+            Thing::Return(stuff, line) => write!(
+                f,
+                "Return{}",
+                match stuff {
+                    Some(stuff) => format!("({})", stuff),
+                    None => format!(""),
+                }
+            ),
         }
     }
 }
@@ -690,18 +713,21 @@ impl fmt::Debug for Thing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Thing::Expression(expression) => write!(f, "{:?}", expression),
-            Thing::Literal(literal) => {
-                write!(f, "[{:?} at line: {}]", literal.literal, literal.line)
-            }
-            Thing::Other(t, l) => write!(f, "[TokenType::{:?} at line: {}]", t, l),
             Thing::Identifier(t) => write!(f, "[Identifier({}) at line: {}]", t, t.line),
             Thing::Function(function) => write!(f, "{:?}", function),
             Thing::IfStatement(if_statement) => write!(f, "{:?}", if_statement),
             Thing::LoopStatement(loop_statement) => write!(f, "{:?}", loop_statement),
-            Thing::Call(call) => write!(f, "{:?}", call),
-            Thing::IdentifierPointer(identifier_pointer) => {
-                write!(f, "{:?}", identifier_pointer)
-            }
+            Thing::Break(line) => write!(f, "[Break at line: {}]", line),
+            Thing::Continue(line) => write!(f, "[Continue at line: {}]", line),
+            Thing::Return(stuff, line) => write!(
+                f,
+                "[Return{} at line: {}]",
+                match stuff {
+                    Some(stuff) => format!("({:?})", stuff),
+                    None => format!(""),
+                },
+                line
+            ),
         }
     }
 }
