@@ -90,9 +90,9 @@ impl Literal {
         }
     }
 
-    pub fn new_null(line: i32) -> Literal {
+    pub fn new_hempty(line: i32) -> Literal {
         Literal {
-            literal: LiteralType::Null,
+            literal: LiteralType::hempty,
             line,
         }
     }
@@ -108,7 +108,7 @@ pub enum LiteralType {
     Number(f64),
     String(String),
     Boolean(bool),
-    Null,
+    hempty,
 }
 
 impl Display for LiteralType {
@@ -117,7 +117,7 @@ impl Display for LiteralType {
             LiteralType::Number(num) => write!(f, "{}", num),
             LiteralType::String(string) => write!(f, "{}", string),
             LiteralType::Boolean(bool) => write!(f, "{}", bool),
-            LiteralType::Null => write!(f, "null"),
+            LiteralType::hempty => write!(f, "hempty"),
         }
     }
 }
@@ -289,7 +289,7 @@ impl Vairable {
 
     pub fn new_empty(line: i32) -> Self {
         Vairable {
-            value: OtherStuff::Literal(Literal::new_null(line)),
+            value: OtherStuff::Literal(Literal::new_hempty(line)),
         }
     }
 }

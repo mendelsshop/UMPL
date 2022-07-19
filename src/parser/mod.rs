@@ -584,7 +584,7 @@ impl Parser {
             TokenType::String { literal } => {
                 OtherStuff::Literal(Literal::new_string(literal, self.token.line))
             }
-            TokenType::Null => OtherStuff::Literal(Literal::new_null(self.token.line)),
+            TokenType::hempty => OtherStuff::Literal(Literal::new_hempty(self.token.line)),
             TokenType::Boolean { value } => {
                 OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
             }
@@ -628,9 +628,9 @@ impl Parser {
                 self.advance();
                 Stuff::Literal(Literal::new_string(literal, self.token.line))
             }
-            TokenType::Null => {
+            TokenType::hempty => {
                 self.advance();
-                Stuff::Literal(Literal::new_null(self.token.line))
+                Stuff::Literal(Literal::new_hempty(self.token.line))
             }
             TokenType::Boolean { value } => {
                 self.advance();
@@ -669,9 +669,9 @@ impl Parser {
                 self.advance();
                 OtherStuff::Literal(Literal::new_string(literal, self.token.line))
             }
-            TokenType::Null => {
+            TokenType::hempty => {
                 self.advance();
-                OtherStuff::Literal(Literal::new_null(self.token.line))
+                OtherStuff::Literal(Literal::new_hempty(self.token.line))
             }
             TokenType::Boolean { value } => {
                 self.advance();

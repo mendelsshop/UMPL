@@ -28,7 +28,7 @@
 # stuff:
 [`<literal>`](#literal) `|` [`<calling>`](#calling) `|` [`<identifier>`](#identifier)
 # literal:
-[`<number>`](#number) `|` [`<string>`](#string) `|` [`<boolean>`](#boolean) | `"null"`
+[`<number>`](#number) `|` [`<string>`](#string) `|` [`<boolean>`](#boolean) | `"hempty"`
 
 # number:
 `"0x" &| 0-9A-F`

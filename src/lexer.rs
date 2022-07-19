@@ -72,7 +72,7 @@ impl Lexer {
                             self.identifier();
                         }
                     } else if c == 'n' {
-                        if !self.null() {
+                        if !self.hempty() {
                             self.identifier();
                         }
                     } else {
@@ -128,7 +128,7 @@ impl Lexer {
         false
     }
 
-    fn null(&mut self) -> bool {
+    fn hempty(&mut self) -> bool {
         if self.peek() == 'u' {
             self.advance();
             if self.peek() == 'l' {
@@ -138,7 +138,7 @@ impl Lexer {
                     if self.peek().is_alphanumeric() || self.peek() == '-' {
                         return false;
                     }
-                    self.add_token(TokenType::Null);
+                    self.add_token(TokenType::hempty);
                     return true;
                 }
             }
