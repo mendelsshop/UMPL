@@ -3,7 +3,7 @@ use crate::{
     error, keywords,
     token::{Token, TokenType},
 };
-use log::info;
+use log::{debug, info};
 use rules::{
     Call, Expression, Function, Identifier, IdentifierPointer, IfStatement, Literal, LiteralType,
     LoopStatement, OtherStuff, Stuff,
@@ -136,7 +136,7 @@ impl Parser {
             match expr {
                 Some(t) => {
                     program.push(t.clone());
-                    info!("{:?}", t);
+                    debug!("{:?}", t);
                 }
                 None => {}
             }
@@ -234,6 +234,7 @@ impl Parser {
                                 if self.token.token_type == TokenType::With {
                                     self.advance();
                                     if self.token.token_type == TokenType::LeftBracket {
+                                        self.advance();
                                         let thing = self.parse_to_other_stuff();
                                         let thing1 = self.parse_to_other_stuff();
                                         self.advance();
@@ -481,8 +482,10 @@ impl Parser {
                 }
             }
             _ => {
-                info!("found terminal token {}", self.token.token_type);
-                Some(atom(self.token.clone()))
+                error::error(
+                    self.token.line,
+                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                );
             }
         }
     }
@@ -490,8 +493,8 @@ impl Parser {
     fn after_left_paren(&mut self) -> Callorexpression {
         if self.paren_count == 1 {
             info!("found expresssion");
-            let stuff = self.parse_from_token().unwrap();
-            self.advance();
+            let stuff = self.parse_to_stuff();
+
             if self.token.token_type == TokenType::RightParen {
                 info!("right paren found");
             } else {
@@ -510,7 +513,7 @@ impl Parser {
                 _ => {}
             }
             Callorexpression::Expression(Expression {
-                inside: stuff.convert_to_stuff(),
+                inside: stuff,
                 print: prints,
                 line: self.token.line,
             })
@@ -521,9 +524,11 @@ impl Parser {
             }
             let keyword = self.token.token_type.clone();
             let line = self.token.line;
-            info!("found call");
+            info!("found call {}", keyword);
+            self.advance();
             let mut args = Vec::new();
-            while self.tokens[self.current_position].token_type != TokenType::RightParen {
+            while self.token.token_type != TokenType::RightParen {
+                info!("looking for args");
                 args.push(self.parse_to_stuff());
             }
             self.advance();
@@ -605,8 +610,10 @@ impl Parser {
     }
 
     fn parse_to_stuff(&mut self) -> Stuff {
-        match self.token.token_type {
+        info!("parsing stuff");
+        match self.token.token_type.clone() {
             TokenType::LeftParen => {
+                info!("found left paren");
                 self.advance();
                 match self.after_left_paren() {
                     Callorexpression::Call(call) => Stuff::Call(call),
@@ -629,13 +636,59 @@ impl Parser {
                 self.advance();
                 Stuff::Literal(Literal::new_boolean(value, self.token.line))
             }
+            TokenType::Identifier { name } => {
+                self.advance();
+                Stuff::Identifier(self.var(name))
+            }
             _ => {
-                error::error(self.token.line, "");
+                error::error(
+                    self.token.line,
+                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                );
             }
         }
     }
 
-    fn parse_to_other_stuff(&mut self) -> OtherStuff {}
+    fn parse_to_other_stuff(&mut self) -> OtherStuff {
+        match self.token.token_type.clone() {
+            TokenType::LeftParen => {
+                self.advance();
+                match self.after_left_paren() {
+                    Callorexpression::Expression(expression) => OtherStuff::Expression(expression),
+                    _ => error::error(
+                        self.token.line,
+                        "expression expected after left parenthesis, found call",
+                    ),
+                }
+            }
+            TokenType::Number { literal } => {
+                self.advance();
+                OtherStuff::Literal(Literal::new_number(literal, self.token.line))
+            }
+            TokenType::String { literal } => {
+                self.advance();
+                OtherStuff::Literal(Literal::new_string(literal, self.token.line))
+            }
+            TokenType::Null => {
+                self.advance();
+                OtherStuff::Literal(Literal::new_null(self.token.line))
+            }
+            TokenType::Boolean { value } => {
+                self.advance();
+                OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
+            }
+            TokenType::Identifier { name } => {
+                self.advance();
+                OtherStuff::Identifier(self.var(name))
+            }
+            _ => {
+                error::error(
+                    self.token.line,
+                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                );
+            }
+        }
+    }
 }
 
 #[derive(PartialEq, Clone)]
@@ -661,10 +714,6 @@ pub enum Thing {
 }
 
 impl Thing {
-    pub fn new(token: Token) -> Thing {
-        atom(token)
-    }
-
     pub fn get_line(&self) -> i32 {
         match self {
             Thing::Identifier(identifier) => identifier.line,
@@ -729,26 +778,5 @@ impl fmt::Debug for Thing {
                 line
             ),
         }
-    }
-}
-fn atom(token: Token) -> Thing {
-    match token.token_type {
-        TokenType::Number { literal } => Thing::Literal(Literal {
-            literal: LiteralType::Number(literal),
-            line: token.line,
-        }),
-        TokenType::String { literal } => Thing::Literal(Literal {
-            literal: LiteralType::String(literal),
-            line: token.line,
-        }),
-        TokenType::Boolean { value } => Thing::Literal(Literal {
-            literal: LiteralType::Boolean(value),
-            line: token.line,
-        }),
-        TokenType::Null => Thing::Literal(Literal {
-            literal: LiteralType::Null,
-            line: token.line,
-        }),
-        _ => Thing::Other(token.token_type, token.line),
     }
 }
