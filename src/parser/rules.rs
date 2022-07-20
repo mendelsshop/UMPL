@@ -1,5 +1,5 @@
 use crate::{error, eval::Scope, token::TokenType};
-use std::fmt::{self, Debug, Display};
+use std::fmt::{self, Debug, Display, Write};
 
 use super::Thing;
 // TODO: make proper constructors for each struct/enum
@@ -198,13 +198,14 @@ impl Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut c = String::from("");
         for arg in self.arguments.iter().enumerate() {
-            c.push_str(&format!("{}{}", arg.1, {
+            write!(c, "{}{}", arg.1, {
                 if arg.0 < self.arguments.len() - 1 {
                     ", "
                 } else {
                     ""
                 }
-            }));
+            })
+            .unwrap()
         }
         write!(f, "{:?}: [{}]", self.keyword, c)
     }
