@@ -168,16 +168,16 @@ impl Parser {
                 info!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
                     TokenType::Potato => {
-                        self.advance("parse_from_token");
+                        self.advance("parse_from_token after function looking for function name");
                         match self.token.token_type.clone() {
                             TokenType::FunctionIdentifier { name } => {
                                 info!("function identifier found");
-                                self.advance("parse_from_token");
+                                self.advance("parse_from_token after function name looking for function arguments");
                                 // check if the next token is a number and save it in a vairable num_args
                                 let num_args = match self.token.token_type {
                                     TokenType::Number { literal } => {
                                         if literal.trunc() == literal {
-                                            self.advance("parse_from_token");
+                                            self.advance("parse_from_token found number or args looking for function body");
                                             literal
                                         } else {
                                             error::error(
@@ -198,13 +198,18 @@ impl Parser {
                                 if self.token.token_type == TokenType::CodeBlockBegin {
                                     let mut function: Vec<Thing> = Vec::new();
                                     self.in_function = true;
-                                    while self.token.token_type != TokenType::CodeBlockEnd {
+                                    while self.tokens[self.current_position].token_type
+                                        != TokenType::CodeBlockEnd
+                                    {
+                                        self.in_function = true; // for funtions inside functions see loop below for more info
                                         match self.parse_from_token() {
                                             Some(t) => function.push(t),
                                             None => {}
                                         }
                                     }
+                                    self.advance("parse_from_token after function body looking for function end");
                                     self.in_function = false;
+                                    debug!("new function {:?}", function);
                                     Some(Thing::Function(Function::new(
                                         name,
                                         num_args,
@@ -333,18 +338,22 @@ impl Parser {
                     }
                     TokenType::Loop => {
                         info!("loop found");
-                        self.advance("parse_from_token");
+                        self.advance("parse_from_token looking for loop body");
                         let mut loop_body: Vec<Thing> = Vec::new();
                         if self.token.token_type == TokenType::CodeBlockBegin {
                             self.in_loop = true;
-                            while self.token.token_type != TokenType::CodeBlockEnd {
+                            while self.tokens[self.current_position].token_type
+                                != TokenType::CodeBlockEnd
+                            {
                                 info!("parsing loop body");
+                                self.in_loop = true; // just in case we encounter a loop inside a loop and when the inner loop ends it will set this to false which will make the outer loop panic if it encountweers a break|contuinue statement
                                 match self.parse_from_token() {
                                     Some(t) => loop_body.push(t),
                                     None => {}
                                 }
                             }
                             info!("Done parsing loop body");
+                            self.advance("parse_from_token after loop body looking for loop end");
                             self.in_loop = false;
                             Some(Thing::LoopStatement(LoopStatement::new(
                                 loop_body,
@@ -355,10 +364,10 @@ impl Parser {
                         }
                     }
                     TokenType::If => {
-                        self.advance("parse_from_token");
+                        self.advance("parse_from_token after if expecting left brace");
                         if self.token.token_type == TokenType::LeftBrace {
                             info!("if statement");
-                            self.advance("parse_from_token");
+                            self.advance("parse_from_token finding condition");
                             let mut if_body: Vec<Thing>;
                             let mut else_body: Vec<Thing>;
                             let thing: OtherStuff = match self.token.clone().token_type {
@@ -391,12 +400,19 @@ impl Parser {
                                 }
                             };
                             info!("after conditon if statement");
-                            self.advance("parse_from_token");
+                            self.advance("parse_from_token if expecting left brace");
                             if self.token.token_type == TokenType::RightBrace {
-                                self.advance("parse_from_token");
+                                self.advance("parse_from_token looking for if body");
                                 if self.token.token_type == TokenType::CodeBlockBegin {
                                     if_body = Vec::new();
-                                    while self.token.token_type != TokenType::CodeBlockEnd {
+                                    while self.tokens[self.current_position].token_type
+                                        != TokenType::CodeBlockEnd
+                                    {
+                                        info!(
+                                            "c {:?} n {}",
+                                            self.token.token_type,
+                                            self.tokens[self.current_position].token_type
+                                        );
                                         match self.parse_from_token() {
                                             Some(token) => {
                                                 if_body.push(token);
@@ -404,20 +420,23 @@ impl Parser {
                                             None => {}
                                         }
                                     }
-                                    self.advance("parse_from_token");
+                                    self.advance("parse_from_token looking for else body");
+                                    self.advance("parse_from_token before else");
                                     if self.token.token_type == TokenType::Else {
-                                        self.advance("parse_from_token");
+                                        self.advance("parse_from_token looking for else body");
                                         if self.token.token_type == TokenType::CodeBlockBegin {
                                             info!("else found");
                                             else_body = Vec::new();
-                                            while self.token.token_type != TokenType::CodeBlockEnd {
+                                            while self.tokens[self.current_position].token_type
+                                                != TokenType::CodeBlockEnd
+                                            {
                                                 match self.parse_from_token() {
                                                     Some(x) => else_body.push(x),
                                                     None => {}
                                                 }
                                             }
                                             info!("in else_body");
-
+                                            self.advance("parse_from_token after else");
                                             Some(Thing::IfStatement(Box::new(IfStatement::new(
                                                 thing,
                                                 if_body,
@@ -461,7 +480,7 @@ impl Parser {
                     }
                     TokenType::Return { .. } => {
                         if self.tokens[self.current_position].token_type == TokenType::Colon {
-                            self.advance("parse_from_token");
+                            self.advance("parse_from_token return expecting expression");
                             return Some(Thing::Return(None, self.token.line));
                         }
                         // TODO: capture the value returned if any

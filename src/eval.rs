@@ -28,7 +28,7 @@ impl Scope {
                 // self.body.remove(index);
                 self.function.insert(
                     function.name,
-                    (function.body.body.clone(), function.num_arguments),
+                    (function.body.clone(), function.num_arguments),
                 );
             }
         }
