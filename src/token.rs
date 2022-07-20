@@ -55,7 +55,7 @@ pub enum TokenType {
     Potato,
     If,
     Else,
-    hempty,
+    Hempty,
     Boolean { value: bool },
     Input,
     New,

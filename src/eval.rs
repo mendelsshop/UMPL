@@ -1,9 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::parser::{
-    rules::{IdentifierType, Stuff},
-    Thing,
-};
+use crate::parser::{rules::IdentifierType, Thing};
 #[derive(PartialEq, Clone, Debug)]
 pub struct Scope {
     pub vars: HashMap<String, IdentifierType>,
@@ -39,13 +36,9 @@ impl Scope {
 
     pub fn find_variables(&mut self) {
         for thing in &self.body {
-            match thing {
-                Thing::Identifier(variable) => {
-                    self.vars
-                        .insert(variable.name.clone(), variable.value.clone());
-                }
-
-                _ => {}
+            if let Thing::Identifier(variable) = thing {
+                self.vars
+                    .insert(variable.name.clone(), variable.value.clone());
             }
         }
     }
@@ -53,11 +46,11 @@ impl Scope {
 
 impl Display for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "variables: \n")?;
+        writeln!(f, "variables:")?;
         for (key, value) in &self.vars {
-            write!(
+            writeln!(
                 f,
-                "\t{}: {}\n",
+                "\t{}: {}",
                 key,
                 match value {
                     IdentifierType::List(list) => list.to_string(),
@@ -65,9 +58,9 @@ impl Display for Scope {
                 }
             )?;
         }
-        write!(f, "Functions: \n")?;
+        writeln!(f, "Functions:")?;
         for (key, value) in &self.function {
-            write!(f, "\t{}: {:?}\n", key, value)?;
+            writeln!(f, "\t{}: {:?}", key, value)?;
         }
 
         write!(
@@ -78,7 +71,8 @@ impl Display for Scope {
                 .map(|thing| thing.to_string())
                 .collect::<Vec<String>>()
                 .join("\n")
-        );
+        )
+        .unwrap();
 
         // .join("\n\t")?;
         Ok(())

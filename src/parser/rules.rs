@@ -92,7 +92,7 @@ impl Literal {
 
     pub fn new_hempty(line: i32) -> Literal {
         Literal {
-            literal: LiteralType::hempty,
+            literal: LiteralType::Hempty,
             line,
         }
     }
@@ -108,7 +108,7 @@ pub enum LiteralType {
     Number(f64),
     String(String),
     Boolean(bool),
-    hempty,
+    Hempty,
 }
 
 impl Display for LiteralType {
@@ -117,7 +117,7 @@ impl Display for LiteralType {
             LiteralType::Number(num) => write!(f, "{}", num),
             LiteralType::String(string) => write!(f, "{}", string),
             LiteralType::Boolean(bool) => write!(f, "{}", bool),
-            LiteralType::hempty => write!(f, "hempty"),
+            LiteralType::Hempty => write!(f, "hempty"),
         }
     }
 }

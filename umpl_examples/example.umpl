@@ -8,8 +8,8 @@ potato 😂2 ⧼ ! to create a function we use the potato keyword, functions mus
 ((new 😂 10 0x1A))> ! we use the new keyword to call a function followed by function names, prints 32, when the first digit of number is a letre prefix with 0x
 
 list it with [((not true))> 0] ! creates a list with the values  1,2 (in hex), list can only have two elements and you cant declare recursive lists like: [0 [1 1]], but if you have an identiifer (d) that points to a list you can do: [9 d]
-((set-with it.first  2))<! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
-((set-with it.second  4))< ! sets the second element of the it list to 4 and print its
+((set-with it.first 2))<! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
+((set-with it.second 4))< ! sets the second element of the it list to 4 and print its
 
 create bool with true
 create other-bool with ((not bool))< ! creates a variable called bool and sets it to true, then creates a variable called other-bool and sets it to the opposite of bool, when we call a function in a variable defenition we must use an expression to call the function

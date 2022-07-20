@@ -138,7 +138,7 @@ impl Lexer {
                     if self.peek().is_alphanumeric() || self.peek() == '-' {
                         return false;
                     }
-                    self.add_token(TokenType::hempty);
+                    self.add_token(TokenType::Hempty);
                     return true;
                 }
             }

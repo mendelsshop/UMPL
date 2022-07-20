@@ -1,5 +1,4 @@
 use log::info;
-use log4rs;
 use std::{
     env,
     fs::File,
@@ -85,6 +84,6 @@ fn run(line: String) {
 
     let thing = parsed.parse();
 
-    let mut scope = Scope::new(thing);
+    let scope = Scope::new(thing);
     println!("{}", scope);
 }
