@@ -84,7 +84,7 @@ fn run(line: String) {
 
     let thing = parsed.parse();
 
-    let mut  scope = Scope::new(thing);
+    let mut scope = Scope::new(thing);
     scope.find_functions();
     scope.find_variables();
     println!("{}", scope);

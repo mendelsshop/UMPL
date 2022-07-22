@@ -57,7 +57,6 @@ impl Display for Scope {
             write!(f, "\t{}: {:?}\n", key, value)?;
         }
 
-
         write!(f, "body: \n")?;
         for thing in &self.body {
             write!(f, "\t{}\n", thing.to_string())?;
