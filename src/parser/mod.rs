@@ -437,12 +437,12 @@ impl Parser {
                                             }
                                             info!("in else_body");
                                             self.advance("parse_from_token after else");
-                                            Some(Thing::IfStatement(Box::new(IfStatement::new(
+                                            Some(Thing::IfStatement(IfStatement::new(
                                                 thing,
                                                 if_body,
                                                 else_body,
                                                 self.token.line,
-                                            ))))
+                                            )))
                                         } else {
                                             error::error(
                                                 self.token.line,
@@ -665,7 +665,6 @@ impl Parser {
     }
 
     fn parse_to_other_stuff(&mut self) -> OtherStuff {
-        println!("parsing other stuff {}", self.token.token_type);
         match self.token.token_type.clone() {
             TokenType::LeftParen => {
                 // self.advance("parse to other stuff");
@@ -710,7 +709,7 @@ pub enum Thing {
     Identifier(Identifier),
     Expression(Expression),
     Function(Function),
-    IfStatement(Box<IfStatement>),
+    IfStatement(IfStatement),
     LoopStatement(LoopStatement),
     Break(i32),
     Continue(i32),

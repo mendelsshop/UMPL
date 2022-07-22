@@ -2,7 +2,7 @@
 
 potato 😂3 ⧼ ! to create a function we use the potato keyword, functions must be nameed with a single emoji, we put the number of args and then ⧼⧽ is where the code goes
     loop ⧼
-        (``)>
+        (` `)>
         if {$3} ⧼
             break
         ⧽ else ⧼
@@ -27,7 +27,7 @@ create other-bool with ((not bool))< ! creates a variable called bool and sets i
 (other-bool)> ! prints false
 ((set-with other-bool true))< ! we set other-bool to true
 
-if {((not bool))<} ⧼ ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
+if {other-bool} ⧼ ! the {} must evalte to a boolean, we can also use eq, ne lt, le etc
   (`hello`)> ! the bactick (`) is used to encapsulate a string
 ⧽ else ⧼
     (`by`)>
@@ -40,18 +40,18 @@ if {true} ⧼ ! there is now else, use nested if elses, condotins must be in {} 
 ⧽
 
 loop ⧼
-      potato 😂 1 ⧼
-      ((minus 1 10))> ! prints -15
-      ⧽
-  create inputs with ((inputs `continue?`))<
+    potato 😂 1 ⧼
+    ((minus 1 10))> ! prints -15
+    ⧽
+  create inputs with ((input `continue?`))<
   if {((eq inputs `y`))<} ⧼ ! there is now else, use nested if elses, condotins must be in {} and we can use nested () within the 
     potato 😂 1 ⧼
       ((minus 1 10))> ! prints -15
       ⧽
     continue
   ⧽ else ⧼
-        potato 😂 1 ⧼
-      ((minus 1 10))> ! prints -15
+      potato 😂 1 ⧼
+        ((minus 1 10))> ! prints -15
       ⧽
     break ! what the if/esle do can be nothing if you dont pu anything in the parenthesis
   ⧽
@@ -59,4 +59,5 @@ loop ⧼
 ⧽
 ((new 😂 10 0x1A))> ! we use the new keyword to call a function followed by function names, prints 32, when the first digit of number is a letre prefix with 0x
 
-
+((set-with bool (input `ads`)))>
+create inputs with ((input `continue?`))<
