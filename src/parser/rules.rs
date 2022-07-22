@@ -1,5 +1,5 @@
 use crate::{error, token::TokenType};
-use std::fmt::{self, Debug, Display};
+use std::fmt::{self, Debug, Display, Write};
 
 use super::Thing;
 // TODO: make proper constructors for each struct/enum
@@ -52,23 +52,6 @@ pub enum Stuff {
     Call(Call),
 }
 
-impl Stuff {
-    pub fn from_thing(thing: Thing) -> Stuff {
-        match thing {
-            Thing::Literal(ref lit) => Stuff::Literal(lit.clone()),
-            Thing::IdentifierPointer(ref ident) => Stuff::Identifier(ident.clone()),
-            Thing::Call(ref call) => Stuff::Call(call.clone()),
-            thing => error::error(
-                thing.get_line(),
-                format!(
-                    "expected Literal, Identifier, or function call, got {:?}",
-                    thing
-                )
-                .as_str(),
-            ),
-        }
-    }
-}
 impl Display for Stuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -107,9 +90,9 @@ impl Literal {
         }
     }
 
-    pub fn new_null(line: i32) -> Literal {
+    pub fn new_hempty(line: i32) -> Literal {
         Literal {
-            literal: LiteralType::Null,
+            literal: LiteralType::Hempty,
             line,
         }
     }
@@ -125,7 +108,7 @@ pub enum LiteralType {
     Number(f64),
     String(String),
     Boolean(bool),
-    Null,
+    Hempty,
 }
 
 impl Display for LiteralType {
@@ -134,7 +117,7 @@ impl Display for LiteralType {
             LiteralType::Number(num) => write!(f, "{}", num),
             LiteralType::String(string) => write!(f, "{}", string),
             LiteralType::Boolean(bool) => write!(f, "{}", bool),
-            LiteralType::Null => write!(f, "null"),
+            LiteralType::Hempty => write!(f, "hempty"),
         }
     }
 }
@@ -215,13 +198,14 @@ impl Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut c = String::from("");
         for arg in self.arguments.iter().enumerate() {
-            c.push_str(&format!("{}{}", arg.1, {
+            write!(c, "{}{}", arg.1, {
                 if arg.0 < self.arguments.len() - 1 {
                     ", "
                 } else {
                     ""
                 }
-            }));
+            })
+            .unwrap()
         }
         write!(f, "{:?}: [{}]", self.keyword, c)
     }
@@ -232,24 +216,6 @@ pub enum OtherStuff {
     Literal(Literal),
     Identifier(IdentifierPointer),
     Expression(Expression),
-}
-
-impl OtherStuff {
-    pub fn from_thing(thing: Thing) -> Self {
-        match thing {
-            Thing::IdentifierPointer(ref ident) => Self::Identifier(ident.clone()),
-            Thing::Literal(ref lit) => Self::Literal(lit.clone()),
-            Thing::Expression(ref expr) => Self::Expression(expr.clone()),
-            _ => error::error(
-                thing.get_line(),
-                format!(
-                    "expected Identifier, Literal, or Expression, got {:?}",
-                    thing
-                )
-                .as_str(),
-            ),
-        }
-    }
 }
 
 impl Display for OtherStuff {
@@ -290,9 +256,9 @@ impl Display for Function {
             self.num_arguments,
             self.body
                 .iter()
-                .map(|x| x.to_string())
+                .map(|thing| thing.to_string())
                 .collect::<Vec<String>>()
-                .join("\n\t")
+                .join("\n")
         )
     }
 }
@@ -330,7 +296,7 @@ impl Vairable {
 
     pub fn new_empty(line: i32) -> Self {
         Vairable {
-            value: OtherStuff::Literal(Literal::new_null(line)),
+            value: OtherStuff::Literal(Literal::new_hempty(line)),
         }
     }
 }
@@ -369,18 +335,18 @@ impl Display for IfStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "if statement: with condition: [{}] when true: [\n\t{}\n] and when false: [\n\t{}\n]",
+            "if statement: with condition: [{}] when true: [\n{}\n] and when false: [\n{}\n]",
             self.condition,
             self.body_true
                 .iter()
-                .map(|x| x.to_string())
+                .map(|thing| thing.to_string())
                 .collect::<Vec<String>>()
-                .join("\n\t"),
+                .join("\n"),
             self.body_false
                 .iter()
-                .map(|x| x.to_string())
+                .map(|thing| thing.to_string())
                 .collect::<Vec<String>>()
-                .join("\n\t")
+                .join("\n"),
         )
     }
 }
@@ -401,12 +367,12 @@ impl Display for LoopStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "loop statement: [\n\t{}\n]",
+            "loop statement: [\n{}\n]",
             self.body
                 .iter()
-                .map(|x| x.to_string())
+                .map(|thing| thing.to_string())
                 .collect::<Vec<String>>()
-                .join("\n\t")
+                .join("\n")
         )
     }
 }

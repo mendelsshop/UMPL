@@ -1,5 +1,4 @@
 use log::info;
-use log4rs;
 use std::{
     env,
     fs::File,
@@ -84,11 +83,7 @@ fn run(line: String) {
     let mut parsed = Parser::new(lexer.scan_tokens().to_vec());
 
     let thing = parsed.parse();
-    for things in thing.iter() {
-        println!("{:?}", things);
-    }
-    let mut scope = Scope::new(thing);
-    scope.find_functions();
-    scope.find_variables();
+
+    let scope = Scope::new(thing);
     println!("{}", scope);
 }
