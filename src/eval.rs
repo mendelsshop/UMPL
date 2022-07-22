@@ -56,6 +56,13 @@ impl Display for Scope {
         for (key, value) in &self.function {
             write!(f, "\t{}: {:?}\n", key, value)?;
         }
+
+
+        write!(f, "body: \n")?;
+        for thing in &self.body {
+            write!(f, "\t{}\n", thing.to_string())?;
+        }
+
         Ok(())
     }
 }
