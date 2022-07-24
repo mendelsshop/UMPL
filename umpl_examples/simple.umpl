@@ -1,0 +1,3 @@
+create num with 5
+((minus num (divide 6 6) ))>
+(5)>

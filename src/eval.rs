@@ -1,23 +1,23 @@
 #![allow(unused_variables, unreachable_patterns)]
 use log::info;
-use std::{collections::HashMap, fmt::Display};
+
+use std::{collections::HashMap, fmt::{Display, self}};
 
 use crate::{
     error,
     parser::{
         rules::{
-            Call, Expression, IdentifierType, IfStatement,  OtherStuff, Stuff,
+            Call, Expression, IdentifierType, IfStatement, Literal, LiteralType, OtherStuff, Stuff,
             Vairable,
         },
         Thing,
     },
     token::TokenType,
 };
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone)]
 pub struct Scope {
     pub vars: HashMap<String, IdentifierType>,
     pub function: HashMap<char, (Vec<Thing>, f64)>,
-
     pub body: Vec<Thing>,
     pub level: i32,
 }
@@ -27,7 +27,6 @@ impl Scope {
         let mut scope = Self {
             vars: HashMap::new(),
             function: HashMap::new(),
-
             body,
             level: 0,
         };
@@ -175,11 +174,49 @@ impl Scope {
                             None => new_stuff.push(thing.clone()),
                         }
                     }
-                    Some(Stuff::Call(Call::new(
-                        new_stuff,
-                        call.line,
-                        call.keyword.clone(),
-                    )))
+                    let mut total: f64 = match &new_stuff[0] {
+                        Stuff::Literal(value) => match value.literal {
+                            LiteralType::Number(number) => number,
+                            _ => error::error(0, "Invalid literal arguments"),
+                        },
+                        _ => {
+                            error::error(call.line, format!("Invalid type for operation").as_str());
+                        }
+                    };
+                    for thing in new_stuff.iter().skip(1) {
+                        match thing {
+                            Stuff::Literal(literal) => {
+                                match literal.literal {
+                                    LiteralType::Number(number) => {
+                                        // convert the call.keyword to an operator
+                                        match call.keyword {
+                                            TokenType::Plus => {
+                                                total += number;
+                                            }
+                                            TokenType::Minus => {
+                                                total -= number;
+                                            }
+                                            TokenType::Divide => {
+                                                total /= number;
+                                            }
+                                            TokenType::Multiply => {
+                                                total *= number;
+                                            }
+                                            _ => {}
+                                        };
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            _ => {
+                                error::error(
+                                    call.line,
+                                    format!("Only numbers can be added found {}", thing).as_str(),
+                                );
+                            }
+                        }
+                    }
+                    Some(Stuff::Literal(Literal::new_number(total, call.line)))
                 }
                 TokenType::Not
                 | TokenType::Input
@@ -200,6 +237,7 @@ impl Scope {
                             None => new_stuff.push(thing.clone()),
                         }
                     }
+
                     Some(Stuff::Call(Call::new(
                         new_stuff,
                         call.line,
@@ -251,7 +289,7 @@ impl Scope {
     }
 }
 
-impl Display for Scope {
+impl fmt::Debug for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "variables:")?;
         for (key, value) in &self.vars {
@@ -294,3 +332,18 @@ impl Display for Scope {
         Ok(())
     }
 }
+
+
+impl Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter
+    ) -> fmt::Result {
+        write!(
+            f,"{}",
+            self.body
+                .iter()
+                .map(|thing| thing.to_string())
+                .collect::<Vec<String>>()
+                .join("\n"),
+        )
+    }
+    }
