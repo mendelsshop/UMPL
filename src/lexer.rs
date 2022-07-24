@@ -71,7 +71,7 @@ impl Lexer {
                         if !self.boolean() {
                             self.identifier();
                         }
-                    } else if c == 'n' {
+                    } else if c == 'h' {
                         if !self.hempty() {
                             self.identifier();
                         }
@@ -129,18 +129,23 @@ impl Lexer {
     }
 
     fn hempty(&mut self) -> bool {
-        if self.peek() == 'u' {
+        if self.peek() == 'e' {
             self.advance();
-            if self.peek() == 'l' {
+            if self.peek() == 'm' {
                 self.advance();
-                if self.peek() == 'l' {
+                if self.peek() == 'p' {
                     self.advance();
+                    if self.peek() == 't' {
+                        self.advance();
+                        if self.peek() == 'y' {
+                            self.advance();
                     if self.peek().is_alphanumeric() || self.peek() == '-' {
                         return false;
                     }
                     self.add_token(TokenType::Hempty);
                     return true;
-                }
+                }}
+            }
             }
         }
         false

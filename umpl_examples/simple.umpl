@@ -1,3 +1,6 @@
 create num with 5
-((minus num (divide 6 6) ))>
+(( multiply 0xA6.A7 6 66 (minus 5)))>
+create str  with ((multiply  `ff\n `  5.76))>
+((plus str ` ` 5  ` ` true  ` ` hempty))>
+((not true))>
 (5)>

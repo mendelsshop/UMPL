@@ -174,49 +174,129 @@ impl Scope {
                             None => new_stuff.push(thing.clone()),
                         }
                     }
-                    let mut total: f64 = match &new_stuff[0] {
+                    match &new_stuff[0] {
                         Stuff::Literal(value) => match value.literal {
-                            LiteralType::Number(number) => number,
+                            LiteralType::Number(number) => {
+                                // check if minus and only one argument 
+                                let mut total;
+                                if call.keyword == TokenType::Minus && new_stuff.len() == 1 {
+                                    total = -number
+                                    
+                                } else {
+                                    total = number
+                                }
+                                for thing in new_stuff.iter().skip(1) {
+                                    match thing {
+                                        Stuff::Literal(literal) => {
+                                            match literal.literal {
+                                                LiteralType::Number(number) => {
+                                                    // convert the call.keyword to an operator
+                                                    match call.keyword {
+                                                        TokenType::Plus => {
+                                                            total += number;
+                                                        }
+                                                        TokenType::Minus => {
+                                                            total -= number;
+                                                        }
+                                                        TokenType::Divide => {
+                                                            total /= number;
+                                                        }
+                                                        TokenType::Multiply => {
+                                                            total *= number;
+                                                        }
+                                                        _ => {}
+                                                    };
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        _ => {
+                                            error::error(
+                                                call.line,
+                                                format!("Only numbers can be added found {}", thing).as_str(),
+                                            );
+                                        }
+                                    }
+                                }
+                                Some(Stuff::Literal(Literal::new_number(total, call.line)))
+                            },
+                            LiteralType::String(ref string) => {
+                                println!("{}", string);
+                                let mut new_string = string.clone();
+                                for (index, thing) in new_stuff.iter().skip(1).enumerate() {
+                                    match call.keyword {
+                                        TokenType::Plus => {
+                                            println!("plus");
+                                            match thing {
+                                                Stuff::Literal(literal) => {
+                                                    match literal.literal {
+                                                        LiteralType::String(ref string) => {
+                                                            new_string.push_str(string);
+                                                        }
+                                                        LiteralType::Number(number) => {
+                                                            new_string.push_str(&number.to_string());
+                                                        }
+                                                        LiteralType::Boolean(boolean) => {
+                                                            new_string.push_str(&boolean.to_string());
+                                                        }
+                                                        LiteralType::Hempty => {
+                                                            new_string.push_str("HEMPTY");
+                                                        }
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        TokenType::Multiply => {
+                                            if index > 0 {
+                                                error::error(call.line, "Multiply can only be used with the first argument");
+                                            }
+                                            println!("multiply");
+                                            match thing {
+                                                Stuff::Literal(literal) => {
+                                                    match literal.literal {
+      
+                                                        LiteralType::Number(number) => {
+                                                            let mut new_new_string = String::new();
+                                                            for i in 0..number as i32 {
+                                                                new_new_string.push_str(&new_string);
+                                                            }
+                                                            new_string = new_new_string;
+                                                        }
+                                                        _ => {
+                                                            error::error(
+                                                                call.line,
+                                                                format!("strings can only be multiplied by numbers").as_str(),
+                                                            );
+                                                        }
+
+
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        TokenType::Divide | TokenType::Minus => {
+                                            println!("minus");
+                                            error::error(
+                                                call.line,
+                                                format!("Only numbers can be divided or subtracted found").as_str(),
+                                            );
+                                        }
+                                        _ => {
+                                            println!("plus");
+                                        }
+                                    };
+                                }
+                                Some(Stuff::Literal(Literal::new_string(new_string, call.line)))
+                            }
                             _ => error::error(0, "Invalid literal arguments"),
                         },
                         _ => {
                             error::error(call.line, format!("Invalid type for operation").as_str());
                         }
-                    };
-                    for thing in new_stuff.iter().skip(1) {
-                        match thing {
-                            Stuff::Literal(literal) => {
-                                match literal.literal {
-                                    LiteralType::Number(number) => {
-                                        // convert the call.keyword to an operator
-                                        match call.keyword {
-                                            TokenType::Plus => {
-                                                total += number;
-                                            }
-                                            TokenType::Minus => {
-                                                total -= number;
-                                            }
-                                            TokenType::Divide => {
-                                                total /= number;
-                                            }
-                                            TokenType::Multiply => {
-                                                total *= number;
-                                            }
-                                            _ => {}
-                                        };
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            _ => {
-                                error::error(
-                                    call.line,
-                                    format!("Only numbers can be added found {}", thing).as_str(),
-                                );
-                            }
-                        }
                     }
-                    Some(Stuff::Literal(Literal::new_number(total, call.line)))
+
                 }
                 TokenType::Not
                 | TokenType::Input
