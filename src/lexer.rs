@@ -1,6 +1,5 @@
 use crate::{
     error,
-    keywords::Keyword,
     token::{Token, TokenType},
 };
 use hexponent::FloatLiteral;
@@ -13,7 +12,6 @@ pub struct Lexer {
     start: usize,
     current: usize,
     line: i32,
-    keywords: Keyword,
 }
 
 impl Lexer {
@@ -24,7 +22,6 @@ impl Lexer {
             start: 0,   // bytes
             current: 0, // actual number of bytes in source
             line: 1,
-            keywords: Keyword::new(),
         }
     }
 
@@ -200,7 +197,7 @@ impl Lexer {
             self.advance();
         }
         self.add_token(
-            self.keywords
+            crate::KEYWORDS
                 .get(&self.get_text())
                 .unwrap_or(TokenType::Identifier {
                     name: self.get_text(),

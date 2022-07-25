@@ -1,4 +1,7 @@
-use crate::parser::rules::OtherStuff;
+use crate::{
+    error,
+    parser::rules::{LiteralType, OtherStuff, Stuff},
+};
 use std::fmt::{self, Debug, Display};
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
@@ -20,7 +23,7 @@ pub enum TokenType {
     Minus,
     Divide,
     Multiply,
-    Negative,
+
     // Comparison stuffs
     Equal,
     NotEqual,
@@ -66,6 +69,35 @@ pub enum TokenType {
     Error,
     EOF,
     Program,
+}
+
+impl TokenType {
+    pub fn r#do(&self, args: Vec<Stuff>, line: i32) -> LiteralType {
+        if crate::KEYWORDS.is_keyword(self) {
+            match self {
+                TokenType::Not => {
+                    if args.len() != 1 {
+                        error::error(line, "Expected 1 argument for not operator");
+                    }
+                    match &args[0] {
+                        Stuff::Literal(literal) => match literal.literal {
+                            LiteralType::Boolean(b) => LiteralType::Boolean(!b),
+                            _ => error::error(line, "Expected boolean for not operator"),
+                        },
+                        _ => error::error(line, "Expected a literal for not operator"),
+                    }
+                }
+                keyword if crate::KEYWORDS.is_keyword(keyword) => {
+                    todo!()
+                }
+                _ => {
+                    error::error(line, format!("Keyword not found {}", self));
+                }
+            }
+        } else {
+            error::error(line, "Unknown keyword");
+        }
+    }
 }
 
 impl Display for TokenType {

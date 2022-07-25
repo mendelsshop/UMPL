@@ -225,12 +225,10 @@ impl Scope {
                                 Some(Stuff::Literal(Literal::new_number(total, call.line)))
                             }
                             LiteralType::String(ref string) => {
-                                println!("{}", string);
                                 let mut new_string = string.clone();
                                 for (index, thing) in new_stuff.iter().skip(1).enumerate() {
                                     match call.keyword {
                                         TokenType::Plus => {
-                                            println!("plus");
                                             if let Stuff::Literal(literal) = thing {
                                                 match literal.literal {
                                                     LiteralType::String(ref string) => {
@@ -252,7 +250,6 @@ impl Scope {
                                             if index > 0 {
                                                 error::error(call.line, "Multiply can only be used with the first argument");
                                             }
-                                            println!("multiply");
                                             if let Stuff::Literal(literal) = thing {
                                                 match literal.literal {
                                                     LiteralType::Number(number) => {
@@ -272,15 +269,12 @@ impl Scope {
                                             }
                                         }
                                         TokenType::Divide | TokenType::Minus => {
-                                            println!("minus");
                                             error::error(
                                                 call.line,
                                                 "Only numbers can be divided or subtracted found",
                                             );
                                         }
-                                        _ => {
-                                            println!("plus");
-                                        }
+                                        _ => {}
                                     };
                                 }
                                 Some(Stuff::Literal(Literal::new_string(new_string, call.line)))
@@ -292,11 +286,7 @@ impl Scope {
                         }
                     }
                 }
-                TokenType::Not
-                | TokenType::Input
-                | TokenType::Error
-                | TokenType::Exit
-                | TokenType::Negative => {
+                TokenType::Not | TokenType::Input | TokenType::Error | TokenType::Exit => {
                     let mut new_stuff: Vec<Stuff> = Vec::new();
                     for (index, thing) in call.arguments.iter().enumerate() {
                         if index > 0 {
@@ -311,11 +301,19 @@ impl Scope {
                         }
                     }
 
-                    Some(Stuff::Call(Call::new(
-                        new_stuff,
-                        call.line,
-                        call.keyword.clone(),
-                    )))
+                    match &call.keyword.r#do(new_stuff, call.line) {
+                        LiteralType::Number(number) => {
+                            Some(Stuff::Literal(Literal::new_number(*number, call.line)))
+                        }
+                        LiteralType::String(string) => Some(Stuff::Literal(Literal::new_string(
+                            string.clone(),
+                            call.line,
+                        ))),
+                        LiteralType::Boolean(bool) => {
+                            Some(Stuff::Literal(Literal::new_boolean(*bool, call.line)))
+                        }
+                        LiteralType::Hempty => Some(Stuff::Literal(Literal::new_hempty(call.line))),
+                    }
                 }
                 TokenType::FunctionIdentifier { name } => {
                     if self.function.contains_key(&name) {

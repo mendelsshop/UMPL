@@ -19,6 +19,7 @@ fn main() {
         log4rs::init_file("log.yaml", Default::default()).unwrap();
         info!("Starting up...");
     }
+
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
         // if we are in repl mode

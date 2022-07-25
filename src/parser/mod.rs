@@ -1,6 +1,6 @@
 pub(crate) mod rules;
 use crate::{
-    error, keywords,
+    error,
     token::{Token, TokenType},
 };
 use log::{debug, info, warn};
@@ -19,7 +19,7 @@ pub struct Parser {
     done: bool,
     in_function: bool,
     in_loop: bool,
-    keywords: keywords::Keyword,
+
     variables: Vec<String>,
 }
 
@@ -39,7 +39,6 @@ impl Parser {
             in_function: false,
             in_loop: false,
 
-            keywords: keywords::Keyword::new(),
             variables: Vec::new(),
         }
     }
@@ -164,7 +163,7 @@ impl Parser {
             TokenType::Identifier { .. } => {
                 error::error(self.token.line, "variable not allowed in this context");
             }
-            keyword if self.keywords.is_keyword(&keyword) => {
+            keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 info!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
                     TokenType::Potato => {
