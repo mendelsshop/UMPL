@@ -182,7 +182,7 @@ impl Parser {
                                         } else {
                                             error::error(
                                                 self.token.line,
-                                                format!("number expected in function declaration found floating point number literal with {}", literal).as_str(),
+                                                format!("number expected in function declaration found floating point number literal with {}", literal),
                                             );
                                         }
                                     }
@@ -190,7 +190,7 @@ impl Parser {
                                     _ => {
                                         error::error(
                                             self.token.line,
-                                            format!("number expected after function identifier, found {}", self.token).as_str(),
+                                            format!("number expected after function identifier, found {}", self.token),
                                         );
                                     }
                                 };
@@ -219,14 +219,14 @@ impl Parser {
                                 } else {
                                     error::error(
                                         self.token.line,
-                                        format!("code block expected after function identifier, found {}", self.token.token_type).as_str(),
+                                        format!("code block expected after function identifier, found {}", self.token.token_type),
                                     );
                                 }
                             }
                             tokentype => {
                                 error::error(
                                     self.token.line,
-                                    format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype).as_str(),
+                                    format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype),
                                 );
                             }
                         }
@@ -506,7 +506,7 @@ impl Parser {
             _ => {
                 error::error(
                     self.token.line,
-                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                    format!("{:?} not allowed in this context", self.token.token_type),
                 );
             }
         }
@@ -640,7 +640,7 @@ impl Parser {
                     Callorexpression::Call(call) => Stuff::Call(call),
                     Callorexpression::Expression(a) => error::error(
                         self.token.line,
-                        format!("call expected after left parenthesis found {:?}", a).as_str(),
+                        format!("call expected after left parenthesis found {:?}", a),
                     ),
                 }
             }
@@ -658,7 +658,7 @@ impl Parser {
             _ => {
                 error::error(
                     self.token.line,
-                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                    format!("{:?} not allowed in this context", self.token.token_type),
                 );
             }
         }
@@ -690,7 +690,7 @@ impl Parser {
             _ => {
                 error::error(
                     self.token.line,
-                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                    format!("{:?} not allowed in this context", self.token.token_type),
                 );
             }
         }

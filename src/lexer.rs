@@ -88,7 +88,7 @@ impl Lexer {
                 } else if emoji::is_emoji(c) {
                     self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
                 } else {
-                    error::error(self.line, format!("uknown character {}", c).as_str());
+                    error::error(self.line, format!("uknown character {}", c));
                 }
             }
         }
@@ -139,13 +139,14 @@ impl Lexer {
                         self.advance();
                         if self.peek() == 'y' {
                             self.advance();
-                    if self.peek().is_alphanumeric() || self.peek() == '-' {
-                        return false;
+                            if self.peek().is_alphanumeric() || self.peek() == '-' {
+                                return false;
+                            }
+                            self.add_token(TokenType::Hempty);
+                            return true;
+                        }
                     }
-                    self.add_token(TokenType::Hempty);
-                    return true;
-                }}
-            }
+                }
             }
         }
         false
