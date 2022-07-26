@@ -10,8 +10,7 @@ use crate::{
     error,
     parser::{
         rules::{
-            Call, Expression, IdentifierType, IfStatement, Literal, LiteralType, OtherStuff, Stuff,
-            Vairable,
+            Call, Expression, IdentifierType, IfStatement, Literal, OtherStuff, Stuff, Vairable,
         },
         Thing,
     },
@@ -51,7 +50,8 @@ impl Scope {
 
     pub fn find_variables(&mut self, body: Vec<Thing>) {
         // create a vector to return instead of inplace modification
-        // variables should be immutable, so it fixes the problem of functions being able to change the value of variables
+        // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
+        // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
         let mut new_body = Vec::new();
         for thing in &body {
             match thing.clone() {
@@ -168,156 +168,10 @@ impl Scope {
                     );
                 }
             }
-            Stuff::Call(call) => match call.keyword {
-                TokenType::Plus | TokenType::Minus | TokenType::Divide | TokenType::Multiply => {
-                    let mut new_stuff: Vec<Stuff> = Vec::new();
-                    for thing in &call.arguments {
-                        match self.find_pointer_in_stuff(thing) {
-                            Some(new_thing) => new_stuff.push(new_thing.clone()),
-                            None => new_stuff.push(thing.clone()),
-                        }
-                    }
-                    match &new_stuff[0] {
-                        Stuff::Literal(value) => match value.literal {
-                            LiteralType::Number(number) => {
-                                // check if minus and only one argument
-                                let mut total;
-                                if call.keyword == TokenType::Minus && new_stuff.len() == 1 {
-                                    total = -number
-                                } else {
-                                    total = number
-                                }
-                                for thing in new_stuff.iter().skip(1) {
-                                    match thing {
-                                        Stuff::Literal(literal) => {
-                                            if let LiteralType::Number(number) = literal.literal {
-                                                {
-                                                    // convert the call.keyword to an operator
-                                                    match call.keyword {
-                                                        TokenType::Plus => {
-                                                            total += number;
-                                                        }
-                                                        TokenType::Minus => {
-                                                            total -= number;
-                                                        }
-                                                        TokenType::Divide => {
-                                                            total /= number;
-                                                        }
-                                                        TokenType::Multiply => {
-                                                            total *= number;
-                                                        }
-                                                        _ => {}
-                                                    };
-                                                }
-                                            }
-                                        }
-                                        _ => {
-                                            error::error(
-                                                call.line,
-                                                format!(
-                                                    "Only numbers can be added found {}",
-                                                    thing
-                                                ),
-                                            );
-                                        }
-                                    }
-                                }
-                                Some(Stuff::Literal(Literal::new_number(total, call.line)))
-                            }
-                            LiteralType::String(ref string) => {
-                                let mut new_string = string.clone();
-                                for (index, thing) in new_stuff.iter().skip(1).enumerate() {
-                                    match call.keyword {
-                                        TokenType::Plus => {
-                                            if let Stuff::Literal(literal) = thing {
-                                                match literal.literal {
-                                                    LiteralType::String(ref string) => {
-                                                        new_string.push_str(string);
-                                                    }
-                                                    LiteralType::Number(number) => {
-                                                        new_string.push_str(&number.to_string());
-                                                    }
-                                                    LiteralType::Boolean(boolean) => {
-                                                        new_string.push_str(&boolean.to_string());
-                                                    }
-                                                    LiteralType::Hempty => {
-                                                        new_string.push_str("HEMPTY");
-                                                    }
-                                                };
-                                            }
-                                        }
-                                        TokenType::Multiply => {
-                                            if index > 0 {
-                                                error::error(call.line, "Multiply can only be used with the first argument");
-                                            }
-                                            if let Stuff::Literal(literal) = thing {
-                                                match literal.literal {
-                                                    LiteralType::Number(number) => {
-                                                        let mut new_new_string = String::new();
-                                                        for i in 0..number as i32 {
-                                                            new_new_string.push_str(&new_string);
-                                                        }
-                                                        new_string = new_new_string;
-                                                    }
-                                                    _ => {
-                                                        error::error(
-                                                                call.line,
-                                                                "strings can only be multiplied by numbers",
-                                                            );
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        TokenType::Divide | TokenType::Minus => {
-                                            error::error(
-                                                call.line,
-                                                "Only numbers can be divided or subtracted found",
-                                            );
-                                        }
-                                        _ => {}
-                                    };
-                                }
-                                Some(Stuff::Literal(Literal::new_string(new_string, call.line)))
-                            }
-                            _ => error::error(0, "Invalid literal arguments"),
-                        },
-                        _ => {
-                            error::error(call.line, "Invalid type for operation");
-                        }
-                    }
-                }
-                TokenType::Not | TokenType::Input | TokenType::Error | TokenType::Exit => {
-                    let mut new_stuff: Vec<Stuff> = Vec::new();
-                    for (index, thing) in call.arguments.iter().enumerate() {
-                        if index > 0 {
-                            error::error(
-                                call.line,
-                                format!("Too many arguments for function {}", call.keyword),
-                            );
-                        }
-                        match self.find_pointer_in_stuff(thing) {
-                            Some(new_thing) => new_stuff.push(new_thing.clone()),
-                            None => new_stuff.push(thing.clone()),
-                        }
-                    }
-
-                    match &call.keyword.r#do(new_stuff, call.line) {
-                        LiteralType::Number(number) => {
-                            Some(Stuff::Literal(Literal::new_number(*number, call.line)))
-                        }
-                        LiteralType::String(string) => Some(Stuff::Literal(Literal::new_string(
-                            string.clone(),
-                            call.line,
-                        ))),
-                        LiteralType::Boolean(bool) => {
-                            Some(Stuff::Literal(Literal::new_boolean(*bool, call.line)))
-                        }
-                        LiteralType::Hempty => Some(Stuff::Literal(Literal::new_hempty(call.line))),
-                    }
-                }
+            Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
-                    if self.function.contains_key(&name) {
-                        let function = self.function.get(&name).unwrap();
+                    if self.function.contains_key(name) {
+                        let function = self.function.get(name).unwrap();
                         let mut new_stuff: Vec<Stuff> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             if index > function.1 as usize {
@@ -343,15 +197,29 @@ impl Scope {
                         Some(Stuff::Call(Call::new(
                             new_stuff,
                             call.line,
-                            TokenType::FunctionIdentifier { name },
+                            TokenType::FunctionIdentifier { name: *name },
                         )))
                     } else {
                         error::error(call.line, format!("Function {} is not defined", name));
                     }
                 }
 
-                _ => None,
+                t => {
+                    let mut new_stuff: Vec<Stuff> = Vec::new();
+                    for thing in &call.arguments {
+                        match self.find_pointer_in_stuff(thing) {
+                            Some(new_thing) => new_stuff.push(new_thing.clone()),
+                            None => new_stuff.push(thing.clone()),
+                        }
+                    }
+                    let lit = t.r#do(new_stuff, call.line);
+                    Some(Stuff::Literal(Literal {
+                        line: call.line,
+                        literal: lit,
+                    }))
+                }
             },
+
             _ => None,
         }
     }
