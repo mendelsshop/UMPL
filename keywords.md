@@ -20,7 +20,15 @@ Currenly working keywords for UMPL:
 - [ ] set-with
 - [ ] exit
 - [x] error
-- [ ] strtonum
-- [ ] strtobool
+- [x] strtonum
+- [x] strtobool
+- [x] strtohempty
+- [ ] eval
+- [ ] runcommand
+- [ ] open
+- [ ] close
+- [ ] write
+- [ ] read
+- [ ] readline
 
 `* only available for numbers`

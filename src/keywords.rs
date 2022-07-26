@@ -10,12 +10,10 @@ pub struct Keyword {
 impl Keyword {
     pub fn new() -> Keyword {
         let mut keywords = HashMap::new();
-        // math
         keywords.insert("plus".to_string(), TokenType::Plus);
         keywords.insert("minus".to_string(), TokenType::Minus);
         keywords.insert("multiply".to_string(), TokenType::Multiply);
         keywords.insert("divide".to_string(), TokenType::Divide);
-        // comparison
         keywords.insert("not".to_string(), TokenType::Not);
         keywords.insert("or".to_string(), TokenType::Or);
         keywords.insert("and".to_string(), TokenType::And);
@@ -25,7 +23,6 @@ impl Keyword {
         keywords.insert("lt".to_string(), TokenType::LessThan);
         keywords.insert("le".to_string(), TokenType::LessEqual);
         keywords.insert("ge".to_string(), TokenType::GreaterEqual);
-        // variable stuff
         keywords.insert("create".to_string(), TokenType::Create);
         keywords.insert("addwith".to_string(), TokenType::AddWith);
         keywords.insert("dividewith".to_string(), TokenType::DivideWith);
@@ -34,7 +31,6 @@ impl Keyword {
         keywords.insert("list".to_string(), TokenType::List);
         keywords.insert("first".to_string(), TokenType::First);
         keywords.insert("second".to_string(), TokenType::Second);
-        // misc keywords
         keywords.insert("return".to_string(), TokenType::Return { value: None });
         keywords.insert("break".to_string(), TokenType::Break);
         keywords.insert("continue".to_string(), TokenType::Continue);
@@ -49,6 +45,16 @@ impl Keyword {
         keywords.insert("exit".to_string(), TokenType::Exit);
         keywords.insert("error".to_string(), TokenType::Error);
         keywords.insert("with".to_string(), TokenType::With);
+        keywords.insert("strtonum".to_string(), TokenType::StrToNum);
+        keywords.insert("strtobool".to_string(), TokenType::StrToBool);
+        keywords.insert("strtohempty".to_string(), TokenType::StrToHempty);
+        keywords.insert("eval".to_string(), TokenType::Eval);
+        keywords.insert("runcommand".to_string(), TokenType::RunCommand);
+        keywords.insert("open".to_string(), TokenType::Open);
+        keywords.insert("close".to_string(), TokenType::Close);
+        keywords.insert("write".to_string(), TokenType::Write);
+        keywords.insert("read".to_string(), TokenType::Read);
+        keywords.insert("readline".to_string(), TokenType::ReadLine);
         Keyword { keywords }
     }
 

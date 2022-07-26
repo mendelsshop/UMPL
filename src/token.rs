@@ -2,13 +2,14 @@ use crate::{
     error,
     parser::rules::{LiteralType, OtherStuff, Stuff},
 };
+use hexponent::FloatLiteral;
 use std::{
     fmt::{self, Debug, Display},
     io::{self, Write},
+    process::exit,
 };
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
-    // single character tokens
     RightParen,
     LeftParen,
     GreaterThanSymbol,
@@ -21,13 +22,10 @@ pub enum TokenType {
     LeftBrace,
     CodeBlockBegin,
     CodeBlockEnd,
-    // math operators
     Plus,
     Minus,
     Divide,
     Multiply,
-
-    // Comparison stuffs
     Equal,
     NotEqual,
     GreaterEqual,
@@ -37,7 +35,6 @@ pub enum TokenType {
     And,
     Or,
     Not,
-    // variable stuff
     Identifier { name: String },
     FunctionIdentifier { name: char },
     String { literal: String },
@@ -52,7 +49,6 @@ pub enum TokenType {
     List,
     First,
     Second,
-    // other keywords
     Return { value: Option<Box<OtherStuff>> },
     Colon,
     Break,
@@ -67,7 +63,16 @@ pub enum TokenType {
     New,
     Function,
     FunctionArgument { name: String },
-
+    StrToNum,
+    StrToBool,
+    StrToHempty,
+    Eval,
+    RunCommand,
+    Open,
+    Close,
+    Write,
+    Read,
+    ReadLine,
     Exit,
     Error,
     EOF,
@@ -200,7 +205,15 @@ impl TokenType {
                         }
                     }
                 }
-                TokenType::Error | TokenType::Input => {
+                TokenType::Error
+                | TokenType::Input
+                | TokenType::StrToBool
+                | TokenType::StrToHempty
+                | TokenType::StrToNum
+                | TokenType::RunCommand
+                | TokenType::Eval
+                | TokenType::Open
+                | TokenType::Write => {
                     if args.len() != 1 {
                         error::error(
                             line,
@@ -209,18 +222,54 @@ impl TokenType {
                     }
                     match &args[0] {
                         Stuff::Literal(literal) => match literal.literal {
-                            LiteralType::String(ref string) => {
-                                if self == &TokenType::Error {
+                            LiteralType::String(ref string) => match self {
+                                TokenType::Error => {
                                     println!("{}", string);
-                                    std::process::exit(1);
-                                } else {
-                                    print!("{}", string);
-                                    io::stdout().flush().unwrap();
+                                    exit(1)
+                                }
+                                TokenType::Input => {
                                     let mut input = String::new();
+                                    print!("{}", string);
+                                    // flush stdout
+                                    io::stdout().flush().unwrap();
                                     io::stdin().read_line(&mut input).unwrap();
                                     LiteralType::String(input)
                                 }
-                            }
+                                TokenType::StrToBool => {
+                                    if string == "true" {
+                                        LiteralType::Boolean(true)
+                                    } else if string == "false" {
+                                        LiteralType::Boolean(false)
+                                    } else {
+                                        error::error(line, "Expected true or false");
+                                    }
+                                }
+                                TokenType::StrToHempty => {
+                                    if string == "HEMPTY" {
+                                        LiteralType::Hempty
+                                    } else {
+                                        error::error(line, "Expected HEMPTY");
+                                    }
+                                }
+                                TokenType::StrToNum => {
+                                    // TODO: check if 0x is already in the string
+                                    let number: FloatLiteral =
+                                        match format!("0x{}", string.trim()).parse() {
+                                            Ok(value) => value,
+                                            Err(_) => error::error(
+                                                line,
+                                                format!(
+                                                    "Error parsing string {} to number",
+                                                    string.trim()
+                                                ),
+                                            ),
+                                        };
+
+                                    LiteralType::Number(number.convert::<f64>().inner())
+                                }
+
+                                _ => todo!(),
+                            },
                             _ => error::error(line, "Expected string for input operator"),
                         },
                         _ => error::error(line, "Expected string for input operator"),
@@ -247,7 +296,6 @@ impl TokenType {
                         }
                     };
                     if type_.type_eq(type_1) {
-                        println!("Expected")
                     } else {
                         error::error(
                             line,
