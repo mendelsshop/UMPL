@@ -4,14 +4,14 @@ Currenly working keywords for UMPL:
 - [x] multiply
 - [x] divide
 - [x] not
-- [+] or
-- [+] and
-- [+] eq
-- [+] ne 
-- [+] gt *
-- [+] lt *
-- [+] le *
-- [+] ge *
+- [x] or
+- [x] and
+- [x] eq
+- [x] ne 
+- [x] gt *
+- [x] lt *
+- [x] le *
+- [x] ge *
 - [ ] addwith
 - [ ] dividewith
 - [ ] subtractwith
