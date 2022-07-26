@@ -1,0 +1,22 @@
+Currenly working keywords for UMPL:
+- [x] plus
+- [x] minus
+- [x] multiply
+- [x] divide
+- [x] not
+- [ ] or
+- [ ] and
+- [ ] eq
+- [ ] ne
+- [ ] gt
+- [ ] lt
+- [ ] le
+- [ ] ge
+- [ ] addwith
+- [ ] dividewith
+- [ ] subtractwith
+- [ ] multiplywith
+- [x] input
+- [ ] set-with
+- [ ] exit
+- [x] error
