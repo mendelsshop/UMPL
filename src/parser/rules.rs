@@ -111,6 +111,17 @@ pub enum LiteralType {
     Hempty,
 }
 
+impl LiteralType {
+    pub fn type_eq(&self, other: &LiteralType) -> bool {
+        match self {
+            LiteralType::Number(_) => matches!(other, LiteralType::Number(_)),
+            LiteralType::String(_) => matches!(other, LiteralType::String(_)),
+            LiteralType::Boolean(_) => matches!(other, LiteralType::Boolean(_)),
+            LiteralType::Hempty => matches!(other, LiteralType::Hempty),
+        }
+    }
+}
+
 impl Display for LiteralType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

@@ -202,7 +202,10 @@ impl TokenType {
                 }
                 TokenType::Error | TokenType::Input => {
                     if args.len() != 1 {
-                        error::error(line, format!("Expected 1 arguments for {} operator", self));
+                        error::error(
+                            line,
+                            format!("Expected 1 arguments for {:?} operator", self),
+                        );
                     }
                     match &args[0] {
                         Stuff::Literal(literal) => match literal.literal {
@@ -221,6 +224,129 @@ impl TokenType {
                             _ => error::error(line, "Expected string for input operator"),
                         },
                         _ => error::error(line, "Expected string for input operator"),
+                    }
+                }
+                TokenType::NotEqual | TokenType::Equal => {
+                    if args.len() != 2 {
+                        error::error(
+                            line,
+                            format!("Expected 2 arguments for {:?} operator", self),
+                        );
+                    }
+                    let type_ = match &args[0] {
+                        Stuff::Literal(literal) => &literal.literal,
+                        _ => {
+                            error::error(line, format!("Expected literal for {:?} operator", self))
+                        }
+                    };
+
+                    let type_1 = match &args[1] {
+                        Stuff::Literal(literal) => &literal.literal,
+                        _ => {
+                            error::error(line, format!("Expected literal for {:?} operator", self))
+                        }
+                    };
+                    if type_.type_eq(type_1) {
+                        println!("Expected")
+                    } else {
+                        error::error(
+                            line,
+                            format!(
+                                "{} and {} are not the same type which is required for {} operator",
+                                type_, type_1, self
+                            ),
+                        );
+                    }
+
+                    if self == &TokenType::Equal {
+                        LiteralType::Boolean(type_ == type_1)
+                    } else {
+                        LiteralType::Boolean(!(type_ == type_1))
+                    }
+                }
+                TokenType::Or | TokenType::And => {
+                    if args.len() != 2 {
+                        error::error(
+                            line,
+                            format!("Expected 2 arguments for {:?} operator", self),
+                        );
+                    }
+                    let bool_1 = match &args[0] {
+                        Stuff::Literal(literal) => match &literal.literal {
+                            LiteralType::Boolean(boolean) => boolean,
+                            _ => error::error(
+                                line,
+                                format!("Expected boolean for {:?} operator", self),
+                            ),
+                        },
+                        _ => {
+                            error::error(line, format!("Expected literal for {:?} operator", self))
+                        }
+                    };
+                    let bool_2 = match &args[1] {
+                        Stuff::Literal(literal) => match &literal.literal {
+                            LiteralType::Boolean(boolean) => boolean,
+                            _ => error::error(
+                                line,
+                                format!("Expected boolean for {:?} operator", self),
+                            ),
+                        },
+                        _ => {
+                            error::error(line, format!("Expected literal for {:?} operator", self))
+                        }
+                    };
+                    if bool_1 == bool_2 {
+                        if bool_1 == &true {
+                            LiteralType::Boolean(true)
+                        } else {
+                            LiteralType::Boolean(false)
+                        }
+                    } else {
+                        LiteralType::Boolean(false)
+                    }
+                }
+                TokenType::GreaterThan
+                | TokenType::LessThan
+                | TokenType::GreaterEqual
+                | TokenType::LessEqual => {
+                    if args.len() != 2 {
+                        error::error(
+                            line,
+                            format!("Expected 2 arguments for {:?} operator", self),
+                        );
+                    }
+                    let type_ = match &args[0] {
+                        Stuff::Literal(literal) => match &literal.literal {
+                            LiteralType::Number(number) => number,
+                            _ => error::error(
+                                line,
+                                format!("Expected number for {:?} operator", self),
+                            ),
+                        },
+                        _ => {
+                            error::error(line, format!("Expected literal for {:?} operator", self))
+                        }
+                    };
+                    let type_1 = match &args[1] {
+                        Stuff::Literal(literal) => match &literal.literal {
+                            LiteralType::Number(number) => number,
+                            _ => error::error(
+                                line,
+                                format!("Expected number for {:?} operator", self),
+                            ),
+                        },
+                        _ => {
+                            error::error(line, format!("Expected literal for {:?} operator", self))
+                        }
+                    };
+                    if self == &TokenType::GreaterThan {
+                        LiteralType::Boolean(type_ > type_1)
+                    } else if self == &TokenType::LessThan {
+                        LiteralType::Boolean(type_ < type_1)
+                    } else if self == &TokenType::GreaterEqual {
+                        LiteralType::Boolean(type_ >= type_1)
+                    } else {
+                        LiteralType::Boolean(type_ <= type_1)
                     }
                 }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {

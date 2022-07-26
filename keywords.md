@@ -4,14 +4,14 @@ Currenly working keywords for UMPL:
 - [x] multiply
 - [x] divide
 - [x] not
-- [ ] or
-- [ ] and
-- [ ] eq
-- [ ] ne
-- [ ] gt
-- [ ] lt
-- [ ] le
-- [ ] ge
+- [+] or
+- [+] and
+- [+] eq
+- [+] ne 
+- [+] gt *
+- [+] lt *
+- [+] le *
+- [+] ge *
 - [ ] addwith
 - [ ] dividewith
 - [ ] subtractwith
@@ -20,3 +20,7 @@ Currenly working keywords for UMPL:
 - [ ] set-with
 - [ ] exit
 - [x] error
+- [ ] strtonum
+- [ ] strtobool
+
+`* only available for numbers`

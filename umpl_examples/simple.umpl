@@ -4,3 +4,5 @@ create str  with ((multiply  `ff\n `  5.76))>
 ((plus str ` ` 5  ` ` true  ` ` hempty))>
 ((not true))>
 (5)>
+((and(eq true true) true))>
+((ge true 6))>
