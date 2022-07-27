@@ -78,7 +78,7 @@ impl Display for NewVairable {
         write!(f, "with: {}", self.value)
     }
 }
-
+#[derive(PartialEq, Clone, Debug)]
 pub enum NewIdentifierType {
     List(Box<NewList>),
     Vairable(Box<NewVairable>),
@@ -103,6 +103,31 @@ pub struct Scope {
 }
 
 impl Scope {
+    pub fn set_var(&mut self, name: &str, value: Vec<LiteralType>) {
+        // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
+        // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
+        let new_val = match value.len() {
+            0 => error::error(0, "expected Identifier, got empty list"),
+            1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value[0].clone()))),
+            2 => NewIdentifierType::List(Box::new(NewList::new(value))),
+            _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
+        };
+
+        match name {
+            name if name.ends_with(".first") | name.ends_with(".second") => {
+                self.vars.insert(name.to_string(), new_val);
+            }
+            _ => {
+                self.vars.insert(name.to_string(), new_val);
+            }
+        }
+    }
+
+    pub fn get_var(&self, name: &str) -> Option<NewIdentifierType> {
+        // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
+        self.vars.get(name).cloned()
+    }
+
     pub fn new(body: Vec<Thing>) -> Scope {
         let mut scope = Self {
             vars: HashMap::new(),
@@ -137,21 +162,12 @@ impl Scope {
                     IdentifierType::Vairable(ref name) => {
                         match self.find_pointer_in_other_stuff(&name.value) {
                             Some(pointer) => {
-                                println!("{}", pointer);
-                                self.vars.insert(
-                                    variable.name.clone(),
-                                    NewIdentifierType::Vairable(Box::new(NewVairable {
-                                        value: pointer,
-                                    })),
-                                );
+                                self.set_var(&variable.name, vec![pointer]);
                             }
                             None => {
-                                println!("{}", variable.name);
-                                self.vars.insert(
-                                    variable.name.clone(),
-                                    NewIdentifierType::Vairable(Box::new(NewVairable {
-                                        value: LiteralType::from_other_stuff(name.value.clone()),
-                                    })),
+                                self.set_var(
+                                    &variable.name,
+                                    vec![LiteralType::from_other_stuff(name.value.clone())],
                                 );
                             }
                         }
@@ -165,6 +181,7 @@ impl Scope {
                             Some(pointer) => pointer,
                             None => LiteralType::from_other_stuff(list.second.clone()),
                         };
+                        self.set_var(&variable.name, vec![first, second]);
                     }
                 },
                 Thing::Return(oos, line) => match oos {
@@ -206,8 +223,8 @@ impl Scope {
     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralType> {
         match other_stuff {
             OtherStuff::Identifier(ident) => {
-                if self.vars.contains_key(&ident.name) {
-                    match self.vars.get(&ident.name).unwrap() {
+                if let Some(i) = self.get_var(&ident.name) {
+                    match i {
                         NewIdentifierType::List(..) => {
                             error::error(ident.line, "whole list not supported in call")
                         }
@@ -232,8 +249,8 @@ impl Scope {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
             Stuff::Identifier(ident) => {
-                if self.vars.contains_key(&ident.name) {
-                    match self.vars.get(&ident.name).unwrap() {
+                if let Some(i) = self.get_var(&ident.name) {
+                    match i {
                         NewIdentifierType::List(..) => {
                             error::error(ident.line, "whole list not supported in call")
                         }
@@ -316,109 +333,105 @@ impl Scope {
                                     match new_stuff.len() {
                                         1 => {
                                             let literal = &new_stuff[0];
-                                            let var =
-                                                match self.vars.get(&ident.name.clone()).unwrap() {
-                                                    NewIdentifierType::Vairable(v) => {
-                                                        v.value.clone()
-                                                    }
-                                                    NewIdentifierType::List(..) => {
-                                                        error::error(
-                                                            ident.line,
-                                                            "Cannot change entire list",
-                                                        );
-                                                    }
-                                                };
+                                            let var = match self.get_var(&ident.name).unwrap() {
+                                                NewIdentifierType::Vairable(v) => v.value.clone(),
+                                                NewIdentifierType::List(..) => {
+                                                    error::error(
+                                                        ident.line,
+                                                        "Cannot change entire list",
+                                                    );
+                                                }
+                                            };
 
                                             match call.keyword {
                                                 TokenType::Set => {
-                                                    self.vars.insert(
-                                                        ident.name.clone(),
-                                                        NewIdentifierType::Vairable(Box::new(
-                                                            NewVairable::new(literal.clone()),
-                                                        )),
+                                                    self.set_var(
+                                                        &ident.name.clone(),
+                                                        vec![literal.clone()],
                                                     );
                                                     None
                                                 }
-                                                TokenType::AddWith => {
-                                                    match var {
-                                                        LiteralType::Number(num) => {
-                                                            match literal {
-                                                                LiteralType::Number(num2) => {
-                                                                    let new_val = num + num2;
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                    LiteralType::Number(new_val)
-                                                                ))));
-                                                                    None
-                                                                }
-                                                                _ => {
-                                                                    error::error(
-                                                                    call.line,
-                                                                    format!("Variable {} is not a number", ident.name),
-                                                                );
-                                                                }
-                                                            }
-                                                        }
-                                                        LiteralType::String(mut s) => {
-                                                            match literal {
-                                                                LiteralType::String(s2) => {
-                                                                    s.push_str(s2);
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                    LiteralType::String(s)
-                                                                ))));
-                                                                    None
-                                                                }
-                                                                LiteralType::Number(n) => {
-                                                                    s.push_str(&n.to_string());
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                    LiteralType::String(s)
-                                                                ))));
-                                                                    None
-                                                                }
-                                                                LiteralType::Boolean(boolean) => {
-                                                                    s.push_str(
-                                                                        &boolean.to_string(),
-                                                                    );
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                    LiteralType::String(s)
-                                                                ))));
-                                                                    None
-                                                                }
-                                                                LiteralType::Hempty => {
-                                                                    s.push_str("null");
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                    LiteralType::String(s)
-                                                                ))));
-                                                                    None
-                                                                }
-                                                            }
+                                                TokenType::AddWith => match var {
+                                                    LiteralType::Number(num) => match literal {
+                                                        LiteralType::Number(num2) => {
+                                                            let new_val = num + num2;
+                                                            self.set_var(
+                                                                &ident.name,
+                                                                vec![LiteralType::Number(new_val)],
+                                                            );
+                                                            None
                                                         }
                                                         _ => {
                                                             error::error(
                                                                 call.line,
-                                                                format!("Variable {} is not a number/string", ident.name),
+                                                                format!(
+                                                                    "Variable {} is not a number",
+                                                                    ident.name
+                                                                ),
                                                             );
                                                         }
+                                                    },
+                                                    LiteralType::String(mut s) => match literal {
+                                                        LiteralType::String(s2) => {
+                                                            s.push_str(s2);
+                                                            self.set_var(
+                                                                &ident.name,
+                                                                vec![LiteralType::String(s)],
+                                                            );
+                                                            None
+                                                        }
+                                                        LiteralType::Number(n) => {
+                                                            s.push_str(&n.to_string());
+                                                            self.set_var(
+                                                                &ident.name,
+                                                                vec![LiteralType::String(s)],
+                                                            );
+                                                            None
+                                                        }
+                                                        LiteralType::Boolean(boolean) => {
+                                                            s.push_str(&boolean.to_string());
+                                                            self.set_var(
+                                                                &ident.name,
+                                                                vec![LiteralType::String(s)],
+                                                            );
+                                                            None
+                                                        }
+                                                        LiteralType::Hempty => {
+                                                            s.push_str("null");
+                                                            self.set_var(
+                                                                &ident.name,
+                                                                vec![LiteralType::String(s)],
+                                                            );
+                                                            None
+                                                        }
+                                                    },
+                                                    _ => {
+                                                        error::error(
+                                                                call.line,
+                                                                format!("Variable {} is not a number/string", ident.name),
+                                                            );
                                                     }
-                                                }
+                                                },
                                                 TokenType::MultiplyWith => {
                                                     match var {
-                                                        LiteralType::Number(num) => {
-                                                            match literal {
-                                                                LiteralType::Number(num2) => {
-                                                                    let new_val = num * num2;
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                    LiteralType::Number(new_val)
-                                                                ))));
-                                                                    None
-                                                                }
-                                                                _ => {
-                                                                    error::error(
+                                                        LiteralType::Number(num) => match literal {
+                                                            LiteralType::Number(num2) => {
+                                                                let new_val = num * num2;
+                                                                self.set_var(
+                                                                    &ident.name,
+                                                                    vec![LiteralType::Number(
+                                                                        new_val,
+                                                                    )],
+                                                                );
+                                                                None
+                                                            }
+                                                            _ => {
+                                                                error::error(
                                                                     call.line,
                                                                     format!("Variable {} is not a number", ident.name),
                                                                 );
-                                                                }
                                                             }
-                                                        }
+                                                        },
                                                         LiteralType::String(ref s) => {
                                                             match literal {
                                                                 LiteralType::Number(num) => {
@@ -428,9 +441,12 @@ impl Scope {
                                                                             (0..*num as i32)
                                                                                 .map(|_| s.clone()),
                                                                         );
-                                                                    self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                        LiteralType::String(new_string)
-                                                                    ))));
+                                                                    self.set_var(
+                                                                        &ident.name,
+                                                                        vec![LiteralType::String(
+                                                                            new_string,
+                                                                        )],
+                                                                    );
                                                                     None
                                                                 }
                                                                 _ => {
@@ -458,16 +474,26 @@ impl Scope {
                                                                         == TokenType::SubtractWith
                                                                     {
                                                                         let new_val = nums - num;
-                                                                        self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                            LiteralType::Number(new_val)
-                                                                        ))));
+                                                                        self.set_var(
+                                                                            &ident.name,
+                                                                            vec![
+                                                                                LiteralType::Number(
+                                                                                    new_val,
+                                                                                ),
+                                                                            ],
+                                                                        );
 
                                                                         None
                                                                     } else {
                                                                         let new_val = nums / num;
-                                                                        self.vars.insert(ident.name.clone(), NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                                                            LiteralType::Number(new_val)
-                                                                        ))));
+                                                                        self.set_var(
+                                                                            &ident.name,
+                                                                            vec![
+                                                                                LiteralType::Number(
+                                                                                    new_val,
+                                                                                ),
+                                                                            ],
+                                                                        );
                                                                         None
                                                                     }
                                                                 }
@@ -500,12 +526,7 @@ impl Scope {
                                         }
                                         2 => {
                                             if call.keyword == TokenType::Set {
-                                                self.vars.insert(
-                                                    ident.name.clone(),
-                                                    NewIdentifierType::List(Box::new(
-                                                        NewList::new(new_stuff),
-                                                    )),
-                                                );
+                                                self.set_var(&ident.name, new_stuff);
                                                 None
                                             } else {
                                                 error::error(
