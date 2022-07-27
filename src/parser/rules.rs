@@ -229,6 +229,16 @@ pub enum OtherStuff {
     Expression(Expression),
 }
 
+impl OtherStuff {
+    pub fn from_stuff(stuff: &Stuff) -> OtherStuff {
+        match stuff {
+            Stuff::Literal(literal) => OtherStuff::Literal(literal.clone()),
+            Stuff::Identifier(identifier) => OtherStuff::Identifier(identifier.clone()),
+            _ => error::error(0, "expected literal or identifier"),
+        }
+    }
+}
+
 impl Display for OtherStuff {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

@@ -1,4 +1,4 @@
-create num with 5
+create num with 1
 (( multiply 0xA6.A7 6 66 (minus 5)))>
 create str  with ((multiply  `ff\n `  5.76))>
 ((plus str ` ` 5  ` ` true  ` ` hempty))>
@@ -6,5 +6,15 @@ create str  with ((multiply  `ff\n `  5.76))>
 (5)>
 ((and(eq true true) true))>
 ((ge 5 6))>
-create num with ((strtonum (input `>> `)))>
+
+((plus str ` ` 5  ` ` true  ` ` hempty))>
+((setwith num (strtonum (input `>> `))))>
 ((plus num 5))>
+((subtractwith num ``))>
+(num)>
+(4)>
+create str with `d`
+((multiplywith str 5))>
+(str)>
+((addwith str 5))>
+(str)>

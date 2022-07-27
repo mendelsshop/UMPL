@@ -12,12 +12,12 @@ Currenly working keywords for UMPL:
 - [x] lt *
 - [x] le *
 - [x] ge *
-- [ ] addwith
-- [ ] dividewith
-- [ ] subtractwith
-- [ ] multiplywith
+- [x] addwith
+- [x] dividewith
+- [x] subtractwith
+- [x] multiplywith
 - [x] input
-- [ ] set-with
+- [x] setwith
 - [ ] exit
 - [x] error
 - [x] strtonum

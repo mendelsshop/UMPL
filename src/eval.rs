@@ -10,7 +10,8 @@ use crate::{
     error,
     parser::{
         rules::{
-            Call, Expression, IdentifierType, IfStatement, Literal, OtherStuff, Stuff, Vairable,
+            Call, Expression, IdentifierType, IfStatement, List, Literal, LiteralType, OtherStuff,
+            Stuff, Vairable,
         },
         Thing,
     },
@@ -94,7 +95,7 @@ impl Scope {
                             line: expr.line,
                         }));
                     }
-                    None => new_body.push(Thing::Expression(expr)),
+                    None => {}
                 },
                 Thing::IfStatement(if_statement) => {
                     let conditon = match self.find_pointer_in_other_stuff(&if_statement.condition) {
@@ -120,7 +121,7 @@ impl Scope {
         self.body = new_body;
     }
 
-    fn find_pointer_in_other_stuff(&self, other_stuff: &OtherStuff) -> Option<OtherStuff> {
+    fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<OtherStuff> {
         match other_stuff {
             OtherStuff::Identifier(ident) => {
                 if self.vars.contains_key(&ident.name) {
@@ -147,7 +148,8 @@ impl Scope {
         }
     }
 
-    fn find_pointer_in_stuff(&self, stuff: &Stuff) -> Option<Stuff> {
+    fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<Stuff> {
+        // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
             Stuff::Identifier(ident) => {
                 if self.vars.contains_key(&ident.name) {
@@ -171,7 +173,7 @@ impl Scope {
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
                     if self.function.contains_key(name) {
-                        let function = self.function.get(name).unwrap();
+                        let function = self.function.get(name).unwrap().clone();
                         let mut new_stuff: Vec<Stuff> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             if index > function.1 as usize {
@@ -203,6 +205,261 @@ impl Scope {
                         error::error(call.line, format!("Function {} is not defined", name));
                     }
                 }
+                TokenType::AddWith
+                | TokenType::SubtractWith
+                | TokenType::DivideWith
+                | TokenType::MultiplyWith
+                | TokenType::Set => match &call.arguments[0] {
+                    Stuff::Identifier(ident) => {
+                        if self.vars.contains_key(&ident.name) {
+                            let mut new_stuff: Vec<OtherStuff> = Vec::new();
+                            for thing in call.arguments.iter().skip(1) {
+                                match self.find_pointer_in_stuff(thing) {
+                                    Some(new_thing) => {
+                                        new_stuff.push(OtherStuff::from_stuff(&new_thing.clone()))
+                                    }
+                                    None => new_stuff.push(OtherStuff::from_stuff(thing)),
+                                }
+                            }
+                            match new_stuff.len() {
+                                1 => {
+                                    let new_val = match &new_stuff[0] {
+                                        OtherStuff::Literal(val) => val.literal.clone(),
+                                        _ => {
+                                            error::error(
+                                                call.line,
+                                                format!("Expected literal for {}", call.keyword),
+                                            );
+                                        }
+                                    };
+                                    let var = match self.vars.get(&ident.name.clone()).unwrap() {
+                                        IdentifierType::Vairable(v) => match &v.value {
+                                            OtherStuff::Literal(val) => val.literal.clone(),
+                                            _ => {
+                                                error::error(
+                                                    call.line,
+                                                    format!(
+                                                        "Variable {} is not a literal",
+                                                        ident.name
+                                                    ),
+                                                );
+                                            }
+                                        },
+                                        IdentifierType::List(..) => {
+                                            error::error(ident.line, "Cannot change entire list");
+                                        }
+                                    };
+                                    match &new_stuff[0] {
+                                        OtherStuff::Literal(literal) => {
+                                            match call.keyword {
+                                                TokenType::Set => {
+                                                    self.vars.insert(
+                                                        ident.name.clone(),
+                                                        IdentifierType::Vairable(Box::new(
+                                                            Vairable::new(OtherStuff::from_stuff(
+                                                                &Stuff::Literal(literal.clone()),
+                                                            )),
+                                                        )),
+                                                    );
+                                                    None
+                                                }
+                                                TokenType::AddWith => match var {
+                                                    LiteralType::Number(num) => {
+                                                        match new_val {
+                                                            LiteralType::Number(num2) => {
+                                                                let new_val = num + num2;
+                                                                self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                    OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::Number(new_val), line: call.line })),
+                                                                ))));
+                                                                None
+                                                            }
+                                                            _ => {
+                                                                error::error(
+                                                                    call.line,
+                                                                    format!("Variable {} is not a number", ident.name),
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                    LiteralType::String(mut s) => match new_val {
+                                                        LiteralType::String(s2) => {
+                                                            s.push_str(&s2);
+                                                            self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                    OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::String(s), line: call.line })),
+                                                                ))));
+                                                            None
+                                                        }
+                                                        LiteralType::Number(n) => {
+                                                            s.push_str(&n.to_string());
+                                                            self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                    OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::String(s), line: call.line })),
+                                                                ))));
+                                                            None
+                                                        }
+                                                        LiteralType::Boolean(boolean) => {
+                                                            s.push_str(&boolean.to_string());
+                                                            self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                    OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::String(s), line: call.line })),
+                                                                ))));
+                                                            None
+                                                        }
+                                                        LiteralType::Hempty => {
+                                                            s.push_str("null");
+                                                            self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                    OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::String(s), line: call.line })),
+                                                                ))));
+                                                            None
+                                                        }
+                                                    },
+                                                    _ => {
+                                                        error::error(
+                                                                call.line,
+                                                                format!("Variable {} is not a number/string", ident.name),
+                                                            );
+                                                    }
+                                                },
+                                                TokenType::MultiplyWith => {
+                                                    match var {
+                                                        LiteralType::Number(num) => match new_val {
+                                                            LiteralType::Number(num2) => {
+                                                                let new_val = num * num2;
+                                                                self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                    OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::Number(new_val), line: call.line })),
+                                                                ))));
+                                                                None
+                                                            }
+                                                            _ => {
+                                                                error::error(
+                                                                    call.line,
+                                                                    format!("Variable {} is not a number", ident.name),
+                                                                );
+                                                            }
+                                                        },
+                                                        LiteralType::String(ref s) => match new_val
+                                                        {
+                                                            LiteralType::Number(num) => {
+                                                                let new_string = String::from_iter(
+                                                                    s.chars().map(|c| {
+                                                                        c.to_string()
+                                                                            .repeat(num as usize)
+                                                                    }),
+                                                                );
+                                                                self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                        OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::String(new_string), line: call.line })),
+                                                                    ))));
+                                                                None
+                                                            }
+                                                            _ => {
+                                                                error::error(
+                                                                    call.line,
+                                                                    format!("Variable {} is not a number", ident.name),
+                                                                );
+                                                            }
+                                                        },
+                                                        _ => {
+                                                            error::error(
+                                                                call.line,
+                                                                format!("Variable {} is not a number/string", ident.name),
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                                TokenType::SubtractWith | TokenType::DivideWith => {
+                                                    match var {
+                                                        LiteralType::Number(nums) => {
+                                                            match new_val {
+                                                                LiteralType::Number(num) => {
+                                                                    if call.keyword
+                                                                        == TokenType::SubtractWith
+                                                                    {
+                                                                        let new_val = nums - num;
+                                                                        self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                            OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::Number(new_val), line: call.line })),
+                                                                        ))));
+
+                                                                        None
+                                                                    } else {
+                                                                        let new_val = nums / num;
+                                                                        self.vars.insert(ident.name.clone(), IdentifierType::Vairable(Box::new(Vairable::new(
+                                                                            OtherStuff::from_stuff(&Stuff::Literal(Literal { literal: LiteralType::Number(new_val), line: call.line })),
+                                                                        ))));
+                                                                        None
+                                                                    }
+                                                                }
+                                                                _ => {
+                                                                    error::error(
+                                                                        call.line,
+                                                                        format!("Variable {} is not a number", ident.name),
+                                                                    );
+                                                                }
+                                                            }
+                                                        }
+                                                        _ => {
+                                                            error::error(
+                                                                call.line,
+                                                                format!("Variable {} is not a number/string", ident.name),
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                                _ => {
+                                                    error::error(
+                                                        call.line,
+                                                        format!(
+                                                            "Invalid operator for literal {}",
+                                                            call.keyword
+                                                        ),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        _ => {
+                                            error::error(
+                                                call.line,
+                                                "Only literals can be used in set",
+                                            );
+                                        }
+                                    }
+                                }
+                                2 => {
+                                    if call.keyword == TokenType::Set {
+                                        self.vars.insert(
+                                            ident.name.clone(),
+                                            IdentifierType::List(Box::new(List::new(new_stuff))),
+                                        );
+                                        None
+                                    } else {
+                                        error::error(
+                                            call.line,
+                                            format!(
+                                                "Too many arguments for function {}",
+                                                call.keyword
+                                            )
+                                            .as_str(),
+                                        );
+                                    }
+                                }
+                                _ => error::error(
+                                    call.line,
+                                    format!("Too many arguments for function {}", call.keyword)
+                                        .as_str(),
+                                ),
+                            }
+                        } else {
+                            error::error(
+                                ident.line,
+                                format!("Variable {} is not defined", ident.name),
+                            );
+                        }
+                    }
+                    _ => {
+                        error::error(
+                            call.line,
+                            format!("First argument of {} must be an identifier", call.keyword)
+                                .as_str(),
+                        );
+                    }
+                },
 
                 t => {
                     let mut new_stuff: Vec<Stuff> = Vec::new();
@@ -220,7 +477,7 @@ impl Scope {
                 }
             },
 
-            _ => None,
+            _ => Some(stuff.clone()),
         }
     }
 }
