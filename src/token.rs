@@ -1,12 +1,13 @@
 use crate::{
     error,
-    parser::rules::{LiteralType, OtherStuff, Stuff},
+    parser::rules::{LiteralType, OtherStuff},
 };
 use hexponent::FloatLiteral;
 use std::{
+    env::consts::OS,
     fmt::{self, Debug, Display},
     io::{self, Write},
-    process::exit,
+    process::{exit, Command},
 };
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenType {
@@ -77,10 +78,11 @@ pub enum TokenType {
     Error,
     EOF,
     Program,
+    Delete,
 }
 
 impl TokenType {
-    pub fn r#do(&self, args: Vec<Stuff>, line: i32) -> LiteralType {
+    pub fn r#do(&self, args: Vec<LiteralType>, line: i32) -> LiteralType {
         if crate::KEYWORDS.is_keyword(self) {
             match self {
                 TokenType::Not => {
@@ -88,121 +90,101 @@ impl TokenType {
                         error::error(line, "Expected 1 argument for not operator");
                     }
                     match &args[0] {
-                        Stuff::Literal(literal) => match literal.literal {
-                            LiteralType::Boolean(b) => LiteralType::Boolean(!b),
-                            _ => error::error(line, "Expected boolean for not operator"),
-                        },
-                        _ => error::error(line, "Expected a literal for not operator"),
+                        LiteralType::Boolean(b) => LiteralType::Boolean(!b),
+                        _ => error::error(line, "Expected boolean for not operator"),
                     }
                 }
                 TokenType::Plus | TokenType::Minus | TokenType::Divide | TokenType::Multiply => {
-                    match &args[0] {
-                        Stuff::Literal(value) => match value.literal {
-                            LiteralType::Number(number) => {
-                                // check if minus and only one argument
-                                let mut total;
-                                if self == &TokenType::Minus && args.len() == 1 {
-                                    total = -number
-                                } else {
-                                    total = number
-                                }
-                                for thing in args.iter().skip(1) {
-                                    match thing {
-                                        Stuff::Literal(literal) => {
-                                            if let LiteralType::Number(number) = literal.literal {
-                                                {
-                                                    // convert the self to an operator
-                                                    match self {
-                                                        TokenType::Plus => {
-                                                            total += number;
-                                                        }
-                                                        TokenType::Minus => {
-                                                            total -= number;
-                                                        }
-                                                        TokenType::Divide => {
-                                                            total /= number;
-                                                        }
-                                                        TokenType::Multiply => {
-                                                            total *= number;
-                                                        }
-                                                        _ => {}
-                                                    };
-                                                }
+                    match args[0] {
+                        LiteralType::Number(number) => {
+                            // check if minus and only one argument
+                            let mut total;
+                            if self == &TokenType::Minus && args.len() == 1 {
+                                total = -number
+                            } else {
+                                total = number
+                            }
+                            for thing in args.iter().skip(1) {
+                                if let LiteralType::Number(number) = thing {
+                                    {
+                                        // convert the self to an operator
+                                        match self {
+                                            TokenType::Plus => {
+                                                total += number;
                                             }
-                                        }
-                                        _ => {
-                                            error::error(
-                                                line,
-                                                format!(
-                                                    "Only numbers can be added found {}",
-                                                    thing
-                                                ),
-                                            );
-                                        }
+                                            TokenType::Minus => {
+                                                total -= number;
+                                            }
+                                            TokenType::Divide => {
+                                                total /= number;
+                                            }
+                                            TokenType::Multiply => {
+                                                total *= number;
+                                            }
+                                            _ => {}
+                                        };
                                     }
                                 }
-                                LiteralType::Number(total)
                             }
-                            LiteralType::String(ref string) => {
-                                let mut new_string = string.clone();
-                                for (index, thing) in args.iter().skip(1).enumerate() {
-                                    match self {
-                                        TokenType::Plus => {
-                                            if let Stuff::Literal(literal) = thing {
-                                                match literal.literal {
-                                                    LiteralType::String(ref string) => {
-                                                        new_string.push_str(string);
-                                                    }
-                                                    LiteralType::Number(number) => {
-                                                        new_string.push_str(&number.to_string());
-                                                    }
-                                                    LiteralType::Boolean(boolean) => {
-                                                        new_string.push_str(&boolean.to_string());
-                                                    }
-                                                    LiteralType::Hempty => {
-                                                        new_string.push_str("HEMPTY");
-                                                    }
-                                                };
+                            LiteralType::Number(total)
+                        }
+                        LiteralType::String(ref string) => {
+                            let mut new_string = string.clone();
+                            for (index, thing) in args.iter().skip(1).enumerate() {
+                                match self {
+                                    TokenType::Plus => {
+                                        match thing {
+                                            LiteralType::String(ref string) => {
+                                                new_string.push_str(string);
                                             }
-                                        }
-                                        TokenType::Multiply => {
-                                            if index > 0 {
-                                                error::error(line, "Multiply can only be used with the first argument");
+                                            LiteralType::Number(number) => {
+                                                new_string.push_str(&number.to_string());
                                             }
-                                            if let Stuff::Literal(literal) = thing {
-                                                match literal.literal {
-                                                    LiteralType::Number(number) => {
-                                                        let mut new_new_string = String::new();
-                                                        for _ in 0..number as i32 {
-                                                            new_new_string.push_str(&new_string);
-                                                        }
-                                                        new_string = new_new_string;
-                                                    }
-                                                    _ => {
-                                                        error::error(
-                                                                line,
-                                                                "strings can only be multiplied by numbers",
-                                                            );
-                                                    }
-                                                }
+                                            LiteralType::Boolean(boolean) => {
+                                                new_string.push_str(&boolean.to_string());
                                             }
-                                        }
-                                        TokenType::Divide | TokenType::Minus => {
+                                            LiteralType::Hempty => {
+                                                new_string.push_str("HEMPTY");
+                                            }
+                                        };
+                                    }
+                                    TokenType::Multiply => {
+                                        if index > 0 {
                                             error::error(
                                                 line,
-                                                "Only numbers can be divided or subtracted found",
+                                                "Multiply can only be used with the first argument",
                                             );
                                         }
-                                        _ => {}
-                                    };
-                                }
-                                LiteralType::String(new_string)
+
+                                        match thing {
+                                            LiteralType::Number(number) => {
+                                                let mut new_new_string = String::new();
+                                                for _ in 0..*number as i32 - 1 {
+                                                    println!("{}", new_string);
+                                                    new_new_string.push_str(&new_string);
+                                                }
+                                                new_string = new_new_string;
+                                            }
+                                            _ => {
+                                                error::error(
+                                                    line,
+                                                    "strings can only be multiplied by numbers",
+                                                );
+                                            }
+                                        }
+                                    }
+                                    TokenType::Divide | TokenType::Minus => {
+                                        error::error(
+                                            line,
+                                            "Only numbers can be divided or subtracted found",
+                                        );
+                                    }
+                                    _ => {}
+                                };
                             }
-                            _ => error::error(0, "Invalid literal arguments"),
-                        },
-                        _ => {
-                            error::error(line, "Invalid type for operation");
+                            LiteralType::String(new_string)
                         }
+                        _ => error::error(0, "Invalid literal arguments"),
                     }
                 }
                 TokenType::Error
@@ -221,56 +203,77 @@ impl TokenType {
                         );
                     }
                     match &args[0] {
-                        Stuff::Literal(literal) => match literal.literal {
-                            LiteralType::String(ref string) => match self {
-                                TokenType::Error => {
-                                    println!("{}", string);
-                                    exit(1)
+                        LiteralType::String(ref string) => match self {
+                            TokenType::Error => {
+                                println!("{}", string);
+                                exit(1)
+                            }
+                            TokenType::Input => {
+                                let mut input = String::new();
+                                print!("{}", string);
+                                // flush stdout
+                                io::stdout().flush().unwrap();
+                                io::stdin().read_line(&mut input).unwrap();
+                                LiteralType::String(input.trim().to_string())
+                            }
+                            TokenType::StrToBool => {
+                                if string == "true" {
+                                    LiteralType::Boolean(true)
+                                } else if string == "false" {
+                                    LiteralType::Boolean(false)
+                                } else {
+                                    error::error(line, "Expected true or false");
                                 }
-                                TokenType::Input => {
-                                    let mut input = String::new();
-                                    print!("{}", string);
-                                    // flush stdout
-                                    io::stdout().flush().unwrap();
-                                    io::stdin().read_line(&mut input).unwrap();
-                                    LiteralType::String(input)
+                            }
+                            TokenType::StrToHempty => {
+                                if string == "HEMPTY" {
+                                    LiteralType::Hempty
+                                } else {
+                                    error::error(line, "Expected HEMPTY");
                                 }
-                                TokenType::StrToBool => {
-                                    if string == "true" {
-                                        LiteralType::Boolean(true)
-                                    } else if string == "false" {
-                                        LiteralType::Boolean(false)
-                                    } else {
-                                        error::error(line, "Expected true or false");
-                                    }
-                                }
-                                TokenType::StrToHempty => {
-                                    if string == "HEMPTY" {
-                                        LiteralType::Hempty
-                                    } else {
-                                        error::error(line, "Expected HEMPTY");
-                                    }
-                                }
-                                TokenType::StrToNum => {
-                                    // TODO: check if 0x is already in the string
-                                    let number: FloatLiteral =
-                                        match format!("0x{}", string.trim()).parse() {
-                                            Ok(value) => value,
-                                            Err(_) => error::error(
-                                                line,
-                                                format!(
-                                                    "Error parsing string {} to number",
-                                                    string.trim()
-                                                ),
-                                            ),
-                                        };
+                            }
+                            TokenType::StrToNum => {
+                                // TODO: check if 0x is already in the string
+                                let number: FloatLiteral = match format!("0x{}", string.trim())
+                                    .parse()
+                                {
+                                    Ok(value) => value,
+                                    Err(_) => error::error(
+                                        line,
+                                        format!("Error parsing string {} to number", string.trim()),
+                                    ),
+                                };
 
-                                    LiteralType::Number(number.convert::<f64>().inner())
-                                }
+                                LiteralType::Number(number.convert::<f64>().inner())
+                            }
+                            TokenType::RunCommand => {
+                                let cmd = match OS {
+                                    "windows" => {
+                                        let mut cmd = Command::new("powershell");
+                                        cmd.args(&["-c", string.trim()]).output()
+                                    }
+                                    _ => {
+                                        let mut cmd = Command::new("sh");
+                                        cmd.args(&["-c", string.trim()]).output()
+                                    }
+                                };
+                                let cmd: String = match cmd {
+                                    Ok(value) => {
+                                        if value.status.success() {
+                                            String::from_utf8_lossy(&value.stdout).into()
+                                        } else {
+                                            String::from_utf8_lossy(&value.stderr).into()
+                                        }
+                                    }
+                                    Err(_) => error::error(
+                                        line,
+                                        format!("Error running command {}", string.trim()),
+                                    ),
+                                };
+                                LiteralType::String(cmd)
+                            }
 
-                                _ => todo!(),
-                            },
-                            _ => error::error(line, "Expected string for input operator"),
+                            _ => todo!(),
                         },
                         _ => error::error(line, "Expected string for input operator"),
                     }
@@ -282,19 +285,9 @@ impl TokenType {
                             format!("Expected 2 arguments for {:?} operator", self),
                         );
                     }
-                    let type_ = match &args[0] {
-                        Stuff::Literal(literal) => &literal.literal,
-                        _ => {
-                            error::error(line, format!("Expected literal for {:?} operator", self))
-                        }
-                    };
+                    let type_ = &args[0];
 
-                    let type_1 = match &args[1] {
-                        Stuff::Literal(literal) => &literal.literal,
-                        _ => {
-                            error::error(line, format!("Expected literal for {:?} operator", self))
-                        }
-                    };
+                    let type_1 = &args[1];
                     if type_.type_eq(type_1) {
                     } else {
                         error::error(
@@ -320,27 +313,15 @@ impl TokenType {
                         );
                     }
                     let bool_1 = match &args[0] {
-                        Stuff::Literal(literal) => match &literal.literal {
-                            LiteralType::Boolean(boolean) => boolean,
-                            _ => error::error(
-                                line,
-                                format!("Expected boolean for {:?} operator", self),
-                            ),
-                        },
+                        LiteralType::Boolean(boolean) => boolean,
                         _ => {
-                            error::error(line, format!("Expected literal for {:?} operator", self))
+                            error::error(line, format!("Expected boolean for {:?} operator", self))
                         }
                     };
                     let bool_2 = match &args[1] {
-                        Stuff::Literal(literal) => match &literal.literal {
-                            LiteralType::Boolean(boolean) => boolean,
-                            _ => error::error(
-                                line,
-                                format!("Expected boolean for {:?} operator", self),
-                            ),
-                        },
+                        LiteralType::Boolean(boolean) => boolean,
                         _ => {
-                            error::error(line, format!("Expected literal for {:?} operator", self))
+                            error::error(line, format!("Expected boolean for {:?} operator", self))
                         }
                     };
                     if bool_1 == bool_2 {
@@ -364,28 +345,12 @@ impl TokenType {
                         );
                     }
                     let type_ = match &args[0] {
-                        Stuff::Literal(literal) => match &literal.literal {
-                            LiteralType::Number(number) => number,
-                            _ => error::error(
-                                line,
-                                format!("Expected number for {:?} operator", self),
-                            ),
-                        },
-                        _ => {
-                            error::error(line, format!("Expected literal for {:?} operator", self))
-                        }
+                        LiteralType::Number(number) => number,
+                        _ => error::error(line, format!("Expected number for {:?} operator", self)),
                     };
                     let type_1 = match &args[1] {
-                        Stuff::Literal(literal) => match &literal.literal {
-                            LiteralType::Number(number) => number,
-                            _ => error::error(
-                                line,
-                                format!("Expected number for {:?} operator", self),
-                            ),
-                        },
-                        _ => {
-                            error::error(line, format!("Expected literal for {:?} operator", self))
-                        }
+                        LiteralType::Number(number) => number,
+                        _ => error::error(line, format!("Expected number for {:?} operator", self)),
                     };
                     if self == &TokenType::GreaterThan {
                         LiteralType::Boolean(type_ > type_1)
@@ -395,6 +360,19 @@ impl TokenType {
                         LiteralType::Boolean(type_ >= type_1)
                     } else {
                         LiteralType::Boolean(type_ <= type_1)
+                    }
+                }
+                TokenType::Exit => {
+                    if args.len() == 1 {
+                        match &args[0] {
+                            LiteralType::Number(number) => exit(*number as i32),
+                            _ => error::error(
+                                line,
+                                format!("Expected number for {:?} operator", self),
+                            ),
+                        }
+                    } else {
+                        error::error(line, format!("Expected 1 argument for {:?} operator", self));
                     }
                 }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {

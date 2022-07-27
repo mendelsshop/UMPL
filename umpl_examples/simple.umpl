@@ -10,11 +10,13 @@ create str  with ((multiply  `ff\n `  5.76))>
 ((plus str ` ` 5  ` ` true  ` ` hempty))>
 ((setwith num (strtonum (input `>> `))))>
 ((plus num 5))>
-((subtractwith num ``))>
+((subtractwith num 4))>
 (num)>
 (4)>
-create str with `d`
+create str with `df`
+(str)>
+(`fdff`)>
 ((multiplywith str 5))>
 (str)>
 ((addwith str 5))>
-(str)>
+(str)<

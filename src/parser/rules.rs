@@ -112,6 +112,33 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
+    pub fn from_other_stuff(thing: OtherStuff) -> LiteralType {
+        match thing {
+            OtherStuff::Literal(literal) => literal.literal,
+            _ => error::error(0, "not a literal"), // TODO: get line number
+        }
+    }
+    pub fn from_stuff(thing: Stuff) -> LiteralType {
+        match thing {
+            Stuff::Literal(literal) => literal.literal,
+            _ => error::error(0, "not a literal"), // TODO: get line number
+        }
+    }
+    pub fn new_string(string: String) -> LiteralType {
+        LiteralType::String(string)
+    }
+
+    pub fn new_number(number: f64) -> LiteralType {
+        LiteralType::Number(number)
+    }
+
+    pub fn new_boolean(boolean: bool) -> Self {
+        LiteralType::Boolean(boolean)
+    }
+
+    pub fn new_hempty() -> Self {
+        LiteralType::Hempty
+    }
     pub fn type_eq(&self, other: &LiteralType) -> bool {
         match self {
             LiteralType::Number(_) => matches!(other, LiteralType::Number(_)),

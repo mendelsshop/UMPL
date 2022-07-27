@@ -18,17 +18,18 @@ Currenly working keywords for UMPL:
 - [x] multiplywith
 - [x] input
 - [x] setwith
-- [ ] exit
+- [x] exit
 - [x] error
 - [x] strtonum
 - [x] strtobool
 - [x] strtohempty
 - [ ] eval
-- [ ] runcommand
+- [x] runcommand
 - [ ] open
 - [ ] close
 - [ ] write
 - [ ] read
 - [ ] readline
+- [x] delete
 
 `* only available for numbers`
