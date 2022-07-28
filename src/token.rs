@@ -161,7 +161,6 @@ impl TokenType {
                                             LiteralType::Number(number) => {
                                                 let mut new_new_string = String::new();
                                                 for _ in 0..*number as i32 - 1 {
-                                                    println!("{}", new_string);
                                                     new_new_string.push_str(&new_string);
                                                 }
                                                 new_string = new_new_string;
@@ -205,10 +204,7 @@ impl TokenType {
                     }
                     match &args[0] {
                         LiteralType::String(ref string) => match self {
-                            Self::Error => {
-                                println!("{}", string);
-                                exit(1)
-                            }
+                            Self::Error => exit(1),
                             Self::Input => {
                                 let mut input = String::new();
                                 print!("{}", string);
