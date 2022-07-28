@@ -15,8 +15,8 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(source: String) -> Lexer {
-        Lexer {
+    pub const fn new(source: String) -> Self {
+        Self {
             token_list: Vec::new(),
             source,
             start: 0,   // bytes
@@ -28,11 +28,11 @@ impl Lexer {
     pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token()
+            self.scan_token();
         }
         self.token_list
             .push(Token::new(TokenType::EOF, "", self.line));
-        self.token_list.to_owned()
+        self.token_list.clone()
     }
 
     fn is_at_end(&self) -> bool {
@@ -79,7 +79,7 @@ impl Lexer {
                 } else if c.is_ascii_digit() {
                     if self.peek() == 'x' {
                         self.advance();
-                        self.start += 2
+                        self.start += 2;
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
@@ -167,7 +167,7 @@ impl Lexer {
         let string = self.get_text();
         self.start -= 1;
         self.current += 1;
-        self.add_token(TokenType::String { literal: string })
+        self.add_token(TokenType::String { literal: string });
     }
 
     fn number(&mut self) {
@@ -223,7 +223,7 @@ impl Lexer {
                 }
             }
         );
-        self.add_token(TokenType::Identifier { name: identifier })
+        self.add_token(TokenType::Identifier { name: identifier });
     }
 
     fn advance(&mut self) -> char {

@@ -8,7 +8,7 @@ pub struct Keyword {
 
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
 impl Keyword {
-    pub fn new() -> Keyword {
+    pub fn new() -> Self {
         let mut keywords = HashMap::new();
         keywords.insert("plus".to_string(), TokenType::Plus);
         keywords.insert("minus".to_string(), TokenType::Minus);
@@ -56,7 +56,7 @@ impl Keyword {
         keywords.insert("read".to_string(), TokenType::Read);
         keywords.insert("readline".to_string(), TokenType::ReadLine);
         keywords.insert("delete".to_string(), TokenType::Delete);
-        Keyword { keywords }
+        Self { keywords }
     }
 
     pub fn get(&self, name: &str) -> Option<TokenType> {

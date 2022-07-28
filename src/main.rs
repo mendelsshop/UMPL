@@ -1,4 +1,16 @@
 #![deny(rust_2018_idioms)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+#![warn(clippy::cargo)]
+#![allow(clippy::must_use_candidate)]
+#![deny(clippy::use_self)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
+#![allow(clippy::match_wildcard_for_single_variants)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cognitive_complexity)]
+#![allow(clippy::float_cmp)]
 use log::info;
 use std::{
     env,
@@ -17,7 +29,7 @@ fn main() {
         cli::get_dash_args(&args, index, &mut parsed_args);
     }
     if parsed_args.log {
-        log4rs::init_file("log.yaml", Default::default()).unwrap();
+        log4rs::init_file("log.yaml", log4rs::config::Deserializers::default()).unwrap();
         info!("Starting up...");
     }
 
@@ -82,10 +94,10 @@ fn main() {
 fn run(line: String) {
     let mut lexer = Lexer::new(line);
 
-    let mut parsed = Parser::new(lexer.scan_tokens().to_vec());
+    let mut parsed = Parser::new(lexer.scan_tokens());
 
     let thing = parsed.parse();
 
-    let scope = Scope::new(thing);
+    let scope = Scope::new(&thing);
     println!("{}", scope);
 }

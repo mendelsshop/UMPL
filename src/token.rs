@@ -10,6 +10,7 @@ use std::{
     process::{exit, Command},
 };
 #[derive(PartialEq, Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub enum TokenType {
     RightParen,
     LeftParen,
@@ -82,10 +83,11 @@ pub enum TokenType {
 }
 
 impl TokenType {
-    pub fn r#do(&self, args: Vec<LiteralType>, line: i32) -> LiteralType {
+    #[allow(clippy::too_many_lines)]
+    pub fn r#do(&self, args: &[LiteralType], line: i32) -> LiteralType {
         if crate::KEYWORDS.is_keyword(self) {
             match self {
-                TokenType::Not => {
+                Self::Not => {
                     if args.len() != 1 {
                         error::error(line, "Expected 1 argument for not operator");
                     }
@@ -94,31 +96,30 @@ impl TokenType {
                         _ => error::error(line, "Expected boolean for not operator"),
                     }
                 }
-                TokenType::Plus | TokenType::Minus | TokenType::Divide | TokenType::Multiply => {
+                Self::Plus | Self::Minus | Self::Divide | Self::Multiply => {
                     match args[0] {
                         LiteralType::Number(number) => {
                             // check if minus and only one argument
-                            let mut total;
-                            if self == &TokenType::Minus && args.len() == 1 {
-                                total = -number
+                            let mut total: f64 = if self == &Self::Minus && args.len() == 1 {
+                                -number
                             } else {
-                                total = number
-                            }
+                                number
+                            };
                             for thing in args.iter().skip(1) {
                                 if let LiteralType::Number(number) = thing {
                                     {
                                         // convert the self to an operator
                                         match self {
-                                            TokenType::Plus => {
+                                            Self::Plus => {
                                                 total += number;
                                             }
-                                            TokenType::Minus => {
+                                            Self::Minus => {
                                                 total -= number;
                                             }
-                                            TokenType::Divide => {
+                                            Self::Divide => {
                                                 total /= number;
                                             }
-                                            TokenType::Multiply => {
+                                            Self::Multiply => {
                                                 total *= number;
                                             }
                                             _ => {}
@@ -132,7 +133,7 @@ impl TokenType {
                             let mut new_string = string.clone();
                             for (index, thing) in args.iter().skip(1).enumerate() {
                                 match self {
-                                    TokenType::Plus => {
+                                    Self::Plus => {
                                         match thing {
                                             LiteralType::String(ref string) => {
                                                 new_string.push_str(string);
@@ -148,7 +149,7 @@ impl TokenType {
                                             }
                                         };
                                     }
-                                    TokenType::Multiply => {
+                                    Self::Multiply => {
                                         if index > 0 {
                                             error::error(
                                                 line,
@@ -173,7 +174,7 @@ impl TokenType {
                                             }
                                         }
                                     }
-                                    TokenType::Divide | TokenType::Minus => {
+                                    Self::Divide | Self::Minus => {
                                         error::error(
                                             line,
                                             "Only numbers can be divided or subtracted found",
@@ -187,15 +188,15 @@ impl TokenType {
                         _ => error::error(0, "Invalid literal arguments"),
                     }
                 }
-                TokenType::Error
-                | TokenType::Input
-                | TokenType::StrToBool
-                | TokenType::StrToHempty
-                | TokenType::StrToNum
-                | TokenType::RunCommand
-                | TokenType::Eval
-                | TokenType::Open
-                | TokenType::Write => {
+                Self::Error
+                | Self::Input
+                | Self::StrToBool
+                | Self::StrToHempty
+                | Self::StrToNum
+                | Self::RunCommand
+                | Self::Eval
+                | Self::Open
+                | Self::Write => {
                     if args.len() != 1 {
                         error::error(
                             line,
@@ -204,11 +205,11 @@ impl TokenType {
                     }
                     match &args[0] {
                         LiteralType::String(ref string) => match self {
-                            TokenType::Error => {
+                            Self::Error => {
                                 println!("{}", string);
                                 exit(1)
                             }
-                            TokenType::Input => {
+                            Self::Input => {
                                 let mut input = String::new();
                                 print!("{}", string);
                                 // flush stdout
@@ -216,7 +217,7 @@ impl TokenType {
                                 io::stdin().read_line(&mut input).unwrap();
                                 LiteralType::String(input.trim().to_string())
                             }
-                            TokenType::StrToBool => {
+                            Self::StrToBool => {
                                 if string == "true" {
                                     LiteralType::Boolean(true)
                                 } else if string == "false" {
@@ -225,14 +226,14 @@ impl TokenType {
                                     error::error(line, "Expected true or false");
                                 }
                             }
-                            TokenType::StrToHempty => {
+                            Self::StrToHempty => {
                                 if string == "HEMPTY" {
                                     LiteralType::Hempty
                                 } else {
                                     error::error(line, "Expected HEMPTY");
                                 }
                             }
-                            TokenType::StrToNum => {
+                            Self::StrToNum => {
                                 // TODO: check if 0x is already in the string
                                 let number: FloatLiteral = match format!("0x{}", string.trim())
                                     .parse()
@@ -246,16 +247,13 @@ impl TokenType {
 
                                 LiteralType::Number(number.convert::<f64>().inner())
                             }
-                            TokenType::RunCommand => {
-                                let cmd = match OS {
-                                    "windows" => {
-                                        let mut cmd = Command::new("powershell");
-                                        cmd.args(&["-c", string.trim()]).output()
-                                    }
-                                    _ => {
-                                        let mut cmd = Command::new("sh");
-                                        cmd.args(&["-c", string.trim()]).output()
-                                    }
+                            Self::RunCommand => {
+                                let cmd = if OS == "windows" {
+                                    let mut cmd = Command::new("powershell");
+                                    cmd.args(&["-c", string.trim()]).output()
+                                } else {
+                                    let mut cmd = Command::new("sh");
+                                    cmd.args(&["-c", string.trim()]).output()
                                 };
                                 let cmd: String = match cmd {
                                     Ok(value) => {
@@ -278,7 +276,7 @@ impl TokenType {
                         _ => error::error(line, "Expected string for input operator"),
                     }
                 }
-                TokenType::NotEqual | TokenType::Equal => {
+                Self::NotEqual | Self::Equal => {
                     if args.len() != 2 {
                         error::error(
                             line,
@@ -299,13 +297,13 @@ impl TokenType {
                         );
                     }
 
-                    if self == &TokenType::Equal {
+                    if self == &Self::Equal {
                         LiteralType::Boolean(type_ == type_1)
                     } else {
                         LiteralType::Boolean(!(type_ == type_1))
                     }
                 }
-                TokenType::Or | TokenType::And => {
+                Self::Or | Self::And => {
                     if args.len() != 2 {
                         error::error(
                             line,
@@ -334,10 +332,7 @@ impl TokenType {
                         LiteralType::Boolean(false)
                     }
                 }
-                TokenType::GreaterThan
-                | TokenType::LessThan
-                | TokenType::GreaterEqual
-                | TokenType::LessEqual => {
+                Self::GreaterThan | Self::LessThan | Self::GreaterEqual | Self::LessEqual => {
                     if args.len() != 2 {
                         error::error(
                             line,
@@ -352,17 +347,17 @@ impl TokenType {
                         LiteralType::Number(number) => number,
                         _ => error::error(line, format!("Expected number for {:?} operator", self)),
                     };
-                    if self == &TokenType::GreaterThan {
+                    if self == &Self::GreaterThan {
                         LiteralType::Boolean(type_ > type_1)
-                    } else if self == &TokenType::LessThan {
+                    } else if self == &Self::LessThan {
                         LiteralType::Boolean(type_ < type_1)
-                    } else if self == &TokenType::GreaterEqual {
+                    } else if self == &Self::GreaterEqual {
                         LiteralType::Boolean(type_ >= type_1)
                     } else {
                         LiteralType::Boolean(type_ <= type_1)
                     }
                 }
-                TokenType::Exit => {
+                Self::Exit => {
                     if args.len() == 1 {
                         match &args[0] {
                             LiteralType::Number(number) => exit(*number as i32),
@@ -402,8 +397,8 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: &str, line: i32) -> Token {
-        Token {
+    pub fn new(token_type: TokenType, lexeme: &str, line: i32) -> Self {
+        Self {
             token_type,
             lexeme: lexeme.to_string(),
             line,

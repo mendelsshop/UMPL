@@ -24,7 +24,7 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             paren_count: 0,
             current_position: 0,
@@ -143,6 +143,7 @@ impl Parser {
         info!("Done parsing");
         program
     }
+    #[allow(clippy::too_many_lines)]
     fn parse_from_token(&mut self) -> Option<Thing> {
         self.advance("parse_from_token");
         info!("new iteration");
@@ -212,7 +213,7 @@ impl Parser {
                                     Some(Thing::Function(Function::new(
                                         name,
                                         num_args,
-                                        function,
+                                        &function,
                                         self.token.line,
                                     )))
                                 } else {
@@ -249,7 +250,7 @@ impl Parser {
                                             self.variables.push(name.clone());
                                             Some(Thing::Identifier(Identifier::new(
                                                 name,
-                                                vec![thing, thing1],
+                                                &[thing, thing1],
                                                 self.token.line,
                                             )))
                                         } else {
@@ -309,7 +310,7 @@ impl Parser {
                                     self.variables.push(name.clone());
                                     Some(Thing::Identifier(Identifier::new(
                                         name,
-                                        vec![thing],
+                                        &[thing],
                                         self.token.line,
                                     )))
                                 } else {
@@ -355,7 +356,7 @@ impl Parser {
                             self.advance("parse_from_token after loop body looking for loop end");
                             self.in_loop = false;
                             Some(Thing::LoopStatement(LoopStatement::new(
-                                loop_body,
+                                &loop_body,
                                 self.token.line,
                             )))
                         } else {
@@ -716,21 +717,6 @@ pub enum Thing {
     // make this into a custom struct
 
     // for the rest of the self.tokens we just have the token type and the line number
-}
-
-impl Thing {
-    pub fn get_line(&self) -> i32 {
-        match self {
-            Thing::Identifier(identifier) => identifier.line,
-            Thing::Expression(expression) => expression.line,
-            Thing::Function(function) => function.line,
-            Thing::IfStatement(if_statement) => if_statement.line,
-            Thing::LoopStatement(loop_statement) => loop_statement.line,
-            Thing::Break(line) => *line,
-            Thing::Continue(line) => *line,
-            Thing::Return(_, line) => *line,
-        }
-    }
 }
 
 impl Display for Thing {
