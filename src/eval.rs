@@ -2,6 +2,7 @@
 use log::info;
 
 use std::{
+    cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Display},
 };
@@ -108,14 +109,15 @@ impl NewIdentifierType {
         }
     }
 }
-#[derive(PartialEq, Clone, Debug)]
-pub struct Scope {
+#[derive(Debug)]
+pub struct Scope<'a> {
     pub vars: HashMap<String, NewIdentifierType>,
     pub function: HashMap<char, (Vec<Thing>, f64)>,
-    pub parent_scope: Option<Box<Scope>>,
+    // parent scope if ref_mut from ref_cell
+    pub parent_scope: Option<Box<RefMut<'a, Scope<'a>>>>,
 }
 
-impl Scope {
+impl<'a> Scope<'a> {
     pub fn new() -> Self {
         Self {
             vars: HashMap::new(),
@@ -123,7 +125,7 @@ impl Scope {
             parent_scope: None,
         }
     }
-    pub fn new_with_parent(parent: Box<Self>) -> Self {
+    pub fn new_with_parent(parent: Box<RefMut<'a, Scope<'a>>>) -> Self {
         Self {
             vars: HashMap::new(),
             function: HashMap::new(),
@@ -201,26 +203,25 @@ impl Scope {
     }
 }
 
-#[derive(PartialEq, Clone)]
-pub struct Eval {
+pub struct Eval<'a> {
     pub body: Vec<NewExpression>,
     pub level: i32,
-    pub scope: Scope,
+    pub scope: RefCell<Scope<'a>>,
 }
 
-impl Eval {
+impl<'a> Eval<'a> {
     pub fn new(body: &[Thing]) -> Self {
         Self {
             body: Vec::new(),
             level: 0,
-            scope: Scope::new(),
+            scope: RefCell::new(Scope::new()),
         }
     }
 
     pub fn find_functions(&mut self, body: &[Thing]) {
         for thing in body {
             if let Thing::Function(function) = thing {
-                self.scope.set_function(
+                self.scope.borrow_mut().set_function(
                     function.name,
                     function.body.clone(),
                     function.num_arguments,
@@ -229,7 +230,7 @@ impl Eval {
         }
     }
 
-    pub fn find_variables(&mut self, body: &[Thing]) {
+    pub fn find_variables(&'a mut self, body: &[Thing]) {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
@@ -240,10 +241,10 @@ impl Eval {
                     IdentifierType::Vairable(ref name) => {
                         match self.find_pointer_in_other_stuff(&name.value) {
                             Some(pointer) => {
-                                self.scope.set_var(&variable.name, &[pointer]);
+                                self.scope.borrow_mut().set_var(&variable.name, &[pointer]);
                             }
                             None => {
-                                self.scope.set_var(
+                                self.scope.borrow_mut().set_var(
                                     &variable.name,
                                     &[LiteralType::from_other_stuff(name.value.clone())],
                                 );
@@ -259,7 +260,9 @@ impl Eval {
                             Some(pointer) => pointer,
                             None => LiteralType::from_other_stuff(list.second.clone()),
                         };
-                        self.scope.set_var(&variable.name, &[first, second]);
+                        self.scope
+                            .borrow_mut()
+                            .set_var(&variable.name, &[first, second]);
                     }
                 },
                 Thing::Return(os, line) => match os {
@@ -297,7 +300,10 @@ impl Eval {
                     } else {
                         error::error(if_statement.line, "expected boolean, got something else");
                     }
-                    todo!()
+                    if conditon == LiteralType::Boolean(true) {
+                        let scope = Scope::new_with_parent(Box::new(self.scope.borrow_mut()));
+                    } else {
+                    }
                 }
                 Thing::LoopStatement(loop_statement) => {
                     todo!()
@@ -308,25 +314,27 @@ impl Eval {
                 _ => {}
             }
         }
-        self.body = new_body;
+        self.body = new_body.clone();
     }
 
-    fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralType> {
+    fn find_pointer_in_other_stuff(&self, other_stuff: &OtherStuff) -> Option<LiteralType> {
         match other_stuff {
-            OtherStuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
-                || {
-                    error::error(
-                        ident.line,
-                        format!("Variable {} is not defined", ident.name),
-                    );
-                },
-                |i| match i {
-                    NewIdentifierType::List(..) => {
-                        error::error(ident.line, "whole list not supported in call")
-                    }
-                    NewIdentifierType::Vairable(var) => Some(var.value.clone()),
-                },
-            ),
+            OtherStuff::Identifier(ident) => {
+                self.scope.borrow_mut().get_var(&ident.name).map_or_else(
+                    || {
+                        error::error(
+                            ident.line,
+                            format!("Variable {} is not defined", ident.name),
+                        );
+                    },
+                    |i| match i {
+                        NewIdentifierType::List(..) => {
+                            error::error(ident.line, "whole list not supported in call")
+                        }
+                        NewIdentifierType::Vairable(var) => Some(var.value.clone()),
+                    },
+                )
+            }
             OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
                 Some(new_expr) => Some(new_expr),
                 None => Some(LiteralType::from_stuff(expr.inside.clone())),
@@ -335,10 +343,10 @@ impl Eval {
         }
     }
     #[allow(clippy::too_many_lines)]
-    fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<LiteralType> {
+    fn find_pointer_in_stuff(&self, stuff: &Stuff) -> Option<LiteralType> {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
-            Stuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
+            Stuff::Identifier(ident) => self.scope.borrow_mut().get_var(&ident.name).map_or_else(
                 || {
                     error::error(
                         ident.line,
@@ -354,7 +362,7 @@ impl Eval {
             ),
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
-                    if let Some(function) = self.scope.get_function(*name) {
+                    if let Some(function) = self.scope.borrow().get_function(*name) {
                         let mut new_stuff = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             if index > function.1 as usize {
@@ -388,7 +396,7 @@ impl Eval {
                     }
                     match &call.arguments[0] {
                         Stuff::Identifier(ident) => {
-                            if self.scope.delete_var(&ident.name).is_some() {
+                            if self.scope.borrow_mut().delete_var(&ident.name).is_some() {
                                 None
                             } else {
                                 error::error(
@@ -406,7 +414,7 @@ impl Eval {
                 | TokenType::MultiplyWith
                 | TokenType::Set => match &call.arguments[0] {
                     Stuff::Identifier(ident) => {
-                        if self.scope.has_var(&ident.name) {
+                        if self.scope.borrow().has_var(&ident.name) {
                             let mut new_stuff = Vec::new();
                             for thing in call.arguments.iter().skip(1) {
                                 match self.find_pointer_in_stuff(thing) {
@@ -417,7 +425,12 @@ impl Eval {
                             match new_stuff.len() {
                                 1 => {
                                     let literal = &new_stuff[0];
-                                    let var = match self.scope.get_var(&ident.name).unwrap() {
+                                    let var = match self
+                                        .scope
+                                        .borrow_mut()
+                                        .get_var(&ident.name)
+                                        .unwrap()
+                                    {
                                         NewIdentifierType::Vairable(v) => v.value.clone(),
                                         NewIdentifierType::List(..) => {
                                             error::error(ident.line, "Cannot change entire list");
@@ -427,6 +440,7 @@ impl Eval {
                                     match call.keyword {
                                         TokenType::Set => {
                                             self.scope
+                                                .borrow_mut()
                                                 .set_var(&ident.name.clone(), &[literal.clone()]);
                                             None
                                         }
@@ -434,7 +448,7 @@ impl Eval {
                                             LiteralType::Number(num) => match literal {
                                                 LiteralType::Number(num2) => {
                                                     let new_val = num + num2;
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::Number(new_val)],
                                                     );
@@ -453,7 +467,7 @@ impl Eval {
                                             LiteralType::String(mut s) => match literal {
                                                 LiteralType::String(s2) => {
                                                     s.push_str(s2);
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -461,7 +475,7 @@ impl Eval {
                                                 }
                                                 LiteralType::Number(n) => {
                                                     s.push_str(&n.to_string());
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -469,7 +483,7 @@ impl Eval {
                                                 }
                                                 LiteralType::Boolean(boolean) => {
                                                     s.push_str(&boolean.to_string());
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -477,7 +491,7 @@ impl Eval {
                                                 }
                                                 LiteralType::Hempty => {
                                                     s.push_str("null");
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -498,7 +512,7 @@ impl Eval {
                                             LiteralType::Number(num) => match literal {
                                                 LiteralType::Number(num2) => {
                                                     let new_val = num * num2;
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::Number(new_val)],
                                                     );
@@ -519,7 +533,7 @@ impl Eval {
                                                     let new_string = (0..*num as i32)
                                                         .map(|_| s.clone())
                                                         .collect::<String>();
-                                                    self.scope.set_var(
+                                                    self.scope.borrow_mut().set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(new_string)],
                                                     );
@@ -551,7 +565,7 @@ impl Eval {
                                                     LiteralType::Number(num) => {
                                                         if call.keyword == TokenType::SubtractWith {
                                                             let new_val = nums - num;
-                                                            self.scope.set_var(
+                                                            self.scope.borrow_mut().set_var(
                                                                 &ident.name,
                                                                 &[LiteralType::Number(new_val)],
                                                             );
@@ -559,7 +573,7 @@ impl Eval {
                                                             None
                                                         } else {
                                                             let new_val = nums / num;
-                                                            self.scope.set_var(
+                                                            self.scope.borrow_mut().set_var(
                                                                 &ident.name,
                                                                 &[LiteralType::Number(new_val)],
                                                             );
@@ -600,7 +614,7 @@ impl Eval {
                                 }
                                 2 => {
                                     if call.keyword == TokenType::Set {
-                                        self.scope.set_var(&ident.name, &new_stuff);
+                                        self.scope.borrow_mut().set_var(&ident.name, &new_stuff);
                                         None
                                     } else {
                                         error::error(
@@ -653,7 +667,7 @@ impl Eval {
     }
 }
 
-impl fmt::Debug for Eval {
+impl fmt::Debug for Eval<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "scope {:?}", self.scope).unwrap();
         write!(
@@ -670,7 +684,7 @@ impl fmt::Debug for Eval {
     }
 }
 
-impl Display for Eval {
+impl Display for Eval<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
