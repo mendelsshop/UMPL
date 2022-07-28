@@ -99,7 +99,7 @@ impl Literal {
 }
 
 impl Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.literal)
     }
 }
@@ -150,7 +150,7 @@ impl LiteralType {
 }
 
 impl Display for LiteralType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LiteralType::Number(num) => write!(f, "{}", num),
             LiteralType::String(string) => write!(f, "{}", string),
@@ -202,7 +202,7 @@ impl Identifier {
 }
 
 impl Display for Identifier {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{} {}",
@@ -233,7 +233,7 @@ impl Call {
 }
 
 impl Display for Call {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut c = String::from("");
         for arg in self.arguments.iter().enumerate() {
             write!(c, "{}{}", arg.1, {
@@ -267,7 +267,7 @@ impl OtherStuff {
 }
 
 impl Display for OtherStuff {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OtherStuff::Literal(literal) => write!(f, "{}", literal),
             OtherStuff::Identifier(identifier) => write!(f, "{}", identifier),
@@ -296,7 +296,7 @@ impl Function {
 }
 
 impl Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Function: {} with {} arguments and body: [\n\t{}\n]",
@@ -327,7 +327,7 @@ impl List {
 }
 
 impl Display for List {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "with: [{}, {}]", self.first, self.second)
     }
 }
@@ -350,7 +350,7 @@ impl Vairable {
 }
 
 impl Display for Vairable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "with: {}", self.value)
     }
 }
@@ -380,7 +380,7 @@ impl IfStatement {
 }
 
 impl Display for IfStatement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "if statement: with condition: [{}] when true: [\n{}\n] and when false: [\n{}\n]",
@@ -412,7 +412,7 @@ impl LoopStatement {
 }
 
 impl Display for LoopStatement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "loop statement: [\n{}\n]",

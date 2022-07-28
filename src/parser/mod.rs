@@ -734,7 +734,7 @@ impl Thing {
 }
 
 impl Display for Thing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Thing::Expression(expression) => write!(f, "{}", expression),
             Thing::Identifier(s) => write!(f, "Identifier({})", s),
@@ -756,7 +756,7 @@ impl Display for Thing {
 }
 
 impl fmt::Debug for Thing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Thing::Expression(expression) => write!(f, "{:?}", expression),
             Thing::Identifier(t) => write!(f, "[Identifier({}) at line: {}]", t, t.line),

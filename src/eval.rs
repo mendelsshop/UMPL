@@ -51,7 +51,7 @@ impl NewList {
 }
 
 impl Display for NewList {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "with: [{}, {}]", self.first, self.second)
     }
 }
@@ -74,7 +74,7 @@ impl NewVairable {
 }
 
 impl Display for NewVairable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "with: {}", self.value)
     }
 }
@@ -184,14 +184,19 @@ impl Scope {
                         self.set_var(&variable.name, vec![first, second]);
                     }
                 },
-                Thing::Return(oos, line) => match oos {
+                Thing::Return(os, line) => match os {
                     Some(os) => match self.find_pointer_in_other_stuff(&os) {
-                        Some(identifier) => {}
-                        None => {}
+                        Some(identifier) => {
+                            todo!()
+                        }
+                        None => {
+                            todo!()
+                        }
                     },
-                    None => {}
+                    None => {
+                        todo!()
+                    }
                 },
-                Thing::Function(function) => {}
                 Thing::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
                     Some(exprs) => {
                         new_body.push(NewExpression {
@@ -210,11 +215,22 @@ impl Scope {
                         }
                         None => LiteralType::from_other_stuff(if_statement.condition),
                     };
+                    if conditon.type_eq(&LiteralType::Boolean(true)) {
+                    } else {
+                        error::error(if_statement.line, "expected boolean, got something else");
+                    }
+                    todo!()
                 }
-                Thing::LoopStatement(loop_statement) => {}
-                Thing::Identifier(_) => {}
-                Thing::Break(_) => {}
-                Thing::Continue(_) => {}
+                Thing::LoopStatement(loop_statement) => {
+                    todo!()
+                }
+                Thing::Break(_) => {
+                    todo!()
+                }
+                Thing::Continue(_) => {
+                    todo!()
+                }
+                _ => {}
             }
         }
         self.body = new_body;
@@ -632,7 +648,7 @@ impl fmt::Debug for Scope {
 }
 
 impl Display for Scope {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",

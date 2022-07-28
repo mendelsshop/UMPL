@@ -1,3 +1,4 @@
+#![deny(rust_2018_idioms)]
 pub mod cli;
 pub mod error;
 pub mod eval;
