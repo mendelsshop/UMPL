@@ -108,15 +108,28 @@ impl NewIdentifierType {
         }
     }
 }
-#[derive(PartialEq, Clone)]
-pub struct Eval {
+#[derive(PartialEq, Clone, Debug)]
+pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
     pub function: HashMap<char, (Vec<Thing>, f64)>,
-    pub body: Vec<NewExpression>,
-    pub level: i32,
+    pub parent_scope: Option<Box<Scope>>,
 }
 
-impl Eval {
+impl Scope {
+    pub fn new() -> Self {
+        Self {
+            vars: HashMap::new(),
+            function: HashMap::new(),
+            parent_scope: None,
+        }
+    }
+    pub fn new_with_parent(parent: Box<Self>) -> Self {
+        Self {
+            vars: HashMap::new(),
+            function: HashMap::new(),
+            parent_scope: Some(parent),
+        }
+    }
     pub fn set_var(&mut self, name: &str, value: &[LiteralType]) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
@@ -126,7 +139,6 @@ impl Eval {
             2 => NewIdentifierType::List(Box::new(NewList::new(value))),
             _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
         };
-
         match name {
             name if name.ends_with(".first") | name.ends_with(".second") => {
                 if let Some(NewIdentifierType::List(mut list)) =
@@ -169,25 +181,49 @@ impl Eval {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
         self.vars.get(name).cloned()
     }
+    pub fn set_function(&mut self, name: char, args: Vec<Thing>, body: f64) {
+        self.function.insert(name, (args, body));
+    }
+    pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64)> {
+        self.function.get(&name).cloned()
+    }
 
+    pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
+        self.vars.remove(name)
+    }
+
+    pub fn has_var(&self, name: &str) -> bool {
+        self.vars.contains_key(name)
+    }
+
+    pub fn has_function(&self, name: char) -> bool {
+        self.function.contains_key(&name)
+    }
+}
+
+#[derive(PartialEq, Clone)]
+pub struct Eval {
+    pub body: Vec<NewExpression>,
+    pub level: i32,
+    pub scope: Scope,
+}
+
+impl Eval {
     pub fn new(body: &[Thing]) -> Self {
-        let mut scope = Self {
-            vars: HashMap::new(),
-            function: HashMap::new(),
+        Self {
             body: Vec::new(),
             level: 0,
-        };
-        scope.find_functions(body);
-        scope.find_variables(body);
-        scope
+            scope: Scope::new(),
+        }
     }
 
     pub fn find_functions(&mut self, body: &[Thing]) {
         for thing in body {
             if let Thing::Function(function) = thing {
-                self.function.insert(
+                self.scope.set_function(
                     function.name,
-                    (function.body.clone(), function.num_arguments),
+                    function.body.clone(),
+                    function.num_arguments,
                 );
             }
         }
@@ -204,10 +240,10 @@ impl Eval {
                     IdentifierType::Vairable(ref name) => {
                         match self.find_pointer_in_other_stuff(&name.value) {
                             Some(pointer) => {
-                                self.set_var(&variable.name, &[pointer]);
+                                self.scope.set_var(&variable.name, &[pointer]);
                             }
                             None => {
-                                self.set_var(
+                                self.scope.set_var(
                                     &variable.name,
                                     &[LiteralType::from_other_stuff(name.value.clone())],
                                 );
@@ -223,7 +259,7 @@ impl Eval {
                             Some(pointer) => pointer,
                             None => LiteralType::from_other_stuff(list.second.clone()),
                         };
-                        self.set_var(&variable.name, &[first, second]);
+                        self.scope.set_var(&variable.name, &[first, second]);
                     }
                 },
                 Thing::Return(os, line) => match os {
@@ -277,7 +313,7 @@ impl Eval {
 
     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralType> {
         match other_stuff {
-            OtherStuff::Identifier(ident) => self.get_var(&ident.name).map_or_else(
+            OtherStuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
                 || {
                     error::error(
                         ident.line,
@@ -302,7 +338,7 @@ impl Eval {
     fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<LiteralType> {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
-            Stuff::Identifier(ident) => self.get_var(&ident.name).map_or_else(
+            Stuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
                 || {
                     error::error(
                         ident.line,
@@ -318,8 +354,7 @@ impl Eval {
             ),
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
-                    if self.function.contains_key(name) {
-                        let function = self.function.get(name).unwrap().clone();
+                    if let Some(function) = self.scope.get_function(*name) {
                         let mut new_stuff = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             if index > function.1 as usize {
@@ -353,8 +388,7 @@ impl Eval {
                     }
                     match &call.arguments[0] {
                         Stuff::Identifier(ident) => {
-                            if self.vars.contains_key(&ident.name) {
-                                self.vars.remove(&ident.name);
+                            if self.scope.delete_var(&ident.name).is_some() {
                                 None
                             } else {
                                 error::error(
@@ -372,7 +406,7 @@ impl Eval {
                 | TokenType::MultiplyWith
                 | TokenType::Set => match &call.arguments[0] {
                     Stuff::Identifier(ident) => {
-                        if self.vars.contains_key(&ident.name) {
+                        if self.scope.has_var(&ident.name) {
                             let mut new_stuff = Vec::new();
                             for thing in call.arguments.iter().skip(1) {
                                 match self.find_pointer_in_stuff(thing) {
@@ -383,7 +417,7 @@ impl Eval {
                             match new_stuff.len() {
                                 1 => {
                                     let literal = &new_stuff[0];
-                                    let var = match self.get_var(&ident.name).unwrap() {
+                                    let var = match self.scope.get_var(&ident.name).unwrap() {
                                         NewIdentifierType::Vairable(v) => v.value.clone(),
                                         NewIdentifierType::List(..) => {
                                             error::error(ident.line, "Cannot change entire list");
@@ -392,14 +426,15 @@ impl Eval {
 
                                     match call.keyword {
                                         TokenType::Set => {
-                                            self.set_var(&ident.name.clone(), &[literal.clone()]);
+                                            self.scope
+                                                .set_var(&ident.name.clone(), &[literal.clone()]);
                                             None
                                         }
                                         TokenType::AddWith => match var {
                                             LiteralType::Number(num) => match literal {
                                                 LiteralType::Number(num2) => {
                                                     let new_val = num + num2;
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::Number(new_val)],
                                                     );
@@ -418,7 +453,7 @@ impl Eval {
                                             LiteralType::String(mut s) => match literal {
                                                 LiteralType::String(s2) => {
                                                     s.push_str(s2);
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -426,7 +461,7 @@ impl Eval {
                                                 }
                                                 LiteralType::Number(n) => {
                                                     s.push_str(&n.to_string());
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -434,7 +469,7 @@ impl Eval {
                                                 }
                                                 LiteralType::Boolean(boolean) => {
                                                     s.push_str(&boolean.to_string());
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -442,7 +477,7 @@ impl Eval {
                                                 }
                                                 LiteralType::Hempty => {
                                                     s.push_str("null");
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
                                                     );
@@ -463,7 +498,7 @@ impl Eval {
                                             LiteralType::Number(num) => match literal {
                                                 LiteralType::Number(num2) => {
                                                     let new_val = num * num2;
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::Number(new_val)],
                                                     );
@@ -484,7 +519,7 @@ impl Eval {
                                                     let new_string = (0..*num as i32)
                                                         .map(|_| s.clone())
                                                         .collect::<String>();
-                                                    self.set_var(
+                                                    self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(new_string)],
                                                     );
@@ -516,7 +551,7 @@ impl Eval {
                                                     LiteralType::Number(num) => {
                                                         if call.keyword == TokenType::SubtractWith {
                                                             let new_val = nums - num;
-                                                            self.set_var(
+                                                            self.scope.set_var(
                                                                 &ident.name,
                                                                 &[LiteralType::Number(new_val)],
                                                             );
@@ -524,7 +559,7 @@ impl Eval {
                                                             None
                                                         } else {
                                                             let new_val = nums / num;
-                                                            self.set_var(
+                                                            self.scope.set_var(
                                                                 &ident.name,
                                                                 &[LiteralType::Number(new_val)],
                                                             );
@@ -565,7 +600,7 @@ impl Eval {
                                 }
                                 2 => {
                                     if call.keyword == TokenType::Set {
-                                        self.set_var(&ident.name, &new_stuff);
+                                        self.scope.set_var(&ident.name, &new_stuff);
                                         None
                                     } else {
                                         error::error(
@@ -620,34 +655,7 @@ impl Eval {
 
 impl fmt::Debug for Eval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "variables:")?;
-        for (key, value) in &self.vars {
-            writeln!(
-                f,
-                "\t{}: {}",
-                key,
-                match value {
-                    NewIdentifierType::List(list) => list.to_string(),
-                    NewIdentifierType::Vairable(variable) => variable.to_string(),
-                }
-            )?;
-        }
-        writeln!(f, "Functions:")?;
-        for (key, value) in &self.function {
-            writeln!(
-                f,
-                "\t{} {}: body: {}",
-                key,
-                value.1,
-                value
-                    .0
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join("\n\t")
-            )?;
-        }
-
+        write!(f, "scope {:?}", self.scope).unwrap();
         write!(
             f,
             "Body: \n\t{}",
