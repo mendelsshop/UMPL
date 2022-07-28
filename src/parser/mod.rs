@@ -526,21 +526,33 @@ impl Parser {
             }
             self.advance("after left paren expr");
             info!("found express");
-            let mut prints = false;
-            match self.token.token_type {
-                TokenType::GreaterThanSymbol => {
-                    prints = true;
+            let prints = match self.token.token_type {
+                TokenType::GreaterThanSymbol => true,
+                TokenType::LessThanSymbol => false,
+                _ => {
+                    error::error(
+                        self.token.line,
+                        "greater than symbol or less than symbol expected",
+                    );
                 }
-                TokenType::LessThanSymbol => {
-                    prints = false;
+            };
+            let new_line = if prints {
+                match self.tokens[self.current_position].token_type {
+                    TokenType::GreaterThanSymbol => {
+                        self.advance("after left paren expr");
+                        false
+                    }
+                    _ => true,
                 }
-                _ => {}
-            }
+            } else {
+                false
+            };
             warn!("{:?}", prints);
             Callorexpression::Expression(Expression {
                 inside: stuff,
                 print: prints,
                 line: self.token.line,
+                new_line,
             })
         } else {
             self.advance("after left paren");

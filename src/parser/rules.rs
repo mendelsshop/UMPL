@@ -8,14 +8,16 @@ pub struct Expression {
     pub inside: Stuff,
     pub print: bool,
     pub line: i32,
+    pub new_line: bool,
 }
 
 impl Expression {
-    pub const fn new(inside: Stuff, print: bool, line: i32) -> Self {
+    pub const fn new(inside: Stuff, print: bool, line: i32, new_line: bool) -> Self {
         Self {
             inside,
             print,
             line,
+            new_line,
         }
     }
 }

@@ -19,6 +19,7 @@ pub struct NewExpression {
     pub inside: LiteralType,
     pub print: bool,
     pub line: i32,
+    pub new_line: bool,
 }
 
 impl Display for NewExpression {
@@ -287,6 +288,7 @@ impl Eval {
                                 inside: exprs,
                                 print: expr.print,
                                 line: expr.line,
+                                new_line: expr.new_line,
                             });
                         }
                         None => {}
@@ -716,9 +718,14 @@ impl Display for Eval {
             "{}",
             self.body
                 .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n"),
+                .map(|x| {
+                    if x.new_line {
+                        format!("\n{}", x)
+                    } else {
+                        x.to_string()
+                    }
+                })
+                .collect::<String>()
         )
     }
 }
