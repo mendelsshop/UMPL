@@ -15,7 +15,6 @@ use crate::{
     token::TokenType,
 };
 #[derive(PartialEq, Clone)]
-
 pub struct NewExpression {
     pub inside: LiteralType,
     pub print: bool,
@@ -37,16 +36,30 @@ impl Display for NewExpression {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+pub enum LitOrList {
+    Identifier(Box<NewList>),
+    Literal(LiteralType),
+}
+
+impl Display for LitOrList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LitOrList::Identifier(i) => write!(f, "{}", i),
+            LitOrList::Literal(l) => write!(f, "{}", l),
+        }
+    }
+}
+#[derive(PartialEq, Clone, Debug)]
 pub struct NewList {
-    pub first: LiteralType,
-    pub second: LiteralType,
+    pub first: LitOrList,
+    pub second: LitOrList,
 }
 
 impl NewList {
     pub fn new(thing: &[LiteralType]) -> Self {
         Self {
-            first: thing[0].clone(),
-            second: thing[1].clone(),
+            first: LitOrList::Literal(thing[0].clone()),
+            second: LitOrList::Literal(thing[1].clone()),
         }
     }
 }
@@ -95,15 +108,15 @@ impl NewIdentifierType {
         }
     }
 }
-
-pub struct Scope {
+#[derive(PartialEq, Clone)]
+pub struct Eval {
     pub vars: HashMap<String, NewIdentifierType>,
     pub function: HashMap<char, (Vec<Thing>, f64)>,
     pub body: Vec<NewExpression>,
     pub level: i32,
 }
 
-impl Scope {
+impl Eval {
     pub fn set_var(&mut self, name: &str, value: &[LiteralType]) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
@@ -116,7 +129,35 @@ impl Scope {
 
         match name {
             name if name.ends_with(".first") | name.ends_with(".second") => {
-                self.vars.insert(name.to_string(), new_val);
+                if let Some(NewIdentifierType::List(mut list)) =
+                    self.get_var(&name[..name.len() - 6])
+                {
+                    if name.ends_with(".first") {
+                        {
+                            // check if new value is a list or a variable
+                            match &new_val {
+                                NewIdentifierType::List(list2) => {
+                                    list.first = LitOrList::Identifier(list2.clone());
+                                }
+                                NewIdentifierType::Vairable(var) => {
+                                    list.first = LitOrList::Literal(var.value.clone());
+                                }
+                            }
+                        }
+                    } else {
+                        // check if new value is a list or a variable
+                        match &new_val {
+                            NewIdentifierType::List(list2) => {
+                                list.second = LitOrList::Identifier(list2.clone());
+                            }
+                            NewIdentifierType::Vairable(var) => {
+                                list.second = LitOrList::Literal(var.value.clone());
+                            }
+                        }
+                    }
+                } else {
+                    error::error(0, "expected list, got something else");
+                }
             }
             _ => {
                 self.vars.insert(name.to_string(), new_val);
@@ -577,7 +618,7 @@ impl Scope {
     }
 }
 
-impl fmt::Debug for Scope {
+impl fmt::Debug for Eval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "variables:")?;
         for (key, value) in &self.vars {
@@ -621,7 +662,7 @@ impl fmt::Debug for Scope {
     }
 }
 
-impl Display for Scope {
+impl Display for Eval {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

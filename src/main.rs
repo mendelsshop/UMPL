@@ -19,7 +19,7 @@ use std::{
     path::Path,
     process::exit,
 };
-use umpl::{cli, error, eval::Scope, lexer::Lexer, parser::Parser};
+use umpl::{cli, error, eval::Eval, lexer::Lexer, parser::Parser};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
@@ -96,8 +96,6 @@ fn run(line: String) {
 
     let mut parsed = Parser::new(lexer.scan_tokens());
 
-    let thing = parsed.parse();
-
-    let scope = Scope::new(&thing);
+    let scope = Eval::new(&parsed.parse());
     println!("{}", scope);
 }
