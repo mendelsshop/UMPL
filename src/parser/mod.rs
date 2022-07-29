@@ -594,14 +594,15 @@ impl Parser {
                     self.advance("Var");
                     self.advance("Var");
                     match self.token.token_type {
-                        TokenType::First | TokenType::Second => {
+                        TokenType::Car | TokenType::Cdr => {
                             // make a string with the name + . and
                             info!("found dot {}", self.token.token_type);
-                            let name = name + "." + format!("{:?}", self.token.token_type).as_str();
+                            let name =
+                                name + "." + &format!("{:?}", self.token.token_type).to_lowercase();
                             IdentifierPointer::new(name, self.token.line)
                         }
                         _ => {
-                            error::error(self.token.line, "first or second expected after dot");
+                            error::error(self.token.line, "car or Cdr expected after dot");
                         }
                     }
                 }

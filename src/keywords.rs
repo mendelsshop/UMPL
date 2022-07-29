@@ -29,8 +29,8 @@ impl Keyword {
         keywords.insert("subtractwith".to_string(), TokenType::SubtractWith);
         keywords.insert("multiplywith".to_string(), TokenType::MultiplyWith);
         keywords.insert("list".to_string(), TokenType::List);
-        keywords.insert("first".to_string(), TokenType::First);
-        keywords.insert("second".to_string(), TokenType::Second);
+        keywords.insert("car".to_string(), TokenType::Car);
+        keywords.insert("cdr".to_string(), TokenType::Cdr);
         keywords.insert("return".to_string(), TokenType::Return { value: None });
         keywords.insert("break".to_string(), TokenType::Break);
         keywords.insert("continue".to_string(), TokenType::Continue);

@@ -96,6 +96,5 @@ fn run(line: String) {
 
     let mut parsed = Parser::new(lexer.scan_tokens());
 
-    let scope = Eval::new(&parsed.parse());
-    println!("{}", scope);
+    let _ = Eval::new(&parsed.parse());
 }

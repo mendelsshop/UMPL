@@ -314,22 +314,22 @@ impl Display for Function {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct List {
-    pub first: OtherStuff,
-    pub second: OtherStuff,
+    pub car: OtherStuff,
+    pub cdr: OtherStuff,
 }
 
 impl List {
     pub fn new(thing: &[OtherStuff]) -> Self {
         Self {
-            first: thing[0].clone(),
-            second: thing[1].clone(),
+            car: thing[0].clone(),
+            cdr: thing[1].clone(),
         }
     }
 }
 
 impl Display for List {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "with: [{}, {}]", self.first, self.second)
+        write!(f, "with: [{}, {}]", self.car, self.cdr)
     }
 }
 

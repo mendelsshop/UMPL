@@ -17,7 +17,7 @@ create str with `df`
 ((multiplywith str 5))<
 (str)>>
 ((addwith str 5))<
-(str)<
+(str)>>
 create str with true 
 if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
     if {false} ⧼ ! if true create a code block} ⧼ ! create a nested if statement that checks the boolean expression ((eq true boolean.second))< 

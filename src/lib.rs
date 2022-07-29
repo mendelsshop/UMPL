@@ -11,6 +11,7 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cognitive_complexity)]
 #![allow(clippy::float_cmp)]
+#![allow(clippy::similar_names)]
 pub mod cli;
 pub mod error;
 pub mod eval;

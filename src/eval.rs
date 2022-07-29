@@ -28,9 +28,15 @@ impl Display for NewExpression {
             f,
             "{}",
             if self.print {
-                self.inside.clone()
+                if self.new_line {
+                    
+                    format!("{}\n", self.inside)
+                }
+                else {
+                    format!("{}", self.inside)
+                }
             } else {
-                LiteralType::String(String::from(""))
+                LiteralType::String(String::from("")).to_string()
             }
         )
     }
@@ -52,22 +58,22 @@ impl Display for LitOrList {
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct NewList {
-    pub first: LitOrList,
-    pub second: LitOrList,
+    pub car: LitOrList,
+    pub cdr: LitOrList,
 }
 
 impl NewList {
     pub fn new(thing: &[LiteralType]) -> Self {
         Self {
-            first: LitOrList::Literal(thing[0].clone()),
-            second: LitOrList::Literal(thing[1].clone()),
+            car: LitOrList::Literal(thing[0].clone()),
+            cdr: LitOrList::Literal(thing[1].clone()),
         }
     }
 }
 
 impl Display for NewList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "with: [{}, {}]", self.first, self.second)
+        write!(f, "with: [{}, {}]", self.car, self.cdr)
     }
 }
 
@@ -141,19 +147,19 @@ impl Scope {
             _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
         };
         match name {
-            name if name.ends_with(".first") | name.ends_with(".second") => {
+            name if name.ends_with(".car") | name.ends_with(".cdr") => {
                 if let Some(NewIdentifierType::List(mut list)) =
-                    self.get_var(&name[..name.len() - 6])
+                    self.get_var(&name[..name.len() - 4])
                 {
-                    if name.ends_with(".first") {
+                    if name.ends_with(".car") {
                         {
                             // check if new value is a list or a variable
                             match &new_val {
                                 NewIdentifierType::List(list2) => {
-                                    list.first = LitOrList::Identifier(list2.clone());
+                                    list.car = LitOrList::Identifier(list2.clone());
                                 }
                                 NewIdentifierType::Vairable(var) => {
-                                    list.first = LitOrList::Literal(var.value.clone());
+                                    list.car = LitOrList::Literal(var.value.clone());
                                 }
                             }
                         }
@@ -161,15 +167,15 @@ impl Scope {
                         // check if new value is a list or a variable
                         match &new_val {
                             NewIdentifierType::List(list2) => {
-                                list.second = LitOrList::Identifier(list2.clone());
+                                list.cdr = LitOrList::Identifier(list2.clone());
                             }
                             NewIdentifierType::Vairable(var) => {
-                                list.second = LitOrList::Literal(var.value.clone());
+                                list.cdr = LitOrList::Literal(var.value.clone());
                             }
                         }
                     }
                 } else {
-                    error::error(0, "expected list, got something else");
+                    error::error(1, "expected list, got something else");
                 }
             }
             _ => {
@@ -180,6 +186,32 @@ impl Scope {
 
     pub fn get_var(&self, name: &str) -> Option<NewIdentifierType> {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
+
+        if name.ends_with(".car") || name.ends_with(".cdr") {
+            if let Some(NewIdentifierType::List(list)) = self.get_var(&name[..name.len() - 4]) {
+                if name.ends_with(".car") {
+                    match list.car {
+                        LitOrList::Identifier(list2) => {
+                            return Some(NewIdentifierType::List(list2));
+                        }
+                        LitOrList::Literal(var) => {
+                            return Some(NewIdentifierType::Vairable(Box::new(NewVairable::new(
+                                var,
+                            ))));
+                        }
+                    }
+                }
+                match list.cdr {
+                    LitOrList::Identifier(list2) => {
+                        return Some(NewIdentifierType::List(list2));
+                    }
+                    LitOrList::Literal(var) => {
+                        return Some(NewIdentifierType::Vairable(Box::new(NewVairable::new(var))));
+                    }
+                }
+            }
+            error::error(1, "expected list, got something else");
+        }
         self.vars.get(name).cloned()
     }
     pub fn set_function(&mut self, name: char, args: Vec<Thing>, body: f64) {
@@ -194,7 +226,7 @@ impl Scope {
     }
 
     pub fn has_var(&self, name: &str) -> bool {
-        self.vars.contains_key(name)
+        self.get_var(name).is_some()
     }
 
     pub fn has_function(&self, name: char) -> bool {
@@ -202,22 +234,29 @@ impl Scope {
     }
 }
 
+pub enum Stopper {
+    Break,
+    Continue,
+    Return(LiteralType),
+}
 #[derive(PartialEq, Clone)]
 pub struct Eval {
-    pub body: Vec<NewExpression>,
     pub level: i32,
     pub scope: Scope,
+    pub in_function: bool,
+    pub in_loop: bool,
 }
 
 impl Eval {
     pub fn new(body: &[Thing]) -> Self {
         let mut self_ = Self {
-            body: Vec::new(),
             level: 0,
             scope: Scope::new(),
+            in_function: false,
+            in_loop: false,
         };
         self_.find_functions(body);
-        self_.body = self_.find_variables(body);
+        self_.find_variables(body);
         self_
     }
 
@@ -232,17 +271,16 @@ impl Eval {
             }
         }
     }
-
-    pub fn find_variables(&mut self, body: &[Thing]) -> Vec<NewExpression> {
+    #[allow(clippy::too_many_lines)]
+    pub fn find_variables(&mut self, body: &[Thing]) -> Option<Stopper> {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-        let mut new_body: Vec<NewExpression> = Vec::new();
         for thing in body {
             match thing.clone() {
                 Thing::Identifier(ref variable) => match variable.value {
                     IdentifierType::Vairable(ref name) => {
-                        match self.find_pointer_in_other_stuff(&name.value, &mut new_body) {
+                        match self.find_pointer_in_other_stuff(&name.value) {
                             Some(pointer) => {
                                 self.scope.set_var(&variable.name, &[pointer]);
                             }
@@ -255,49 +293,44 @@ impl Eval {
                         }
                     }
                     IdentifierType::List(ref list) => {
-                        let first =
-                            match self.find_pointer_in_other_stuff(&list.first, &mut new_body) {
-                                Some(pointer) => pointer,
-                                None => LiteralType::from_other_stuff(list.first.clone()),
-                            };
-                        let second =
-                            match self.find_pointer_in_other_stuff(&list.second, &mut new_body) {
-                                Some(pointer) => pointer,
-                                None => LiteralType::from_other_stuff(list.second.clone()),
-                            };
-                        self.scope.set_var(&variable.name, &[first, second]);
+                        let car = match self.find_pointer_in_other_stuff(&list.car) {
+                            Some(pointer) => pointer,
+                            None => LiteralType::from_other_stuff(list.car.clone()),
+                        };
+
+                        let cdr = match self.find_pointer_in_other_stuff(&list.cdr) {
+                            Some(pointer) => pointer,
+                            None => LiteralType::from_other_stuff(list.cdr.clone()),
+                        };
+                        self.scope.set_var(&variable.name, &[car, cdr]);
                     }
                 },
-                Thing::Return(os, line) => match os {
-                    Some(os) => match self.find_pointer_in_other_stuff(&os, &mut new_body) {
-                        Some(identifier) => {
-                            todo!()
-                        }
-                        None => {
-                            todo!()
-                        }
-                    },
-                    None => {
-                        todo!()
-                    }
-                },
-                Thing::Expression(expr) => {
-                    match self.find_pointer_in_stuff(&expr.inside, &mut new_body) {
-                        Some(exprs) => {
-                            new_body.push(NewExpression {
+                Thing::Return(os, line) => {
+                    let ret = match os {
+                        Some(os) => match self.find_pointer_in_other_stuff(&os) {
+                            Some(identifier) => identifier,
+                            None => LiteralType::from_other_stuff(os),
+                        },
+                        None => LiteralType::Hempty,
+                    };
+                    return Some(Stopper::Return(ret));
+                }
+                Thing::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
+                    Some(exprs) => {
+                        print!(
+                            "{}",
+                            NewExpression {
                                 inside: exprs,
                                 print: expr.print,
                                 line: expr.line,
                                 new_line: expr.new_line,
-                            });
-                        }
-                        None => {}
+                            }
+                        );
                     }
-                }
+                    None => {}
+                },
                 Thing::IfStatement(if_statement) => {
-                    let conditon = match self
-                        .find_pointer_in_other_stuff(&if_statement.condition, &mut new_body)
-                    {
+                    let conditon = match self.find_pointer_in_other_stuff(&if_statement.condition) {
                         Some(pointer) => {
                             info!("if {:?}", pointer);
                             pointer
@@ -309,39 +342,98 @@ impl Eval {
                         error::error(if_statement.line, "expected boolean, got something else");
                     }
                     self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+
                     if conditon == LiteralType::Boolean(true) {
                         self.find_functions(&if_statement.body_true);
-                        let mut new_body_true = self.find_variables(&if_statement.body_true);
-                        new_body.append(&mut new_body_true);
+                        let body_true = self.find_variables(&if_statement.body_true);
+
+                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        match body_true {
+                            Some(stop) => match stop {
+                                Stopper::Break | Stopper::Continue => {
+                                    if self.in_loop {
+                                        return Some(stop);
+                                    }
+                                    error::error(
+                                        if_statement.line,
+                                        "break or continue outside of loop",
+                                    );
+                                }
+                                Stopper::Return(ret) => {
+                                    if self.in_function {
+                                        return Some(Stopper::Return(ret));
+                                    }
+                                    error::error(if_statement.line, "return outside of function");
+                                }
+                            },
+                            None => {}
+                        }
                     } else {
                         self.find_functions(&if_statement.body_false);
-                        let mut z = self.find_variables(&if_statement.body_false);
-                        new_body.append(&mut z);
+                        let z = self.find_variables(&if_statement.body_false);
+
+                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        match z {
+                            Some(stop) => match stop {
+                                Stopper::Break | Stopper::Continue => {
+                                    if self.in_loop {
+                                        return Some(stop);
+                                    }
+                                    error::error(
+                                        if_statement.line,
+                                        "break or continue outside of loop",
+                                    );
+                                }
+                                Stopper::Return(ret) => {
+                                    if self.in_function {
+                                        return Some(Stopper::Return(ret));
+                                    }
+                                    error::error(if_statement.line, "return outside of function");
+                                }
+                            },
+                            None => {}
+                        }
                     }
                 }
                 Thing::LoopStatement(loop_statement) => {
-                    self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
-                    self.find_functions(&loop_statement.body);
                     loop {
+                        self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+                        self.find_functions(&loop_statement.body);
+                        self.in_loop = true;
                         // TODO: find out when break/continue is called
-                        let mut z = self.find_variables(&loop_statement.body);
-                        new_body.append(&mut z);
+                        let z = self.find_variables(&loop_statement.body);
+
+                        self.scope = *self.scope.parent_scope.clone().unwrap();
+
+                        match z {
+                            Some(stop) => match stop {
+                                Stopper::Break => break,
+                                Stopper::Continue => continue,
+                                Stopper::Return(ret) => {
+                                    if self.in_function {
+                                        return Some(Stopper::Return(ret));
+                                    }
+                                    error::error(loop_statement.line, "return outside of function");
+                                }
+                            },
+                            None => {}
+                        }
                     }
+                    self.in_loop = false;
                 }
-                Thing::Break(_) | Thing::Continue(_) => {
-                    todo!()
+                Thing::Break(_) => {
+                    return Some(Stopper::Break);
+                }
+                Thing::Continue(_) => {
+                    return Some(Stopper::Continue);
                 }
                 _ => {}
             }
         }
-        new_body
+        None
     }
 
-    fn find_pointer_in_other_stuff(
-        &mut self,
-        other_stuff: &OtherStuff,
-        new_body: &mut Vec<NewExpression>,
-    ) -> Option<LiteralType> {
+    fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralType> {
         match other_stuff {
             OtherStuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
                 || {
@@ -357,21 +449,15 @@ impl Eval {
                     NewIdentifierType::Vairable(var) => Some(var.value.clone()),
                 },
             ),
-            OtherStuff::Expression(expr) => {
-                match self.find_pointer_in_stuff(&expr.inside, new_body) {
-                    Some(new_expr) => Some(new_expr),
-                    None => Some(LiteralType::from_stuff(expr.inside.clone())),
-                }
-            }
+            OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
+                Some(new_expr) => Some(new_expr),
+                None => Some(LiteralType::from_stuff(expr.inside.clone())),
+            },
             _ => None,
         }
     }
     #[allow(clippy::too_many_lines)]
-    fn find_pointer_in_stuff(
-        &mut self,
-        stuff: &Stuff,
-        new_body: &mut Vec<NewExpression>,
-    ) -> Option<LiteralType> {
+    fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<LiteralType> {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
             Stuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
@@ -400,17 +486,12 @@ impl Eval {
                                         .as_str(),
                                 );
                             }
-                            match self.find_pointer_in_stuff(thing, new_body) {
+                            match self.find_pointer_in_stuff(thing) {
                                 Some(new_thing) => {
                                     new_stuff.push(new_thing.clone());
                                 }
                                 None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
                             }
-                            self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
-                            self.find_functions(&function.0);
-                            // TODO: find if function has return in it and act accordingly
-                            let mut z = self.find_variables(&function.0);
-                            new_body.append(&mut z);
                         }
                         if new_stuff.len() != function.1 as usize {
                             error::error(
@@ -418,7 +499,33 @@ impl Eval {
                                     format!("Too few or too many arguments for function {} expected: {}, found: {}", call.keyword, function.1, new_stuff.len()),
                                 );
                         }
-                        todo!()
+                        self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+
+                        self.find_functions(&function.0);
+                        // TODO: find if function has return in it and act accordingly
+                        self.in_function = true;
+
+                        for (i, l) in new_stuff.iter().enumerate() {
+                            self.scope
+                                .set_var(format!("${}", i + 1).as_str(), &[l.clone()]);
+                        }
+
+                        let z = self.find_variables(&function.0);
+                        self.in_function = false;
+
+                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        match z {
+                            Some(v) => match v {
+                                Stopper::Return(a) => Some(a),
+                                _ => {
+                                    error::error(
+                                        call.line,
+                                        "cannot call break/continue at end of function",
+                                    );
+                                }
+                            },
+                            None => Some(LiteralType::Hempty),
+                        }
                     } else {
                         error::error(call.line, format!("Function {} is not defined", name));
                     }
@@ -450,7 +557,7 @@ impl Eval {
                         if self.scope.has_var(&ident.name) {
                             let mut new_stuff = Vec::new();
                             for thing in call.arguments.iter().skip(1) {
-                                match self.find_pointer_in_stuff(thing, new_body) {
+                                match self.find_pointer_in_stuff(thing) {
                                     Some(new_thing) => new_stuff.push(new_thing.clone()),
                                     None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
                                 }
@@ -679,7 +786,7 @@ impl Eval {
                 t => {
                     let mut new_stuff = Vec::new();
                     for thing in &call.arguments {
-                        match self.find_pointer_in_stuff(thing, new_body) {
+                        match self.find_pointer_in_stuff(thing) {
                             Some(new_thing) => new_stuff.push(new_thing.clone()),
                             None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
                         }
@@ -697,35 +804,6 @@ impl Eval {
 impl fmt::Debug for Eval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "scope {:?}", self.scope).unwrap();
-        write!(
-            f,
-            "Body: \n\t{}",
-            self.body
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n\t")
-        )
-        .unwrap();
         Ok(())
-    }
-}
-
-impl Display for Eval {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.body
-                .iter()
-                .map(|x| {
-                    if x.new_line {
-                        format!("\n{}", x)
-                    } else {
-                        x.to_string()
-                    }
-                })
-                .collect::<String>()
-        )
     }
 }

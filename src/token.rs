@@ -49,8 +49,8 @@ pub enum TokenType {
     DivideWith,
     MultiplyWith,
     List,
-    First,
-    Second,
+    Car,
+    Cdr,
     Return { value: Option<Box<OtherStuff>> },
     Colon,
     Break,
@@ -153,7 +153,7 @@ impl TokenType {
                                         if index > 0 {
                                             error::error(
                                                 line,
-                                                "Multiply can only be used with the first argument",
+                                                "Multiply can only be used with the car argument",
                                             );
                                         }
 
