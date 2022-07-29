@@ -93,8 +93,7 @@ fn main() {
 
 fn run(line: String) {
     let mut lexer = Lexer::new(line);
-
     let mut parsed = Parser::new(lexer.scan_tokens());
-
     Eval::new(&parsed.parse());
+
 }
