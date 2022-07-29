@@ -484,7 +484,10 @@ impl Parser {
                             return Some(Thing::Return(None, self.token.line));
                         }
                         // TODO: capture the value returned if any
+
+                        self.advance("parse_from_token return expecting expression");
                         let thing = self.parse_to_other_stuff();
+
                         Some(Thing::Return(Some(thing), self.token.line))
                     }
                     TokenType::Break => {

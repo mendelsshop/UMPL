@@ -29,10 +29,8 @@ impl Display for NewExpression {
             "{}",
             if self.print {
                 if self.new_line {
-                    
                     format!("{}\n", self.inside)
-                }
-                else {
+                } else {
                     format!("{}", self.inside)
                 }
             } else {
@@ -137,7 +135,7 @@ impl Scope {
             parent_scope: Some(parent),
         }
     }
-    pub fn set_var(&mut self, name: &str, value: &[LiteralType]) {
+    pub fn set_var(&mut self, name: &str, value: &[LiteralType], recurse: bool) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
         let new_val = match value.len() {
@@ -148,87 +146,151 @@ impl Scope {
         };
         match name {
             name if name.ends_with(".car") | name.ends_with(".cdr") => {
-                if let Some(NewIdentifierType::List(mut list)) =
-                    self.get_var(&name[..name.len() - 4])
-                {
-                    if name.ends_with(".car") {
-                        {
-                            // check if new value is a list or a variable
-                            match &new_val {
-                                NewIdentifierType::List(list2) => {
-                                    list.car = LitOrList::Identifier(list2.clone());
-                                }
+                let new_name = name.trim_end_matches(".car").trim_end_matches(".cdr");
+                if recurse {
+                    if self.has_var(new_name, false) {
+                        let mut new_var = match self.get_var(new_name) {
+                            NewIdentifierType::List(list) => list,
+                            _ => error::error(0, "expected list"),
+                        };
+
+                        if name.ends_with(".cdr") {
+                            new_var.cdr = match new_val {
+                                NewIdentifierType::List(list) => LitOrList::Identifier(list),
                                 NewIdentifierType::Vairable(var) => {
-                                    list.car = LitOrList::Literal(var.value.clone());
+                                    LitOrList::Literal(var.value.clone())
                                 }
-                            }
+                            };
+                        } else {
+                            new_var.car = match new_val {
+                                NewIdentifierType::List(list) => LitOrList::Identifier(list),
+                                NewIdentifierType::Vairable(var) => {
+                                    LitOrList::Literal(var.value.clone())
+                                }
+                            };
                         }
+                        self.vars
+                            .insert(new_name.to_string(), NewIdentifierType::List(new_var));
                     } else {
-                        // check if new value is a list or a variable
-                        match &new_val {
-                            NewIdentifierType::List(list2) => {
-                                list.cdr = LitOrList::Identifier(list2.clone());
-                            }
-                            NewIdentifierType::Vairable(var) => {
-                                list.cdr = LitOrList::Literal(var.value.clone());
-                            }
+                        match self.parent_scope.as_mut() {
+                            Some(parent) => parent.set_var(name, value, recurse),
+                            None => error::error(1, "variable not found"),
                         }
                     }
                 } else {
-                    error::error(1, "expected list, got something else");
+                    let mut new_var = match self.get_var(new_name) {
+                        NewIdentifierType::List(list) => list,
+                        _ => error::error(0, "expected list"),
+                    };
+
+                    if name.ends_with(".cdr") {
+                        new_var.cdr = match new_val {
+                            NewIdentifierType::List(list) => LitOrList::Identifier(list),
+                            NewIdentifierType::Vairable(var) => {
+                                LitOrList::Literal(var.value.clone())
+                            }
+                        };
+                    } else {
+                        new_var.car = match new_val {
+                            NewIdentifierType::List(list) => LitOrList::Identifier(list),
+                            NewIdentifierType::Vairable(var) => {
+                                LitOrList::Literal(var.value.clone())
+                            }
+                        };
+                    }
+                    self.vars
+                        .insert(new_name.to_string(), NewIdentifierType::List(new_var));
                 }
             }
             _ => {
-                self.vars.insert(name.to_string(), new_val);
+                if recurse {
+                    if self.has_var(name, false) {
+                        self.vars.insert(name.to_string(), new_val);
+                    } else {
+                        match self.parent_scope.as_mut() {
+                            Some(parent) => parent.set_var(name, value, recurse),
+                            None => error::error(1, "variable not found"),
+                        }
+                    }
+                } else {
+                    self.vars.insert(name.to_string(), new_val);
+                }
             }
         }
     }
-
-    pub fn get_var(&self, name: &str) -> Option<NewIdentifierType> {
+    pub fn get_var(&self, name: &str) -> NewIdentifierType {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
 
         if name.ends_with(".car") || name.ends_with(".cdr") {
-            if let Some(NewIdentifierType::List(list)) = self.get_var(&name[..name.len() - 4]) {
+            if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4]) {
                 if name.ends_with(".car") {
                     match list.car {
                         LitOrList::Identifier(list2) => {
-                            return Some(NewIdentifierType::List(list2));
+                            return NewIdentifierType::List(list2);
                         }
                         LitOrList::Literal(var) => {
-                            return Some(NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                var,
-                            ))));
+                            return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
                         }
                     }
                 }
                 match list.cdr {
                     LitOrList::Identifier(list2) => {
-                        return Some(NewIdentifierType::List(list2));
+                        return NewIdentifierType::List(list2);
                     }
                     LitOrList::Literal(var) => {
-                        return Some(NewIdentifierType::Vairable(Box::new(NewVairable::new(var))));
+                        return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
                     }
                 }
             }
             error::error(1, "expected list, got something else");
         }
-        self.vars.get(name).cloned()
+        match self.vars.get(name) {
+            Some(v) => v.clone(),
+            None => match &self.parent_scope {
+                Some(parent) => parent.get_var(name),
+                None => error::error(1, format!("variable not found {}", name)),
+            },
+        }
     }
     pub fn set_function(&mut self, name: char, args: Vec<Thing>, body: f64) {
         self.function.insert(name, (args, body));
     }
     pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64)> {
-        self.function.get(&name).cloned()
+        match self.function.get(&name) {
+            Some((args, body)) => Some(((*args).clone(), *body)),
+            None => match &self.parent_scope {
+                Some(parent) => parent.get_function(name),
+                None => None,
+            },
+        }
     }
-
     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
         self.vars.remove(name)
     }
+    pub fn has_var(&self, name: &str, recurse: bool) -> bool {
+        let name = if name.ends_with(".car") || name.ends_with(".cdr") {
+            &name[..name.len() - 4]
+        } else {
+            name
+        };
+        if !recurse {
+            return self.vars.contains_key(name);
+        }
 
-    pub fn has_var(&self, name: &str) -> bool {
-        self.get_var(name).is_some()
+        if self.vars.contains_key(name) {
+            true
+        } else {
+            match &self.parent_scope {
+                Some(parent) => parent.has_var(name, recurse),
+                None => false,
+            }
+        }
     }
-
+    pub fn drop_scope(&mut self) {
+        self.function = self.parent_scope.as_ref().unwrap().function.clone();
+        self.vars = self.parent_scope.as_ref().unwrap().vars.clone();
+        self.parent_scope = self.parent_scope.as_ref().unwrap().parent_scope.clone();
+    }
     pub fn has_function(&self, name: char) -> bool {
         self.function.contains_key(&name)
     }
@@ -282,12 +344,13 @@ impl Eval {
                     IdentifierType::Vairable(ref name) => {
                         match self.find_pointer_in_other_stuff(&name.value) {
                             Some(pointer) => {
-                                self.scope.set_var(&variable.name, &[pointer]);
+                                self.scope.set_var(&variable.name, &[pointer], false);
                             }
                             None => {
                                 self.scope.set_var(
                                     &variable.name,
                                     &[LiteralType::from_other_stuff(name.value.clone())],
+                                    false,
                                 );
                             }
                         }
@@ -302,7 +365,7 @@ impl Eval {
                             Some(pointer) => pointer,
                             None => LiteralType::from_other_stuff(list.cdr.clone()),
                         };
-                        self.scope.set_var(&variable.name, &[car, cdr]);
+                        self.scope.set_var(&variable.name, &[car, cdr], false);
                     }
                 },
                 Thing::Return(os, line) => {
@@ -347,7 +410,8 @@ impl Eval {
                         self.find_functions(&if_statement.body_true);
                         let body_true = self.find_variables(&if_statement.body_true);
 
-                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        self.scope.drop_scope();
+
                         match body_true {
                             Some(stop) => match stop {
                                 Stopper::Break | Stopper::Continue => {
@@ -372,7 +436,7 @@ impl Eval {
                         self.find_functions(&if_statement.body_false);
                         let z = self.find_variables(&if_statement.body_false);
 
-                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        self.scope.drop_scope();
                         match z {
                             Some(stop) => match stop {
                                 Stopper::Break | Stopper::Continue => {
@@ -398,12 +462,13 @@ impl Eval {
                 Thing::LoopStatement(loop_statement) => {
                     loop {
                         self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+
                         self.find_functions(&loop_statement.body);
                         self.in_loop = true;
                         // TODO: find out when break/continue is called
                         let z = self.find_variables(&loop_statement.body);
 
-                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        self.scope.drop_scope();
 
                         match z {
                             Some(stop) => match stop {
@@ -435,20 +500,13 @@ impl Eval {
 
     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralType> {
         match other_stuff {
-            OtherStuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
-                || {
-                    error::error(
-                        ident.line,
-                        format!("Variable {} is not defined", ident.name),
-                    );
-                },
-                |i| match i {
-                    NewIdentifierType::List(..) => {
-                        error::error(ident.line, "whole list not supported in call")
-                    }
-                    NewIdentifierType::Vairable(var) => Some(var.value.clone()),
-                },
-            ),
+            OtherStuff::Identifier(ident) => match self.scope.get_var(&ident.name) {
+                NewIdentifierType::List(..) => {
+                    error::error(ident.line, "whole list not supported in call")
+                }
+                NewIdentifierType::Vairable(var) => Some(var.value.clone()),
+            },
+
             OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
                 Some(new_expr) => Some(new_expr),
                 None => Some(LiteralType::from_stuff(expr.inside.clone())),
@@ -460,20 +518,13 @@ impl Eval {
     fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<LiteralType> {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
-            Stuff::Identifier(ident) => self.scope.get_var(&ident.name).map_or_else(
-                || {
-                    error::error(
-                        ident.line,
-                        format!("Variable {} is not defined", ident.name),
-                    );
-                },
-                |i| match i {
-                    NewIdentifierType::List(..) => {
-                        error::error(ident.line, "whole list not supported in call")
-                    }
-                    NewIdentifierType::Vairable(var) => Some(var.value.clone()),
-                },
-            ),
+            Stuff::Identifier(ident) => match self.scope.get_var(&ident.name) {
+                NewIdentifierType::List(..) => {
+                    error::error(ident.line, "whole list not supported in call")
+                }
+                NewIdentifierType::Vairable(var) => Some(var.value.clone()),
+            },
+
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
                     if let Some(function) = self.scope.get_function(*name) {
@@ -507,13 +558,13 @@ impl Eval {
 
                         for (i, l) in new_stuff.iter().enumerate() {
                             self.scope
-                                .set_var(format!("${}", i + 1).as_str(), &[l.clone()]);
+                                .set_var(format!("${}", i + 1).as_str(), &[l.clone()], false);
                         }
 
                         let z = self.find_variables(&function.0);
                         self.in_function = false;
 
-                        self.scope = *self.scope.parent_scope.clone().unwrap();
+                        self.scope.drop_scope();
                         match z {
                             Some(v) => match v {
                                 Stopper::Return(a) => Some(a),
@@ -554,7 +605,7 @@ impl Eval {
                 | TokenType::MultiplyWith
                 | TokenType::Set => match &call.arguments[0] {
                     Stuff::Identifier(ident) => {
-                        if self.scope.has_var(&ident.name) {
+                        if self.scope.has_var(&ident.name, true) {
                             let mut new_stuff = Vec::new();
                             for thing in call.arguments.iter().skip(1) {
                                 match self.find_pointer_in_stuff(thing) {
@@ -565,7 +616,7 @@ impl Eval {
                             match new_stuff.len() {
                                 1 => {
                                     let literal = &new_stuff[0];
-                                    let var = match self.scope.get_var(&ident.name).unwrap() {
+                                    let var = match self.scope.get_var(&ident.name) {
                                         NewIdentifierType::Vairable(v) => v.value.clone(),
                                         NewIdentifierType::List(..) => {
                                             error::error(ident.line, "Cannot change entire list");
@@ -574,8 +625,11 @@ impl Eval {
 
                                     match call.keyword {
                                         TokenType::Set => {
-                                            self.scope
-                                                .set_var(&ident.name.clone(), &[literal.clone()]);
+                                            self.scope.set_var(
+                                                &ident.name.clone(),
+                                                &[literal.clone()],
+                                                true,
+                                            );
                                             None
                                         }
                                         TokenType::AddWith => match var {
@@ -585,6 +639,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::Number(new_val)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -604,6 +659,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -612,6 +668,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -620,6 +677,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -628,6 +686,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(s)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -649,6 +708,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::Number(new_val)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -670,6 +730,7 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &[LiteralType::String(new_string)],
+                                                        true,
                                                     );
                                                     None
                                                 }
@@ -702,6 +763,7 @@ impl Eval {
                                                             self.scope.set_var(
                                                                 &ident.name,
                                                                 &[LiteralType::Number(new_val)],
+                                                                true,
                                                             );
 
                                                             None
@@ -710,6 +772,7 @@ impl Eval {
                                                             self.scope.set_var(
                                                                 &ident.name,
                                                                 &[LiteralType::Number(new_val)],
+                                                                true,
                                                             );
                                                             None
                                                         }
@@ -748,7 +811,7 @@ impl Eval {
                                 }
                                 2 => {
                                     if call.keyword == TokenType::Set {
-                                        self.scope.set_var(&ident.name, &new_stuff);
+                                        self.scope.set_var(&ident.name, &new_stuff, true);
                                         None
                                     } else {
                                         error::error(
