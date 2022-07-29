@@ -10,6 +10,9 @@
 `when the * is used it means one or more`
 <br>
 
+`when the ? is used it means one or two` 
+<br>
+
 `& means and`
 <br>
 
@@ -23,7 +26,7 @@
 [`<expression>+`](#expression)   `&|`  [`<definitions>+`](#definitions) `&|` [`<statements>+`](#statements)
 
 # expression:
-`"(",` [`<stuff>`](#stuff) `, ")", "<" | ">"` 
+`"(",` [`<stuff>`](#stuff) `, ")", "<" | ">"?` 
 
 # stuff:
 [`<literal>`](#literal) `|` [`<calling>`](#calling) `|` [`<identifier>`](#identifier)

@@ -1,6 +1,5 @@
 use crate::{
     error,
-    keywords::Keyword,
     token::{Token, TokenType},
 };
 use hexponent::FloatLiteral;
@@ -13,29 +12,27 @@ pub struct Lexer {
     start: usize,
     current: usize,
     line: i32,
-    keywords: Keyword,
 }
 
 impl Lexer {
-    pub fn new(source: String) -> Lexer {
-        Lexer {
+    pub const fn new(source: String) -> Self {
+        Self {
             token_list: Vec::new(),
             source,
             start: 0,   // bytes
             current: 0, // actual number of bytes in source
             line: 1,
-            keywords: Keyword::new(),
         }
     }
 
     pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token()
+            self.scan_token();
         }
         self.token_list
             .push(Token::new(TokenType::EOF, "", self.line));
-        self.token_list.to_owned()
+        self.token_list.clone()
     }
 
     fn is_at_end(&self) -> bool {
@@ -71,7 +68,7 @@ impl Lexer {
                         if !self.boolean() {
                             self.identifier();
                         }
-                    } else if c == 'n' {
+                    } else if c == 'h' {
                         if !self.hempty() {
                             self.identifier();
                         }
@@ -82,13 +79,13 @@ impl Lexer {
                 } else if c.is_ascii_digit() {
                     if self.peek() == 'x' {
                         self.advance();
-                        self.start += 2
+                        self.start += 2;
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
                     self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
                 } else {
-                    error::error(self.line, format!("uknown character {}", c).as_str());
+                    error::error(self.line, format!("uknown character {}", c));
                 }
             }
         }
@@ -129,17 +126,23 @@ impl Lexer {
     }
 
     fn hempty(&mut self) -> bool {
-        if self.peek() == 'u' {
+        if self.peek() == 'e' {
             self.advance();
-            if self.peek() == 'l' {
+            if self.peek() == 'm' {
                 self.advance();
-                if self.peek() == 'l' {
+                if self.peek() == 'p' {
                     self.advance();
-                    if self.peek().is_alphanumeric() || self.peek() == '-' {
-                        return false;
+                    if self.peek() == 't' {
+                        self.advance();
+                        if self.peek() == 'y' {
+                            self.advance();
+                            if self.peek().is_alphanumeric() || self.peek() == '-' {
+                                return false;
+                            }
+                            self.add_token(TokenType::Hempty);
+                            return true;
+                        }
                     }
-                    self.add_token(TokenType::Hempty);
-                    return true;
                 }
             }
         }
@@ -164,7 +167,7 @@ impl Lexer {
         let string = self.get_text();
         self.start -= 1;
         self.current += 1;
-        self.add_token(TokenType::String { literal: string })
+        self.add_token(TokenType::String { literal: string });
     }
 
     fn number(&mut self) {
@@ -194,7 +197,7 @@ impl Lexer {
             self.advance();
         }
         self.add_token(
-            self.keywords
+            crate::KEYWORDS
                 .get(&self.get_text())
                 .unwrap_or(TokenType::Identifier {
                     name: self.get_text(),
@@ -220,7 +223,7 @@ impl Lexer {
                 }
             }
         );
-        self.add_token(TokenType::Identifier { name: identifier })
+        self.add_token(TokenType::Identifier { name: identifier });
     }
 
     fn advance(&mut self) -> char {

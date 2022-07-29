@@ -8,14 +8,16 @@ pub struct Expression {
     pub inside: Stuff,
     pub print: bool,
     pub line: i32,
+    pub new_line: bool,
 }
 
 impl Expression {
-    pub fn new(inside: Stuff, print: bool, line: i32) -> Expression {
-        Expression {
+    pub const fn new(inside: Stuff, print: bool, line: i32, new_line: bool) -> Self {
+        Self {
             inside,
             print,
             line,
+            new_line,
         }
     }
 }
@@ -29,13 +31,12 @@ impl Display for Expression {
 #[derive(PartialEq, Clone, Debug)]
 pub struct IdentifierPointer {
     pub name: String,
-
     pub line: i32,
 }
 
 impl IdentifierPointer {
-    pub fn new(name: String, line: i32) -> IdentifierPointer {
-        IdentifierPointer { name, line }
+    pub const fn new(name: String, line: i32) -> Self {
+        Self { name, line }
     }
 }
 
@@ -69,29 +70,29 @@ pub struct Literal {
 }
 
 impl Literal {
-    pub fn new_string(string: String, line: i32) -> Literal {
-        Literal {
+    pub const fn new_string(string: String, line: i32) -> Self {
+        Self {
             literal: LiteralType::String(string),
             line,
         }
     }
 
-    pub fn new_number(number: f64, line: i32) -> Literal {
-        Literal {
+    pub const fn new_number(number: f64, line: i32) -> Self {
+        Self {
             literal: LiteralType::Number(number),
             line,
         }
     }
 
-    pub fn new_boolean(boolean: bool, line: i32) -> Literal {
-        Literal {
+    pub const fn new_boolean(boolean: bool, line: i32) -> Self {
+        Self {
             literal: LiteralType::Boolean(boolean),
             line,
         }
     }
 
-    pub fn new_hempty(line: i32) -> Literal {
-        Literal {
+    pub const fn new_hempty(line: i32) -> Self {
+        Self {
             literal: LiteralType::Hempty,
             line,
         }
@@ -99,7 +100,7 @@ impl Literal {
 }
 
 impl Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.literal)
     }
 }
@@ -111,13 +112,51 @@ pub enum LiteralType {
     Hempty,
 }
 
-impl Display for LiteralType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl LiteralType {
+    pub fn from_other_stuff(thing: OtherStuff) -> Self {
+        match thing {
+            OtherStuff::Literal(literal) => literal.literal,
+            _ => error::error(0, "not a literal"), // TODO: get line number
+        }
+    }
+    pub fn from_stuff(thing: Stuff) -> Self {
+        match thing {
+            Stuff::Literal(literal) => literal.literal,
+            _ => error::error(0, "not a literal"), // TODO: get line number
+        }
+    }
+    pub const fn new_string(string: String) -> Self {
+        Self::String(string)
+    }
+
+    pub const fn new_number(number: f64) -> Self {
+        Self::Number(number)
+    }
+
+    pub const fn new_boolean(boolean: bool) -> Self {
+        Self::Boolean(boolean)
+    }
+
+    pub const fn new_hempty() -> Self {
+        Self::Hempty
+    }
+    pub const fn type_eq(&self, other: &Self) -> bool {
         match self {
-            LiteralType::Number(num) => write!(f, "{}", num),
-            LiteralType::String(string) => write!(f, "{}", string),
-            LiteralType::Boolean(bool) => write!(f, "{}", bool),
-            LiteralType::Hempty => write!(f, "hempty"),
+            Self::Number(_) => matches!(other, Self::Number(_)),
+            Self::String(_) => matches!(other, Self::String(_)),
+            Self::Boolean(_) => matches!(other, Self::Boolean(_)),
+            Self::Hempty => matches!(other, Self::Hempty),
+        }
+    }
+}
+
+impl Display for LiteralType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(num) => write!(f, "{}", num),
+            Self::String(string) => write!(f, "{}", string),
+            Self::Boolean(bool) => write!(f, "{}", bool),
+            Self::Hempty => write!(f, "hempty"),
         }
     }
 }
@@ -129,11 +168,11 @@ pub enum IdentifierType {
 }
 
 impl IdentifierType {
-    pub fn new(thing: Vec<OtherStuff>) -> IdentifierType {
+    pub fn new(thing: &[OtherStuff]) -> Self {
         match thing.len() {
             0 => error::error(0, "expected Identifier, got empty list"),
-            1 => IdentifierType::Vairable(Box::new(Vairable::new(thing[0].clone()))),
-            2 => IdentifierType::List(Box::new(List::new(thing))),
+            1 => Self::Vairable(Box::new(Vairable::new(thing[0].clone()))),
+            2 => Self::List(Box::new(List::new(thing))),
             _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
         }
     }
@@ -147,15 +186,15 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    pub fn new(name: String, value: Vec<OtherStuff>, line: i32) -> Identifier {
-        Identifier {
+    pub fn new(name: String, value: &[OtherStuff], line: i32) -> Self {
+        Self {
             name,
             value: IdentifierType::new(value),
             line,
         }
     }
-    pub fn new_empty(name: String, line: i32) -> Identifier {
-        Identifier {
+    pub fn new_empty(name: String, line: i32) -> Self {
+        Self {
             name,
             value: IdentifierType::Vairable(Box::new(Vairable::new_empty(line))),
             line,
@@ -164,7 +203,7 @@ impl Identifier {
 }
 
 impl Display for Identifier {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{} {}",
@@ -185,9 +224,9 @@ pub struct Call {
 }
 
 impl Call {
-    pub fn new(arguments: Vec<Stuff>, line: i32, keyword: TokenType) -> Call {
-        Call {
-            arguments,
+    pub fn new(arguments: &[Stuff], line: i32, keyword: TokenType) -> Self {
+        Self {
+            arguments: arguments.to_vec(),
             line,
             keyword,
         }
@@ -195,7 +234,7 @@ impl Call {
 }
 
 impl Display for Call {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut c = String::from("");
         for arg in self.arguments.iter().enumerate() {
             write!(c, "{}{}", arg.1, {
@@ -205,7 +244,7 @@ impl Display for Call {
                     ""
                 }
             })
-            .unwrap()
+            .unwrap();
         }
         write!(f, "{:?}: [{}]", self.keyword, c)
     }
@@ -218,12 +257,22 @@ pub enum OtherStuff {
     Expression(Expression),
 }
 
+impl OtherStuff {
+    pub fn from_stuff(stuff: &Stuff) -> Self {
+        match stuff {
+            Stuff::Literal(literal) => Self::Literal(literal.clone()),
+            Stuff::Identifier(identifier) => Self::Identifier(identifier.clone()),
+            _ => error::error(0, "expected literal or identifier"),
+        }
+    }
+}
+
 impl Display for OtherStuff {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OtherStuff::Literal(literal) => write!(f, "{}", literal),
-            OtherStuff::Identifier(identifier) => write!(f, "{}", identifier),
-            OtherStuff::Expression(expression) => write!(f, "{}", expression),
+            Self::Literal(literal) => write!(f, "{}", literal),
+            Self::Identifier(identifier) => write!(f, "{}", identifier),
+            Self::Expression(expression) => write!(f, "{}", expression),
         }
     }
 }
@@ -237,18 +286,18 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(name: char, num_arguments: f64, body: Vec<Thing>, line: i32) -> Self {
-        Function {
+    pub fn new(name: char, num_arguments: f64, body: &[Thing], line: i32) -> Self {
+        Self {
             name,
             num_arguments,
-            body,
+            body: body.to_vec(),
             line,
         }
     }
 }
 
 impl Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Function: {} with {} arguments and body: [\n\t{}\n]",
@@ -256,7 +305,7 @@ impl Display for Function {
             self.num_arguments,
             self.body
                 .iter()
-                .map(|thing| thing.to_string())
+                .map(std::string::ToString::to_string)
                 .collect::<Vec<String>>()
                 .join("\n")
         )
@@ -265,22 +314,22 @@ impl Display for Function {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct List {
-    pub first: OtherStuff,
-    pub second: OtherStuff,
+    pub car: OtherStuff,
+    pub cdr: OtherStuff,
 }
 
 impl List {
-    pub fn new(thing: Vec<OtherStuff>) -> List {
-        List {
-            first: thing[0].clone(),
-            second: thing[1].clone(),
+    pub fn new(thing: &[OtherStuff]) -> Self {
+        Self {
+            car: thing[0].clone(),
+            cdr: thing[1].clone(),
         }
     }
 }
 
 impl Display for List {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "with: [{}, {}]", self.first, self.second)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "with: [{}, {}]", self.car, self.cdr)
     }
 }
 
@@ -290,19 +339,19 @@ pub struct Vairable {
 }
 
 impl Vairable {
-    pub fn new(value: OtherStuff) -> Self {
-        Vairable { value }
+    const fn new(value: OtherStuff) -> Self {
+        Self { value }
     }
 
-    pub fn new_empty(line: i32) -> Self {
-        Vairable {
+    pub const fn new_empty(line: i32) -> Self {
+        Self {
             value: OtherStuff::Literal(Literal::new_hempty(line)),
         }
     }
 }
 
 impl Display for Vairable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "with: {}", self.value)
     }
 }
@@ -322,7 +371,7 @@ impl IfStatement {
         body_false: Vec<Thing>,
         line: i32,
     ) -> Self {
-        IfStatement {
+        Self {
             condition,
             body_true,
             body_false,
@@ -332,19 +381,19 @@ impl IfStatement {
 }
 
 impl Display for IfStatement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "if statement: with condition: [{}] when true: [\n{}\n] and when false: [\n{}\n]",
             self.condition,
             self.body_true
                 .iter()
-                .map(|thing| thing.to_string())
+                .map(std::string::ToString::to_string)
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.body_false
                 .iter()
-                .map(|thing| thing.to_string())
+                .map(std::string::ToString::to_string)
                 .collect::<Vec<String>>()
                 .join("\n"),
         )
@@ -358,19 +407,22 @@ pub struct LoopStatement {
 }
 
 impl LoopStatement {
-    pub fn new(body: Vec<Thing>, line: i32) -> Self {
-        LoopStatement { body, line }
+    pub fn new(body: &[Thing], line: i32) -> Self {
+        Self {
+            body: body.to_vec(),
+            line,
+        }
     }
 }
 
 impl Display for LoopStatement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "loop statement: [\n{}\n]",
             self.body
                 .iter()
-                .map(|thing| thing.to_string())
+                .map(std::string::ToString::to_string)
                 .collect::<Vec<String>>()
                 .join("\n")
         )

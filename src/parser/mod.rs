@@ -1,6 +1,6 @@
 pub(crate) mod rules;
 use crate::{
-    error, keywords,
+    error,
     token::{Token, TokenType},
 };
 use log::{debug, info, warn};
@@ -19,12 +19,12 @@ pub struct Parser {
     done: bool,
     in_function: bool,
     in_loop: bool,
-    keywords: keywords::Keyword,
+
     variables: Vec<String>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             paren_count: 0,
             current_position: 0,
@@ -39,7 +39,6 @@ impl Parser {
             in_function: false,
             in_loop: false,
 
-            keywords: keywords::Keyword::new(),
             variables: Vec::new(),
         }
     }
@@ -144,6 +143,7 @@ impl Parser {
         info!("Done parsing");
         program
     }
+    #[allow(clippy::too_many_lines)]
     fn parse_from_token(&mut self) -> Option<Thing> {
         self.advance("parse_from_token");
         info!("new iteration");
@@ -164,7 +164,7 @@ impl Parser {
             TokenType::Identifier { .. } => {
                 error::error(self.token.line, "variable not allowed in this context");
             }
-            keyword if self.keywords.is_keyword(&keyword) => {
+            keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 info!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
                     TokenType::Potato => {
@@ -182,7 +182,7 @@ impl Parser {
                                         } else {
                                             error::error(
                                                 self.token.line,
-                                                format!("number expected in function declaration found floating point number literal with {}", literal).as_str(),
+                                                format!("number expected in function declaration found floating point number literal with {}", literal),
                                             );
                                         }
                                     }
@@ -190,7 +190,7 @@ impl Parser {
                                     _ => {
                                         error::error(
                                             self.token.line,
-                                            format!("number expected after function identifier, found {}", self.token).as_str(),
+                                            format!("number expected after function identifier, found {}", self.token),
                                         );
                                     }
                                 };
@@ -213,20 +213,20 @@ impl Parser {
                                     Some(Thing::Function(Function::new(
                                         name,
                                         num_args,
-                                        function,
+                                        &function,
                                         self.token.line,
                                     )))
                                 } else {
                                     error::error(
                                         self.token.line,
-                                        format!("code block expected after function identifier, found {}", self.token.token_type).as_str(),
+                                        format!("code block expected after function identifier, found {}", self.token.token_type),
                                     );
                                 }
                             }
                             tokentype => {
                                 error::error(
                                     self.token.line,
-                                    format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype).as_str(),
+                                    format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype),
                                 );
                             }
                         }
@@ -250,7 +250,7 @@ impl Parser {
                                             self.variables.push(name.clone());
                                             Some(Thing::Identifier(Identifier::new(
                                                 name,
-                                                vec![thing, thing1],
+                                                &[thing, thing1],
                                                 self.token.line,
                                             )))
                                         } else {
@@ -310,7 +310,7 @@ impl Parser {
                                     self.variables.push(name.clone());
                                     Some(Thing::Identifier(Identifier::new(
                                         name,
-                                        vec![thing],
+                                        &[thing],
                                         self.token.line,
                                     )))
                                 } else {
@@ -356,7 +356,7 @@ impl Parser {
                             self.advance("parse_from_token after loop body looking for loop end");
                             self.in_loop = false;
                             Some(Thing::LoopStatement(LoopStatement::new(
-                                loop_body,
+                                &loop_body,
                                 self.token.line,
                             )))
                         } else {
@@ -484,7 +484,10 @@ impl Parser {
                             return Some(Thing::Return(None, self.token.line));
                         }
                         // TODO: capture the value returned if any
+
+                        self.advance("parse_from_token return expecting expression");
                         let thing = self.parse_to_other_stuff();
+
                         Some(Thing::Return(Some(thing), self.token.line))
                     }
                     TokenType::Break => {
@@ -506,7 +509,7 @@ impl Parser {
             _ => {
                 error::error(
                     self.token.line,
-                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                    format!("{:?} not allowed in this context", self.token.token_type),
                 );
             }
         }
@@ -526,21 +529,33 @@ impl Parser {
             }
             self.advance("after left paren expr");
             info!("found express");
-            let mut prints = false;
-            match self.token.token_type {
-                TokenType::GreaterThanSymbol => {
-                    prints = true;
+            let prints = match self.token.token_type {
+                TokenType::GreaterThanSymbol => true,
+                TokenType::LessThanSymbol => false,
+                _ => {
+                    error::error(
+                        self.token.line,
+                        "greater than symbol or less than symbol expected",
+                    );
                 }
-                TokenType::LessThanSymbol => {
-                    prints = false;
+            };
+            let new_line = if prints {
+                match self.tokens[self.current_position].token_type {
+                    TokenType::GreaterThanSymbol => {
+                        self.advance("after left paren expr");
+                        false
+                    }
+                    _ => true,
                 }
-                _ => {}
-            }
+            } else {
+                false
+            };
             warn!("{:?}", prints);
             Callorexpression::Expression(Expression {
                 inside: stuff,
                 print: prints,
                 line: self.token.line,
+                new_line,
             })
         } else {
             self.advance("after left paren");
@@ -582,14 +597,15 @@ impl Parser {
                     self.advance("Var");
                     self.advance("Var");
                     match self.token.token_type {
-                        TokenType::First | TokenType::Second => {
+                        TokenType::Car | TokenType::Cdr => {
                             // make a string with the name + . and
                             info!("found dot {}", self.token.token_type);
-                            let name = name + "." + format!("{:?}", self.token.token_type).as_str();
+                            let name =
+                                name + "." + &format!("{:?}", self.token.token_type).to_lowercase();
                             IdentifierPointer::new(name, self.token.line)
                         }
                         _ => {
-                            error::error(self.token.line, "first or second expected after dot");
+                            error::error(self.token.line, "car or Cdr expected after dot");
                         }
                     }
                 }
@@ -640,7 +656,7 @@ impl Parser {
                     Callorexpression::Call(call) => Stuff::Call(call),
                     Callorexpression::Expression(a) => error::error(
                         self.token.line,
-                        format!("call expected after left parenthesis found {:?}", a).as_str(),
+                        format!("call expected after left parenthesis found {:?}", a),
                     ),
                 }
             }
@@ -658,7 +674,7 @@ impl Parser {
             _ => {
                 error::error(
                     self.token.line,
-                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                    format!("{:?} not allowed in this context", self.token.token_type),
                 );
             }
         }
@@ -690,7 +706,7 @@ impl Parser {
             _ => {
                 error::error(
                     self.token.line,
-                    format!("{:?} not allowed in this context", self.token.token_type).as_str(),
+                    format!("{:?} not allowed in this context", self.token.token_type),
                 );
             }
         }
@@ -719,23 +735,8 @@ pub enum Thing {
     // for the rest of the self.tokens we just have the token type and the line number
 }
 
-impl Thing {
-    pub fn get_line(&self) -> i32 {
-        match self {
-            Thing::Identifier(identifier) => identifier.line,
-            Thing::Expression(expression) => expression.line,
-            Thing::Function(function) => function.line,
-            Thing::IfStatement(if_statement) => if_statement.line,
-            Thing::LoopStatement(loop_statement) => loop_statement.line,
-            Thing::Break(line) => *line,
-            Thing::Continue(line) => *line,
-            Thing::Return(_, line) => *line,
-        }
-    }
-}
-
 impl Display for Thing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Thing::Expression(expression) => write!(f, "{}", expression),
             Thing::Identifier(s) => write!(f, "Identifier({})", s),
@@ -757,7 +758,7 @@ impl Display for Thing {
 }
 
 impl fmt::Debug for Thing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Thing::Expression(expression) => write!(f, "{:?}", expression),
             Thing::Identifier(t) => write!(f, "[Identifier({}) at line: {}]", t, t.line),

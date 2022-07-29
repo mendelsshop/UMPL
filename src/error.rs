@@ -1,8 +1,9 @@
 use crate::cli::EASY_MODE;
-use std::process::exit;
+use std::{fmt::Display, process::exit};
 
-fn report(line: i32, where_: &str, message: &str) -> ! {
-    let mut message = message;
+fn report<T: Display>(line: i32, where_: &str, message: T) -> ! {
+    let message = message.to_string();
+    let mut message = message.as_str();
     unsafe {
         if EASY_MODE {
         } else {
@@ -16,6 +17,6 @@ fn report(line: i32, where_: &str, message: &str) -> ! {
     exit(1);
 }
 
-pub fn error(line: i32, message: &str) -> ! {
+pub fn error<T: Display>(line: i32, message: T) -> ! {
     report(line, "", message)
 }

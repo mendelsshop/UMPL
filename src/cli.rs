@@ -9,8 +9,8 @@ pub struct ParsedArgs {
 }
 
 impl ParsedArgs {
-    fn parsed_args(repl: bool, file: String) -> ParsedArgs {
-        ParsedArgs {
+    const fn new(repl: bool, file: String) -> Self {
+        Self {
             repl,
             file,
             force: false,
@@ -19,12 +19,12 @@ impl ParsedArgs {
     }
 }
 
-pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
-    let mut to_return = ParsedArgs::parsed_args(false, String::from(""));
+pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
+    let mut to_return = ParsedArgs::new(false, String::from(""));
     let mut index: usize = 1; // start at 1 because index  0 is the program name
     if args.len() < 2 {
         // if there are no arguments run in repl mode with no file
-        return (0, ParsedArgs::parsed_args(true, String::from("")));
+        return (0, ParsedArgs::new(true, String::from("")));
     } else if args[1].ends_with(".umpl") {
         // make sure it's a .umpl file
         to_return.file = args[1].clone(); // if it is, then set file to the file name
@@ -48,9 +48,8 @@ pub fn get_string_args(args: &Vec<String>) -> (usize, ParsedArgs) {
                 // if it starts with a dash
                 index += arg_index; // then add the args index to the current index
                 break; // and break
-            } else {
-                usage(); // if not a flag, then its not one of the args we want so print usage and exit
             }
+            usage(); // if not a flag, then its not one of the args we want so print usage and exit
         }
     };
     (index, to_return)
@@ -88,9 +87,9 @@ fn usage() {
         -h: help
         -v: version
         -f: force",
-            )
+            );
         } else {
-            eprintln!("Segmentation fault (core dumped)")
+            eprintln!("Segmentation fault (core dumped)");
         }
     }
     exit(1);
