@@ -56,6 +56,7 @@ impl Keyword {
         keywords.insert("read".to_string(), TokenType::Read);
         keywords.insert("readline".to_string(), TokenType::ReadLine);
         keywords.insert("delete".to_string(), TokenType::Delete);
+        keywords.insert("spliton".to_string(), TokenType::SplitOn);
         Self { keywords }
     }
 

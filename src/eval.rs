@@ -4,6 +4,7 @@ use log::info;
 use std::{
     collections::HashMap,
     fmt::{self, Display},
+    fs::File,
 };
 
 use crate::{
@@ -43,7 +44,7 @@ impl Display for NewExpression {
 #[derive(PartialEq, Clone, Debug)]
 pub enum LitOrList {
     Identifier(Box<NewList>),
-    Literal(LiteralType),
+    Literal(LiteralOrFile),
 }
 
 impl Display for LitOrList {
@@ -63,8 +64,8 @@ pub struct NewList {
 impl NewList {
     pub fn new(thing: &[LiteralType]) -> Self {
         Self {
-            car: LitOrList::Literal(thing[0].clone()),
-            cdr: LitOrList::Literal(thing[1].clone()),
+            car: LitOrList::Literal(LiteralOrFile::Literal(thing[0].clone())),
+            cdr: LitOrList::Literal(LiteralOrFile::Literal(thing[1].clone())),
         }
     }
 }
@@ -75,19 +76,58 @@ impl Display for NewList {
     }
 }
 
+#[derive(Debug)]
+pub enum LiteralOrFile {
+    Literal(LiteralType),
+    File(File),
+}
+impl PartialEq for LiteralOrFile {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            LiteralOrFile::Literal(l) => match other {
+                LiteralOrFile::Literal(o) => l == o,
+                _ => false,
+            },
+            LiteralOrFile::File(f) => match other {
+                LiteralOrFile::File(o) => error::error(0, "cannot compare files"),
+                _ => error::error(1, "cannot compare files"),
+            },
+        }
+    }
+}
+
+impl Clone for LiteralOrFile {
+    fn clone(&self) -> Self {
+        match self {
+            LiteralOrFile::Literal(l) => Self::Literal(l.clone()),
+            LiteralOrFile::File(f) => error::error(0, "Can't clone a file"),
+        }
+    }
+}
+impl Display for LiteralOrFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LiteralOrFile::Literal(l) => write!(f, "{}", l),
+            _ => error::error(0, "files cannot be printed"),
+        }
+    }
+}
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct NewVairable {
-    pub value: LiteralType,
+    pub value: LiteralOrFile,
 }
 
 impl NewVairable {
     pub const fn new(value: LiteralType) -> Self {
-        Self { value }
+        Self {
+            value: LiteralOrFile::Literal(value),
+        }
     }
 
     pub const fn new_empty(line: i32) -> Self {
         Self {
-            value: LiteralType::new_hempty(),
+            value: LiteralOrFile::Literal(LiteralType::new_hempty()),
         }
     }
 }
@@ -228,18 +268,26 @@ impl Scope {
                         LitOrList::Identifier(list2) => {
                             return NewIdentifierType::List(list2);
                         }
-                        LitOrList::Literal(var) => {
-                            return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
-                        }
+                        LitOrList::Literal(var) => match var {
+                            LiteralOrFile::Literal(var) => {
+                                return NewIdentifierType::Vairable(Box::new(NewVairable::new(
+                                    var,
+                                )));
+                            }
+                            _ => error::error(0, "expected literal"),
+                        },
                     }
                 }
                 match list.cdr {
                     LitOrList::Identifier(list2) => {
                         return NewIdentifierType::List(list2);
                     }
-                    LitOrList::Literal(var) => {
-                        return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
-                    }
+                    LitOrList::Literal(var) => match var {
+                        LiteralOrFile::Literal(var) => {
+                            return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
+                        }
+                        _ => error::error(0, "expected literal"),
+                    },
                 }
             }
             error::error(1, "expected list, got something else");
@@ -504,7 +552,10 @@ impl Eval {
                 NewIdentifierType::List(..) => {
                     error::error(ident.line, "whole list not supported in call")
                 }
-                NewIdentifierType::Vairable(var) => Some(var.value.clone()),
+                NewIdentifierType::Vairable(var) => match var.value {
+                    LiteralOrFile::Literal(literal) => Some(literal),
+                    _ => error::error(ident.line, "variable is not a literal"),
+                },
             },
 
             OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
@@ -522,7 +573,10 @@ impl Eval {
                 NewIdentifierType::List(..) => {
                     error::error(ident.line, "whole list not supported in call")
                 }
-                NewIdentifierType::Vairable(var) => Some(var.value.clone()),
+                NewIdentifierType::Vairable(var) => match var.value {
+                    LiteralOrFile::Literal(literal) => Some(literal),
+                    _ => error::error(ident.line, "variable is not a literal"),
+                },
             },
 
             Stuff::Call(call) => match &call.keyword {
@@ -633,64 +687,68 @@ impl Eval {
                                             None
                                         }
                                         TokenType::AddWith => match var {
-                                            LiteralType::Number(num) => match literal {
-                                                LiteralType::Number(num2) => {
-                                                    let new_val = num + num2;
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::Number(new_val)],
-                                                        true,
-                                                    );
-                                                    None
+                                            LiteralOrFile::Literal(LiteralType::Number(num)) => {
+                                                match literal {
+                                                    LiteralType::Number(num2) => {
+                                                        let new_val = num + num2;
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::Number(new_val)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
+                                                    _ => {
+                                                        error::error(
+                                                            call.line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.name
+                                                            ),
+                                                        );
+                                                    }
                                                 }
-                                                _ => {
-                                                    error::error(
-                                                        call.line,
-                                                        format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
-                                                        ),
-                                                    );
+                                            }
+                                            LiteralOrFile::Literal(LiteralType::String(mut s)) => {
+                                                match literal {
+                                                    LiteralType::String(s2) => {
+                                                        s.push_str(s2);
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::String(s)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
+                                                    LiteralType::Number(n) => {
+                                                        s.push_str(&n.to_string());
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::String(s)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
+                                                    LiteralType::Boolean(boolean) => {
+                                                        s.push_str(&boolean.to_string());
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::String(s)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
+                                                    LiteralType::Hempty => {
+                                                        s.push_str("null");
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::String(s)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
                                                 }
-                                            },
-                                            LiteralType::String(mut s) => match literal {
-                                                LiteralType::String(s2) => {
-                                                    s.push_str(s2);
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::String(s)],
-                                                        true,
-                                                    );
-                                                    None
-                                                }
-                                                LiteralType::Number(n) => {
-                                                    s.push_str(&n.to_string());
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::String(s)],
-                                                        true,
-                                                    );
-                                                    None
-                                                }
-                                                LiteralType::Boolean(boolean) => {
-                                                    s.push_str(&boolean.to_string());
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::String(s)],
-                                                        true,
-                                                    );
-                                                    None
-                                                }
-                                                LiteralType::Hempty => {
-                                                    s.push_str("null");
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::String(s)],
-                                                        true,
-                                                    );
-                                                    None
-                                                }
-                                            },
+                                            }
                                             _ => {
                                                 error::error(
                                                     call.line,
@@ -702,48 +760,52 @@ impl Eval {
                                             }
                                         },
                                         TokenType::MultiplyWith => match var {
-                                            LiteralType::Number(num) => match literal {
-                                                LiteralType::Number(num2) => {
-                                                    let new_val = num * num2;
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::Number(new_val)],
-                                                        true,
-                                                    );
-                                                    None
+                                            LiteralOrFile::Literal(LiteralType::Number(num)) => {
+                                                match literal {
+                                                    LiteralType::Number(num2) => {
+                                                        let new_val = num * num2;
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::Number(new_val)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
+                                                    _ => {
+                                                        error::error(
+                                                            call.line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.name
+                                                            ),
+                                                        );
+                                                    }
                                                 }
-                                                _ => {
-                                                    error::error(
-                                                        call.line,
-                                                        format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
-                                                        ),
-                                                    );
+                                            }
+                                            LiteralOrFile::Literal(LiteralType::String(ref s)) => {
+                                                match literal {
+                                                    LiteralType::Number(num) => {
+                                                        let new_string = (0..*num as i32)
+                                                            .map(|_| s.clone())
+                                                            .collect::<String>();
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::String(new_string)],
+                                                            true,
+                                                        );
+                                                        None
+                                                    }
+                                                    _ => {
+                                                        error::error(
+                                                            call.line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.name
+                                                            ),
+                                                        );
+                                                    }
                                                 }
-                                            },
-                                            LiteralType::String(ref s) => match literal {
-                                                LiteralType::Number(num) => {
-                                                    let new_string = (0..*num as i32)
-                                                        .map(|_| s.clone())
-                                                        .collect::<String>();
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &[LiteralType::String(new_string)],
-                                                        true,
-                                                    );
-                                                    None
-                                                }
-                                                _ => {
-                                                    error::error(
-                                                        call.line,
-                                                        format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
-                                                        ),
-                                                    );
-                                                }
-                                            },
+                                            }
                                             _ => {
                                                 error::error(
                                                     call.line,
@@ -756,7 +818,9 @@ impl Eval {
                                         },
                                         TokenType::SubtractWith | TokenType::DivideWith => {
                                             match var {
-                                                LiteralType::Number(nums) => match literal {
+                                                LiteralOrFile::Literal(LiteralType::Number(
+                                                    nums,
+                                                )) => match literal {
                                                     LiteralType::Number(num) => {
                                                         if call.keyword == TokenType::SubtractWith {
                                                             let new_val = nums - num;

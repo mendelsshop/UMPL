@@ -80,6 +80,7 @@ pub enum TokenType {
     EOF,
     Program,
     Delete,
+    SplitOn,
 }
 
 impl TokenType {
@@ -365,6 +366,57 @@ impl TokenType {
                     } else {
                         error::error(line, format!("Expected 1 argument for {:?} operator", self));
                     }
+                }
+                Self::SplitOn => {
+                    if args.len() < 2 {
+                        error::error(
+                            line,
+                            format!("Expected al least 2 arguments for {:?} operator", self),
+                        );
+                    }
+                    let og_string = match &args[0] {
+                        LiteralType::String(string) => string,
+                        _ => error::error(line, format!("Expected string for {:?} operator", self)),
+                    };
+                    let split_on = match &args[1] {
+                        LiteralType::String(string) => string,
+                        _ => error::error(line, format!("Expected string for {:?} operator", self)),
+                    };
+                    // check if there is a third argument (number)
+                    args.get(2).map_or_else(
+                        || match og_string.split_once(split_on) {
+                            Some(v) => LiteralType::String(v.0.to_string()),
+                            None => LiteralType::String(og_string.to_string()),
+                        },
+                        |number| match number {
+                            LiteralType::Number(number) => {
+                                let number = *number as usize;
+                                // return the string until the nth time split_on is found
+                                let string: Vec<&str> =
+                                    og_string.split_inclusive(split_on).collect::<Vec<&str>>();
+                                if number > string.len() {
+                                    error::error(
+                                        line,
+                                        format!("{} is greater than the number of splits", number),
+                                    );
+                                }
+                                // loop through the splits and add them to the string if they are less than the number
+                                let mut ret_string = String::new();
+                                for i in string.iter().take(number) {
+                                    ret_string.push_str(i);
+                                }
+                                let ret_string = match ret_string.rsplit_once(split_on) {
+                                    Some(string) => string.0.to_string(),
+                                    None => ret_string,
+                                };
+                                LiteralType::String(ret_string)
+                            }
+                            _ => error::error(
+                                line,
+                                format!("Expected number for {:?} operator", self),
+                            ),
+                        },
+                    )
                 }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {
                     todo!()
