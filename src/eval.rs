@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    error::error,
+    error::{error, arg_error},
     parser::{
         rules::{IdentifierType, LiteralType, OtherStuff, Stuff},
         Thing,
@@ -579,13 +579,7 @@ impl Eval {
                     if let Some(function) = self.scope.get_function(*name) {
                         let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
-                            if index > function.1 as usize {
-                                error(
-                                    call.line,
-                                    format!("Too many arguments for function {}", call.keyword)
-                                        .as_str(),
-                                );
-                            }
+                            arg_error(function.1 as u32, index as u32, &call.keyword, true, call.line);
                             if let Some(new_thing) = self.find_pointer_in_stuff(thing) {
                                 new_stuff.push(new_thing.clone());
                             } else {
@@ -594,12 +588,7 @@ impl Eval {
                                 )));
                             }
                         }
-                        if new_stuff.len() != function.1 as usize {
-                            error(
-                                    call.line,
-                                    format!("Too few or too many arguments for function {} expected: {}, found: {}", call.keyword, function.1, new_stuff.len()),
-                                );
-                        }
+                        arg_error(function.1 as u32, new_stuff.len() as u32, &call.keyword, false, call.line);
                         self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
                         self.find_functions(&function.0);
                         // TODO: find if function has return in it and act accordingly
@@ -929,12 +918,7 @@ impl Eval {
                     }
                 }
                 TokenType::Open => {
-                    if call.arguments.len() != 1 {
-                        error(
-                            call.line,
-                            format!("Too many arguments for function {}", call.keyword).as_str(),
-                        );
-                    }
+                    arg_error(1,call.arguments.len() as u32, &call.keyword, false, call.line);
                     // check if the first argument is a string
                     let arg = if let Stuff::Literal(literal) = &call.arguments[0] {
                         if let LiteralType::String(s) = &literal.literal {
@@ -965,12 +949,7 @@ impl Eval {
                     Some(LiteralOrFile::File(file))
                 }
                 TokenType::Close => {
-                    if call.arguments.len() != 1 {
-                        error(
-                            call.line,
-                            format!("Too many arguments for function {}", call.keyword).as_str(),
-                        );
-                    }
+                    arg_error(1,call.arguments.len() as u32, &call.keyword, false, call.line);
                     // evalute args[0] and check if it is a file
                     match &call.arguments[0] {
                         Stuff::Identifier(ident) => {
@@ -999,7 +978,7 @@ impl Eval {
                             }
                         }
                         other => {
-                            match self.find_pointer_in_stuff(&other) {
+                            match self.find_pointer_in_stuff(other) {
                                 Some(LiteralOrFile::File(file)) => {
                                     drop(file);
                                 }

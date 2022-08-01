@@ -17,3 +17,26 @@ pub fn error<T: Display>(line: i32, message: T) -> ! {
     eprintln!("[line: {}], Error{}: {}", line, where_, message);
     exit(1);
 }
+
+#[allow(clippy::module_name_repetitions)]
+pub fn arg_error<T: Display>(
+    num_args: u32,
+    given_args: u32,
+    function: T,
+    at_least: bool,
+    line: i32,
+) {
+    if at_least {
+        if num_args > given_args {
+            error(
+                line,
+                format!("{} requires at least {} arguments", function, num_args),
+            );
+        }
+    } else if num_args != given_args {
+        error(
+            line,
+            format!("{} requires {} arguments", function, num_args),
+        );
+    }
+}
