@@ -68,7 +68,6 @@ pub enum TokenType {
     StrToNum,
     StrToBool,
     StrToHempty,
-    Eval,
     RunCommand,
     Open,
     Close,
@@ -193,10 +192,7 @@ impl TokenType {
                 | Self::StrToBool
                 | Self::StrToHempty
                 | Self::StrToNum
-                | Self::RunCommand
-                | Self::Eval
-                | Self::Open
-                | Self::Write => {
+                | Self::RunCommand => {
                     if args.len() != 1 {
                         error::error(
                             line,

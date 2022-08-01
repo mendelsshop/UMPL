@@ -23,9 +23,8 @@ Currenly working keywords for UMPL:
 - [x] strtonum
 - [x] strtobool
 - [x] strtohempty
-- [ ] eval
 - [x] runcommand
-- [ ] open
+- [x] open
 - [ ] close
 - [ ] write
 - [ ] read

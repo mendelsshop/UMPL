@@ -28,3 +28,4 @@ if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
 ⧽ else ⧼
     (`Hello World`)> ! else print the string Hello World (`Hello World`)>
 ⧽
+create file with ((open `log.yaml`))>

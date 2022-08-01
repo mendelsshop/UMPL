@@ -16,7 +16,7 @@ use crate::{
 };
 #[derive(PartialEq, Debug, Clone)]
 pub struct NewExpression {
-    pub inside: LiteralType,
+    pub inside: LiteralOrFile,
     pub print: bool,
     pub line: i32,
     pub new_line: bool,
@@ -34,7 +34,7 @@ impl Display for NewExpression {
                     format!("{}", self.inside)
                 }
             } else {
-                LiteralType::String(String::from("")).to_string()
+                "".to_string()
             }
         )
     }
@@ -61,10 +61,10 @@ pub struct NewList {
 }
 
 impl NewList {
-    pub fn new(thing: &[LiteralType]) -> Self {
+    pub fn new(thing: &[LiteralOrFile]) -> Self {
         Self {
-            car: LitOrList::Literal(LiteralOrFile::Literal(thing[0].clone())),
-            cdr: LitOrList::Literal(LiteralOrFile::Literal(thing[1].clone())),
+            car: LitOrList::Literal(thing[0].clone()),
+            cdr: LitOrList::Literal(thing[1].clone()),
         }
     }
 }
@@ -99,7 +99,10 @@ impl Clone for LiteralOrFile {
     fn clone(&self) -> Self {
         match self {
             LiteralOrFile::Literal(l) => Self::Literal(l.clone()),
-            LiteralOrFile::File(_f) => error(0, "Can't clone a file"),
+            LiteralOrFile::File(file) => Self::File(match file.try_clone() {
+                Ok(f) => f,
+                Err(_) => error(0, "cannot clone file"),
+            }),
         }
     }
 }
@@ -118,10 +121,8 @@ pub struct NewVairable {
 }
 
 impl NewVairable {
-    pub const fn new(value: LiteralType) -> Self {
-        Self {
-            value: LiteralOrFile::Literal(value),
-        }
+    pub const fn new(value: LiteralOrFile) -> Self {
+        Self { value }
     }
 }
 
@@ -137,7 +138,7 @@ pub enum NewIdentifierType {
 }
 
 impl NewIdentifierType {
-    pub fn new(thing: &[LiteralType]) -> Self {
+    pub fn new(thing: &[LiteralOrFile]) -> Self {
         match thing.len() {
             0 => error(0, "expected Identifier, got empty list"),
             1 => Self::Vairable(Box::new(NewVairable::new(thing[0].clone()))),
@@ -168,7 +169,7 @@ impl Scope {
             parent_scope: Some(parent),
         }
     }
-    pub fn set_var(&mut self, name: &str, value: &[LiteralType], recurse: bool) {
+    pub fn set_var(&mut self, name: &str, value: &[LiteralOrFile], recurse: bool) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
         let new_val: NewIdentifierType = match value.len() {
@@ -262,7 +263,7 @@ impl Scope {
                             return NewIdentifierType::List(list2);
                         }
                         LitOrList::Literal(var) => match var {
-                            LiteralOrFile::Literal(var) => {
+                            LiteralOrFile::Literal(_) => {
                                 return NewIdentifierType::Vairable(Box::new(NewVairable::new(
                                     var,
                                 )));
@@ -276,7 +277,7 @@ impl Scope {
                         return NewIdentifierType::List(list2);
                     }
                     LitOrList::Literal(var) => match var {
-                        LiteralOrFile::Literal(var) => {
+                        LiteralOrFile::Literal(_) => {
                             return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
                         }
                         _ => error(0, "expected literal"),
@@ -346,7 +347,7 @@ impl Default for Scope {
 pub enum Stopper {
     Break,
     Continue,
-    Return(LiteralType),
+    Return(LiteralOrFile),
 }
 #[derive(PartialEq, Clone)]
 pub struct Eval {
@@ -394,31 +395,37 @@ impl Eval {
                         } else {
                             self.scope.set_var(
                                 &variable.name,
-                                &[LiteralType::from_other_stuff(name.value.clone())],
+                                &[LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                    name.value.clone(),
+                                ))],
                                 false,
                             );
                         }
                     }
                     IdentifierType::List(ref list) => {
-                        let car: LiteralType = match self.find_pointer_in_other_stuff(&list.car) {
+                        let car: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.car) {
                             Some(pointer) => pointer,
-                            None => LiteralType::from_other_stuff(list.car.clone()),
+                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                list.car.clone(),
+                            )),
                         };
 
-                        let cdr: LiteralType = match self.find_pointer_in_other_stuff(&list.cdr) {
+                        let cdr: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.cdr) {
                             Some(pointer) => pointer,
-                            None => LiteralType::from_other_stuff(list.cdr.clone()),
+                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                list.cdr.clone(),
+                            )),
                         };
                         self.scope.set_var(&variable.name, &[car, cdr], false);
                     }
                 },
                 Thing::Return(os, _line) => {
-                    let ret: LiteralType = match os {
+                    let ret: LiteralOrFile = match os {
                         Some(os) => match self.find_pointer_in_other_stuff(&os) {
                             Some(identifier) => identifier,
-                            None => LiteralType::from_other_stuff(os),
+                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(os)),
                         },
-                        None => LiteralType::Hempty,
+                        None => LiteralOrFile::Literal(LiteralType::Hempty),
                     };
                     return Some(Stopper::Return(ret));
                 }
@@ -440,7 +447,10 @@ impl Eval {
                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
                             Some(pointer) => {
                                 info!("if {:?}", pointer);
-                                pointer
+                                match pointer {
+                                    LiteralOrFile::Literal(literal) => literal,
+                                    _ => error(if_statement.line, "cannot compare files"),
+                                }
                             }
                             None => LiteralType::from_other_stuff(if_statement.condition),
                         };
@@ -530,26 +540,28 @@ impl Eval {
         None
     }
 
-    fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralType> {
+    fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralOrFile> {
         match other_stuff {
             OtherStuff::Identifier(ident) => match self.scope.get_var(&ident.name) {
                 NewIdentifierType::List(..) => {
                     error(ident.line, "whole list not supported in call")
                 }
                 NewIdentifierType::Vairable(var) => match var.value {
-                    LiteralOrFile::Literal(literal) => Some(literal),
+                    LiteralOrFile::Literal(_) => Some(var.value),
                     _ => error(ident.line, "variable is not a literal"),
                 },
             },
             OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
                 Some(new_expr) => Some(new_expr),
-                None => Some(LiteralType::from_stuff(expr.inside.clone())),
+                None => Some(LiteralOrFile::Literal(LiteralType::from_stuff(
+                    expr.inside.clone(),
+                ))),
             },
             _ => None,
         }
     }
     #[allow(clippy::too_many_lines)]
-    fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<LiteralType> {
+    fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> Option<LiteralOrFile> {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
             Stuff::Identifier(ident) => match self.scope.get_var(&ident.name) {
@@ -557,7 +569,7 @@ impl Eval {
                     error(ident.line, "whole list not supported in call")
                 }
                 NewIdentifierType::Vairable(var) => match var.value {
-                    LiteralOrFile::Literal(literal) => Some(literal),
+                    LiteralOrFile::Literal(_) => Some(var.value),
                     _ => error(ident.line, "variable is not a literal"),
                 },
             },
@@ -565,7 +577,7 @@ impl Eval {
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
                     if let Some(function) = self.scope.get_function(*name) {
-                        let mut new_stuff: Vec<LiteralType> = Vec::new();
+                        let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             if index > function.1 as usize {
                                 error(
@@ -577,7 +589,9 @@ impl Eval {
                             if let Some(new_thing) = self.find_pointer_in_stuff(thing) {
                                 new_stuff.push(new_thing.clone());
                             } else {
-                                new_stuff.push(LiteralType::from_stuff(thing.clone()));
+                                new_stuff.push(LiteralOrFile::Literal(LiteralType::from_stuff(
+                                    thing.clone(),
+                                )));
                             }
                         }
                         if new_stuff.len() != function.1 as usize {
@@ -597,7 +611,7 @@ impl Eval {
                         let z: Option<Stopper> = self.find_variables(&function.0);
                         self.in_function = false;
                         self.scope.drop_scope();
-                        z.map_or(Some(LiteralType::Hempty), |v| {
+                        z.map_or(Some(LiteralOrFile::Literal(LiteralType::Hempty)), |v| {
                             if let Stopper::Return(a) = v {
                                 Some(a)
                             } else {
@@ -632,16 +646,18 @@ impl Eval {
                 | TokenType::Set => {
                     if let Stuff::Identifier(ident) = &call.arguments[0] {
                         if self.scope.has_var(&ident.name, true) {
-                            let mut new_stuff: Vec<LiteralType> = Vec::new();
+                            let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
                             call.arguments.iter().skip(1).for_each(|thing| {
                                 match self.find_pointer_in_stuff(thing) {
                                     Some(new_thing) => new_stuff.push(new_thing),
-                                    None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
+                                    None => new_stuff.push(LiteralOrFile::Literal(
+                                        LiteralType::from_stuff(thing.clone()),
+                                    )),
                                 }
                             });
                             match new_stuff.len() {
                                 1 => {
-                                    let literal: &LiteralType = &new_stuff[0];
+                                    let literal: &LiteralOrFile = &new_stuff[0];
                                     let var: LiteralOrFile = match self.scope.get_var(&ident.name) {
                                         NewIdentifierType::Vairable(v) => v.value.clone(),
                                         NewIdentifierType::List(..) => {
@@ -659,11 +675,16 @@ impl Eval {
                                         }
                                         TokenType::AddWith => match var {
                                             LiteralOrFile::Literal(LiteralType::Number(num)) => {
-                                                if let LiteralType::Number(num2) = literal {
+                                                if let LiteralOrFile::Literal(
+                                                    LiteralType::Number(num2),
+                                                ) = literal
+                                                {
                                                     let new_val = num + num2;
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralType::Number(new_val)],
+                                                        &[LiteralOrFile::Literal(
+                                                            LiteralType::Number(new_val),
+                                                        )],
                                                         true,
                                                     );
                                                     None
@@ -679,41 +700,64 @@ impl Eval {
                                             }
                                             LiteralOrFile::Literal(LiteralType::String(mut s)) => {
                                                 match literal {
-                                                    LiteralType::String(s2) => {
+                                                    LiteralOrFile::Literal(
+                                                        LiteralType::String(s2),
+                                                    ) => {
                                                         s.push_str(s2);
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralType::String(s)],
+                                                            &[LiteralOrFile::Literal(
+                                                                LiteralType::String(s),
+                                                            )],
                                                             true,
                                                         );
                                                         None
                                                     }
-                                                    LiteralType::Number(n) => {
+                                                    LiteralOrFile::Literal(
+                                                        LiteralType::Number(n),
+                                                    ) => {
                                                         s.push_str(&n.to_string());
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralType::String(s)],
+                                                            &[LiteralOrFile::Literal(
+                                                                LiteralType::String(s),
+                                                            )],
                                                             true,
                                                         );
                                                         None
                                                     }
-                                                    LiteralType::Boolean(boolean) => {
+                                                    LiteralOrFile::Literal(
+                                                        LiteralType::Boolean(boolean),
+                                                    ) => {
                                                         s.push_str(&boolean.to_string());
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralType::String(s)],
+                                                            &[LiteralOrFile::Literal(
+                                                                LiteralType::String(s),
+                                                            )],
                                                             true,
                                                         );
                                                         None
                                                     }
-                                                    LiteralType::Hempty => {
+                                                    LiteralOrFile::Literal(LiteralType::Hempty) => {
                                                         s.push_str("null");
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralType::String(s)],
+                                                            &[LiteralOrFile::Literal(
+                                                                LiteralType::String(s),
+                                                            )],
                                                             true,
                                                         );
                                                         None
+                                                    }
+                                                    _ => {
+                                                        error(
+                                                            call.line,
+                                                            format!(
+                                                                "Variable {} is not a string",
+                                                                ident.name
+                                                            ),
+                                                        );
                                                     }
                                                 }
                                             }
@@ -729,11 +773,16 @@ impl Eval {
                                         },
                                         TokenType::MultiplyWith => match var {
                                             LiteralOrFile::Literal(LiteralType::Number(num)) => {
-                                                if let LiteralType::Number(num2) = literal {
+                                                if let LiteralOrFile::Literal(
+                                                    LiteralType::Number(num2),
+                                                ) = literal
+                                                {
                                                     let new_val: f64 = num * num2;
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralType::Number(new_val)],
+                                                        &[LiteralOrFile::Literal(
+                                                            LiteralType::Number(new_val),
+                                                        )],
                                                         true,
                                                     );
                                                     None
@@ -748,13 +797,18 @@ impl Eval {
                                                 }
                                             }
                                             LiteralOrFile::Literal(LiteralType::String(ref s)) => {
-                                                if let LiteralType::Number(num) = literal {
+                                                if let LiteralOrFile::Literal(
+                                                    LiteralType::Number(num),
+                                                ) = literal
+                                                {
                                                     let new_string: String = (0..*num as i32)
                                                         .map(|_| s.clone())
                                                         .collect();
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralType::String(new_string)],
+                                                        &[LiteralOrFile::Literal(
+                                                            LiteralType::String(new_string),
+                                                        )],
                                                         true,
                                                     );
                                                     None
@@ -783,12 +837,17 @@ impl Eval {
                                                 nums,
                                             )) = var
                                             {
-                                                if let LiteralType::Number(num) = literal {
+                                                if let LiteralOrFile::Literal(
+                                                    LiteralType::Number(num),
+                                                ) = literal
+                                                {
                                                     if call.keyword == TokenType::SubtractWith {
                                                         let new_val = nums - num;
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralType::Number(new_val)],
+                                                            &[LiteralOrFile::Literal(
+                                                                LiteralType::Number(new_val),
+                                                            )],
                                                             true,
                                                         );
 
@@ -797,7 +856,9 @@ impl Eval {
                                                         let new_val = nums / num;
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralType::Number(new_val)],
+                                                            &[LiteralOrFile::Literal(
+                                                                LiteralType::Number(new_val),
+                                                            )],
                                                             true,
                                                         );
                                                         None
@@ -867,18 +928,70 @@ impl Eval {
                         );
                     }
                 }
+                TokenType::Open => {
+                    if call.arguments.len() != 1 {
+                        error(
+                            call.line,
+                            format!("Too many arguments for function {}", call.keyword).as_str(),
+                        );
+                    }
+                    // check if the first argument is a string
+                    let arg = if let Stuff::Literal(literal) = &call.arguments[0] {
+                        if let LiteralType::String(s) = &literal.literal {
+                            s
+                        } else {
+                            error(
+                                call.line,
+                                format!("First argument of {} must be a string", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    } else {
+                        error(
+                            call.line,
+                            format!("First argument of {} must be a string", call.keyword).as_str(),
+                        );
+                    };
+                    // open the file
+                    let file: File = match File::open(arg) {
+                        Ok(file) => file,
+                        Err(e) => {
+                            error(
+                                call.line,
+                                format!("Could not open file {}: {}", arg, e).as_str(),
+                            );
+                        }
+                    };
+                    Some(LiteralOrFile::File(file))
+                }
                 t => {
                     let mut new_stuff: Vec<LiteralType> = Vec::new();
                     call.arguments.iter().for_each(|thing| {
                         match self.find_pointer_in_stuff(thing) {
-                            Some(new_thing) => new_stuff.push(new_thing),
+                            Some(new_thing) => match new_thing {
+                                LiteralOrFile::Literal(literal) => {
+                                    new_stuff.push(literal);
+                                }
+                                LiteralOrFile::File(_) => {
+                                    error(
+                                        call.line,
+                                        format!(
+                                            "Cannot use file as argument for function {}",
+                                            call.keyword
+                                        )
+                                        .as_str(),
+                                    );
+                                }
+                            },
                             None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
                         }
                     });
-                    Some(t.r#do(&new_stuff, call.line))
+                    Some(LiteralOrFile::Literal(t.r#do(&new_stuff, call.line)))
                 }
             },
-            _ => Some(LiteralType::from_stuff(stuff.clone())),
+            _ => Some(LiteralOrFile::Literal(LiteralType::from_stuff(
+                stuff.clone(),
+            ))),
         }
     }
 }

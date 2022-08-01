@@ -48,7 +48,6 @@ impl Keyword {
         keywords.insert("strtonum".to_string(), TokenType::StrToNum);
         keywords.insert("strtobool".to_string(), TokenType::StrToBool);
         keywords.insert("strtohempty".to_string(), TokenType::StrToHempty);
-        keywords.insert("eval".to_string(), TokenType::Eval);
         keywords.insert("runcommand".to_string(), TokenType::RunCommand);
         keywords.insert("open".to_string(), TokenType::Open);
         keywords.insert("close".to_string(), TokenType::Close);
