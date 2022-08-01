@@ -25,7 +25,7 @@ Currenly working keywords for UMPL:
 - [x] strtohempty
 - [x] runcommand
 - [x] open
-- [ ] close
+- [x] close
 - [ ] write
 - [ ] read
 - [ ] readline
