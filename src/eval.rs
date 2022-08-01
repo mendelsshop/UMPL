@@ -974,23 +974,29 @@ impl Eval {
                     // evalute args[0] and check if it is a file
                     match &call.arguments[0] {
                         Stuff::Identifier(ident) => {
-                            let file = self.scope.get_var(&ident.name); 
-                                match file {
-                                    NewIdentifierType::Vairable(var) => {
-                                        match var.value {
-                                            LiteralOrFile::File(_) => {
-                                                // set idnetifier to nothing
-                                                self.scope.set_var(&ident.name, &[LiteralOrFile::Literal(LiteralType::Hempty)], true);
-                                            },
-                                            _ => error(call.line, format!("{} is not a file", ident.name).as_str()),
+                            let file = self.scope.get_var(&ident.name);
+                            match file {
+                                NewIdentifierType::Vairable(var) => {
+                                    match var.value {
+                                        LiteralOrFile::File(_) => {
+                                            // set idnetifier to nothing
+                                            self.scope.set_var(
+                                                &ident.name,
+                                                &[LiteralOrFile::Literal(LiteralType::Hempty)],
+                                                true,
+                                            );
                                         }
+                                        _ => error(
+                                            call.line,
+                                            format!("{} is not a file", ident.name).as_str(),
+                                        ),
                                     }
-                                    NewIdentifierType::List(_) => error(
-                                        call.line,
-                                        format!("Variable {} is not a file", ident.name).as_str(),
-                                    ),
                                 }
-                            
+                                NewIdentifierType::List(_) => error(
+                                    call.line,
+                                    format!("Variable {} is not a file", ident.name).as_str(),
+                                ),
+                            }
                         }
                         other => {
                             match self.find_pointer_in_stuff(&other) {
@@ -1000,14 +1006,17 @@ impl Eval {
                                 _ => {
                                     error(
                                         call.line,
-                                        format!("First argument of {} must be a file", call.keyword)
-                                            .as_str(),
+                                        format!(
+                                            "First argument of {} must be a file",
+                                            call.keyword
+                                        )
+                                        .as_str(),
                                     );
                                 }
                             };
                         }
                     }
-                    
+
                     Some(LiteralOrFile::Literal(LiteralType::Hempty))
                 }
                 t => {
