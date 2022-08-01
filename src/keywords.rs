@@ -9,7 +9,7 @@ pub struct Keyword {
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
 impl Keyword {
     pub fn new() -> Self {
-        let mut keywords = HashMap::new();
+        let mut keywords: HashMap<String, TokenType> = HashMap::new();
         keywords.insert("plus".to_string(), TokenType::Plus);
         keywords.insert("minus".to_string(), TokenType::Minus);
         keywords.insert("multiply".to_string(), TokenType::Multiply);

@@ -20,7 +20,7 @@ impl ParsedArgs {
 }
 
 pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
-    let mut to_return = ParsedArgs::new(false, String::from(""));
+    let mut to_return: ParsedArgs = ParsedArgs::new(false, String::from(""));
     let mut index: usize = 1; // start at 1 because index  0 is the program name
     if args.len() < 2 {
         // if there are no arguments run in repl mode with no file
@@ -31,7 +31,6 @@ pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
         to_return.repl = false; // and set repl to false
         index += 1; // and increment index
         let file_len = to_return.file.strip_suffix(".umpl").unwrap().len(); // get the length of the file name without the .umpl
-
         if args.len() > 2 && args[2] == format!("{}", file_len) {
             unsafe {
                 EASY_MODE = true;
@@ -56,7 +55,7 @@ pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
 }
 
 pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut ParsedArgs) {
-    for arg in args[start_index..].iter() {
+    args[start_index..].iter().for_each(|arg| {
         // for each arg after the start index
         if arg.starts_with('-') {
             // if it starts with a dash check if its a correct flag and set the appropriate field if not print usage and exit
@@ -74,7 +73,7 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
         } else {
             usage();
         }
-    }
+    });
 }
 
 fn usage() {

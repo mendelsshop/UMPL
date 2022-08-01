@@ -388,8 +388,8 @@ impl TokenType {
                             Some(v) => LiteralType::String(v.0.to_string()),
                             None => LiteralType::String(og_string.to_string()),
                         },
-                        |number| match number {
-                            LiteralType::Number(number) => {
+                        |number| -> LiteralType {
+                            if let LiteralType::Number(number) = number {
                                 let number = *number as usize;
                                 // return the string until the nth time split_on is found
                                 let string: Vec<&str> =
@@ -402,19 +402,20 @@ impl TokenType {
                                 }
                                 // loop through the splits and add them to the string if they are less than the number
                                 let mut ret_string = String::new();
-                                for i in string.iter().take(number) {
+                                string.iter().take(number).for_each(|i: &&str| {
                                     ret_string.push_str(i);
-                                }
+                                });
                                 let ret_string = match ret_string.rsplit_once(split_on) {
                                     Some(string) => string.0.to_string(),
                                     None => ret_string,
                                 };
                                 LiteralType::String(ret_string)
+                            } else {
+                                error::error(
+                                    line,
+                                    format!("Expected number for {:?} operator", self),
+                                )
                             }
-                            _ => error::error(
-                                line,
-                                format!("Expected number for {:?} operator", self),
-                            ),
                         },
                     )
                 }

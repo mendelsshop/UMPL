@@ -172,7 +172,6 @@ impl Lexer {
 
     fn number(&mut self) {
         let hex_char = vec!['A', 'B', 'B', 'C', 'E', 'F'];
-
         while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
             self.advance();
         }
@@ -233,19 +232,19 @@ impl Lexer {
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        let text = self.source.chars();
-        let mut final_text = String::new();
-        for i in text.enumerate() {
+        let text: std::str::Chars<'_> = self.source.chars();
+        let mut final_text: String = String::new();
+        text.enumerate().for_each(|i| {
             if i.0 >= self.start && i.0 < self.current {
                 final_text.push(i.1);
             }
-        }
+        });
         self.token_list
             .push(Token::new(token_type, final_text.as_str(), self.line));
     }
 
     fn add_unicode_token(&mut self, token_type: TokenType) {
-        let text = format!("{}", self.source.chars().nth(self.start).expect("Error"));
+        let text: String = format!("{}", self.source.chars().nth(self.start).expect("Error"));
 
         self.token_list
             .push(Token::new(token_type, &text, self.line));
@@ -260,13 +259,13 @@ impl Lexer {
     }
 
     fn get_text(&self) -> String {
-        let text = self.source.chars();
-        let mut final_text = String::new();
-        for i in text.enumerate() {
+        let text: std::str::Chars<'_> = self.source.chars();
+        let mut final_text: String = String::new();
+        text.enumerate().for_each(|i| {
             if i.0 >= self.start && i.0 < self.current {
                 final_text.push(i.1);
             }
-        }
+        });
         final_text
     }
 }

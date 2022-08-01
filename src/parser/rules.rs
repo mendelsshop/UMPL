@@ -193,13 +193,6 @@ impl Identifier {
             line,
         }
     }
-    pub fn new_empty(name: String, line: i32) -> Self {
-        Self {
-            name,
-            value: IdentifierType::Vairable(Box::new(Vairable::new_empty(line))),
-            line,
-        }
-    }
 }
 
 impl Display for Identifier {
@@ -341,12 +334,6 @@ pub struct Vairable {
 impl Vairable {
     const fn new(value: OtherStuff) -> Self {
         Self { value }
-    }
-
-    pub const fn new_empty(line: i32) -> Self {
-        Self {
-            value: OtherStuff::Literal(Literal::new_hempty(line)),
-        }
     }
 }
 

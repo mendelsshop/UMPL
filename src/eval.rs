@@ -1,4 +1,3 @@
-#![allow(unused_variables, unreachable_patterns)]
 use log::info;
 
 use std::{
@@ -8,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    error,
+    error::error,
     parser::{
         rules::{IdentifierType, LiteralType, OtherStuff, Stuff},
         Thing,
@@ -88,9 +87,9 @@ impl PartialEq for LiteralOrFile {
                 LiteralOrFile::Literal(o) => l == o,
                 _ => false,
             },
-            LiteralOrFile::File(f) => match other {
-                LiteralOrFile::File(o) => error::error(0, "cannot compare files"),
-                _ => error::error(1, "cannot compare files"),
+            LiteralOrFile::File(_f) => match other {
+                LiteralOrFile::File(_o) => error(0, "cannot compare files"),
+                _ => error(1, "cannot compare files"),
             },
         }
     }
@@ -100,7 +99,7 @@ impl Clone for LiteralOrFile {
     fn clone(&self) -> Self {
         match self {
             LiteralOrFile::Literal(l) => Self::Literal(l.clone()),
-            LiteralOrFile::File(f) => error::error(0, "Can't clone a file"),
+            LiteralOrFile::File(_f) => error(0, "Can't clone a file"),
         }
     }
 }
@@ -108,7 +107,7 @@ impl Display for LiteralOrFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LiteralOrFile::Literal(l) => write!(f, "{}", l),
-            _ => error::error(0, "files cannot be printed"),
+            _ => error(0, "files cannot be printed"),
         }
     }
 }
@@ -122,12 +121,6 @@ impl NewVairable {
     pub const fn new(value: LiteralType) -> Self {
         Self {
             value: LiteralOrFile::Literal(value),
-        }
-    }
-
-    pub const fn new_empty(line: i32) -> Self {
-        Self {
-            value: LiteralOrFile::Literal(LiteralType::new_hempty()),
         }
     }
 }
@@ -146,10 +139,10 @@ pub enum NewIdentifierType {
 impl NewIdentifierType {
     pub fn new(thing: &[LiteralType]) -> Self {
         match thing.len() {
-            0 => error::error(0, "expected Identifier, got empty list"),
+            0 => error(0, "expected Identifier, got empty list"),
             1 => Self::Vairable(Box::new(NewVairable::new(thing[0].clone()))),
             2 => Self::List(Box::new(NewList::new(thing))),
-            _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
+            _ => error(0, "expected Identifier, got list with more than 2 elements"),
         }
     }
 }
@@ -178,11 +171,11 @@ impl Scope {
     pub fn set_var(&mut self, name: &str, value: &[LiteralType], recurse: bool) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
-        let new_val = match value.len() {
-            0 => error::error(0, "expected Identifier, got empty list"),
+        let new_val: NewIdentifierType = match value.len() {
+            0 => error(0, "expected Identifier, got empty list"),
             1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value[0].clone()))),
             2 => NewIdentifierType::List(Box::new(NewList::new(value))),
-            _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
+            _ => error(0, "expected Identifier, got list with more than 2 elements"),
         };
         match name {
             name if name.ends_with(".car") | name.ends_with(".cdr") => {
@@ -191,7 +184,7 @@ impl Scope {
                     if self.has_var(new_name, false) {
                         let mut new_var = match self.get_var(new_name) {
                             NewIdentifierType::List(list) => list,
-                            _ => error::error(0, "expected list"),
+                            _ => error(0, "expected list"),
                         };
 
                         if name.ends_with(".cdr") {
@@ -214,13 +207,13 @@ impl Scope {
                     } else {
                         match self.parent_scope.as_mut() {
                             Some(parent) => parent.set_var(name, value, recurse),
-                            None => error::error(1, "variable not found"),
+                            None => error(1, "variable not found"),
                         }
                     }
                 } else {
-                    let mut new_var = match self.get_var(new_name) {
+                    let mut new_var: Box<NewList> = match self.get_var(new_name) {
                         NewIdentifierType::List(list) => list,
-                        _ => error::error(0, "expected list"),
+                        _ => error(0, "expected list"),
                     };
 
                     if name.ends_with(".cdr") {
@@ -249,7 +242,7 @@ impl Scope {
                     } else {
                         match self.parent_scope.as_mut() {
                             Some(parent) => parent.set_var(name, value, recurse),
-                            None => error::error(1, "variable not found"),
+                            None => error(1, "variable not found"),
                         }
                     }
                 } else {
@@ -274,7 +267,7 @@ impl Scope {
                                     var,
                                 )));
                             }
-                            _ => error::error(0, "expected literal"),
+                            _ => error(0, "expected literal"),
                         },
                     }
                 }
@@ -286,17 +279,17 @@ impl Scope {
                         LiteralOrFile::Literal(var) => {
                             return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
                         }
-                        _ => error::error(0, "expected literal"),
+                        _ => error(0, "expected literal"),
                     },
                 }
             }
-            error::error(1, "expected list, got something else");
+            error(1, "expected list, got something else");
         }
         match self.vars.get(name) {
             Some(v) => v.clone(),
             None => match &self.parent_scope {
                 Some(parent) => parent.get_var(name),
-                None => error::error(1, format!("variable not found {}", name)),
+                None => error(1, format!("variable not found {}", name)),
             },
         }
     }
@@ -316,7 +309,7 @@ impl Scope {
         self.vars.remove(name)
     }
     pub fn has_var(&self, name: &str, recurse: bool) -> bool {
-        let name = if name.ends_with(".car") || name.ends_with(".cdr") {
+        let name: &str = if name.ends_with(".car") || name.ends_with(".cdr") {
             &name[..name.len() - 4]
         } else {
             name
@@ -341,6 +334,12 @@ impl Scope {
     }
     pub fn has_function(&self, name: char) -> bool {
         self.function.contains_key(&name)
+    }
+}
+
+impl Default for Scope {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -390,34 +389,31 @@ impl Eval {
             match thing.clone() {
                 Thing::Identifier(ref variable) => match variable.value {
                     IdentifierType::Vairable(ref name) => {
-                        match self.find_pointer_in_other_stuff(&name.value) {
-                            Some(pointer) => {
-                                self.scope.set_var(&variable.name, &[pointer], false);
-                            }
-                            None => {
-                                self.scope.set_var(
-                                    &variable.name,
-                                    &[LiteralType::from_other_stuff(name.value.clone())],
-                                    false,
-                                );
-                            }
+                        if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
+                            self.scope.set_var(&variable.name, &[pointer], false);
+                        } else {
+                            self.scope.set_var(
+                                &variable.name,
+                                &[LiteralType::from_other_stuff(name.value.clone())],
+                                false,
+                            );
                         }
                     }
                     IdentifierType::List(ref list) => {
-                        let car = match self.find_pointer_in_other_stuff(&list.car) {
+                        let car: LiteralType = match self.find_pointer_in_other_stuff(&list.car) {
                             Some(pointer) => pointer,
                             None => LiteralType::from_other_stuff(list.car.clone()),
                         };
 
-                        let cdr = match self.find_pointer_in_other_stuff(&list.cdr) {
+                        let cdr: LiteralType = match self.find_pointer_in_other_stuff(&list.cdr) {
                             Some(pointer) => pointer,
                             None => LiteralType::from_other_stuff(list.cdr.clone()),
                         };
                         self.scope.set_var(&variable.name, &[car, cdr], false);
                     }
                 },
-                Thing::Return(os, line) => {
-                    let ret = match os {
+                Thing::Return(os, _line) => {
+                    let ret: LiteralType = match os {
                         Some(os) => match self.find_pointer_in_other_stuff(&os) {
                             Some(identifier) => identifier,
                             None => LiteralType::from_other_stuff(os),
@@ -426,8 +422,8 @@ impl Eval {
                     };
                     return Some(Stopper::Return(ret));
                 }
-                Thing::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
-                    Some(exprs) => {
+                Thing::Expression(expr) => {
+                    if let Some(exprs) = self.find_pointer_in_stuff(&expr.inside) {
                         print!(
                             "{}",
                             NewExpression {
@@ -438,98 +434,86 @@ impl Eval {
                             }
                         );
                     }
-                    None => {}
-                },
+                }
                 Thing::IfStatement(if_statement) => {
-                    let conditon = match self.find_pointer_in_other_stuff(&if_statement.condition) {
-                        Some(pointer) => {
-                            info!("if {:?}", pointer);
-                            pointer
-                        }
-                        None => LiteralType::from_other_stuff(if_statement.condition),
-                    };
+                    let conditon: LiteralType =
+                        match self.find_pointer_in_other_stuff(&if_statement.condition) {
+                            Some(pointer) => {
+                                info!("if {:?}", pointer);
+                                pointer
+                            }
+                            None => LiteralType::from_other_stuff(if_statement.condition),
+                        };
                     if conditon.type_eq(&LiteralType::Boolean(true)) {
                     } else {
-                        error::error(if_statement.line, "expected boolean, got something else");
+                        error(if_statement.line, "expected boolean, got something else");
                     }
                     self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
 
                     if conditon == LiteralType::Boolean(true) {
                         self.find_functions(&if_statement.body_true);
-                        let body_true = self.find_variables(&if_statement.body_true);
+                        let body_true: Option<Stopper> =
+                            self.find_variables(&if_statement.body_true);
 
                         self.scope.drop_scope();
 
-                        match body_true {
-                            Some(stop) => match stop {
+                        if let Some(stop) = body_true {
+                            match stop {
                                 Stopper::Break | Stopper::Continue => {
                                     if self.in_loop {
                                         return Some(stop);
                                     }
-                                    error::error(
-                                        if_statement.line,
-                                        "break or continue outside of loop",
-                                    );
+                                    error(if_statement.line, "break or continue outside of loop");
                                 }
                                 Stopper::Return(ret) => {
                                     if self.in_function {
                                         return Some(Stopper::Return(ret));
                                     }
-                                    error::error(if_statement.line, "return outside of function");
+                                    error(if_statement.line, "return outside of function");
                                 }
-                            },
-                            None => {}
+                            }
                         }
                     } else {
                         self.find_functions(&if_statement.body_false);
                         let z = self.find_variables(&if_statement.body_false);
-
                         self.scope.drop_scope();
-                        match z {
-                            Some(stop) => match stop {
-                                Stopper::Break | Stopper::Continue => {
-                                    if self.in_loop {
-                                        return Some(stop);
-                                    }
-                                    error::error(
-                                        if_statement.line,
-                                        "break or continue outside of loop",
-                                    );
+                        if let Some(stop) = z {
+                            if let Stopper::Return(ret) = stop {
+                                if self.in_function {
+                                    return Some(Stopper::Return(ret));
                                 }
-                                Stopper::Return(ret) => {
-                                    if self.in_function {
-                                        return Some(Stopper::Return(ret));
-                                    }
-                                    error::error(if_statement.line, "return outside of function");
+                                error(if_statement.line, "return outside of function");
+                            } else {
+                                if self.in_loop {
+                                    return Some(stop);
                                 }
-                            },
-                            None => {}
+                                error(if_statement.line, "break or continue outside of loop");
+                            }
                         }
                     }
                 }
                 Thing::LoopStatement(loop_statement) => {
-                    loop {
+                    'l: loop {
                         self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
 
                         self.find_functions(&loop_statement.body);
                         self.in_loop = true;
                         // TODO: find out when break/continue is called
-                        let z = self.find_variables(&loop_statement.body);
+                        let z: Option<Stopper> = self.find_variables(&loop_statement.body);
 
                         self.scope.drop_scope();
 
-                        match z {
-                            Some(stop) => match stop {
-                                Stopper::Break => break,
-                                Stopper::Continue => continue,
+                        if let Some(stop) = z {
+                            match stop {
+                                Stopper::Break => break 'l,
+                                Stopper::Continue => continue 'l,
                                 Stopper::Return(ret) => {
                                     if self.in_function {
                                         return Some(Stopper::Return(ret));
                                     }
-                                    error::error(loop_statement.line, "return outside of function");
+                                    error(loop_statement.line, "return outside of function");
                                 }
-                            },
-                            None => {}
+                            }
                         }
                     }
                     self.in_loop = false;
@@ -550,14 +534,13 @@ impl Eval {
         match other_stuff {
             OtherStuff::Identifier(ident) => match self.scope.get_var(&ident.name) {
                 NewIdentifierType::List(..) => {
-                    error::error(ident.line, "whole list not supported in call")
+                    error(ident.line, "whole list not supported in call")
                 }
                 NewIdentifierType::Vairable(var) => match var.value {
                     LiteralOrFile::Literal(literal) => Some(literal),
-                    _ => error::error(ident.line, "variable is not a literal"),
+                    _ => error(ident.line, "variable is not a literal"),
                 },
             },
-
             OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
                 Some(new_expr) => Some(new_expr),
                 None => Some(LiteralType::from_stuff(expr.inside.clone())),
@@ -571,112 +554,100 @@ impl Eval {
         match stuff {
             Stuff::Identifier(ident) => match self.scope.get_var(&ident.name) {
                 NewIdentifierType::List(..) => {
-                    error::error(ident.line, "whole list not supported in call")
+                    error(ident.line, "whole list not supported in call")
                 }
                 NewIdentifierType::Vairable(var) => match var.value {
                     LiteralOrFile::Literal(literal) => Some(literal),
-                    _ => error::error(ident.line, "variable is not a literal"),
+                    _ => error(ident.line, "variable is not a literal"),
                 },
             },
 
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
                     if let Some(function) = self.scope.get_function(*name) {
-                        let mut new_stuff = Vec::new();
+                        let mut new_stuff: Vec<LiteralType> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             if index > function.1 as usize {
-                                error::error(
+                                error(
                                     call.line,
                                     format!("Too many arguments for function {}", call.keyword)
                                         .as_str(),
                                 );
                             }
-                            match self.find_pointer_in_stuff(thing) {
-                                Some(new_thing) => {
-                                    new_stuff.push(new_thing.clone());
-                                }
-                                None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
+                            if let Some(new_thing) = self.find_pointer_in_stuff(thing) {
+                                new_stuff.push(new_thing.clone());
+                            } else {
+                                new_stuff.push(LiteralType::from_stuff(thing.clone()));
                             }
                         }
                         if new_stuff.len() != function.1 as usize {
-                            error::error(
+                            error(
                                     call.line,
                                     format!("Too few or too many arguments for function {} expected: {}, found: {}", call.keyword, function.1, new_stuff.len()),
                                 );
                         }
                         self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
-
                         self.find_functions(&function.0);
                         // TODO: find if function has return in it and act accordingly
                         self.in_function = true;
-
-                        for (i, l) in new_stuff.iter().enumerate() {
+                        new_stuff.iter().enumerate().for_each(|(i, l)| {
                             self.scope
                                 .set_var(format!("${}", i + 1).as_str(), &[l.clone()], false);
-                        }
-
-                        let z = self.find_variables(&function.0);
+                        });
+                        let z: Option<Stopper> = self.find_variables(&function.0);
                         self.in_function = false;
-
                         self.scope.drop_scope();
-                        match z {
-                            Some(v) => match v {
-                                Stopper::Return(a) => Some(a),
-                                _ => {
-                                    error::error(
-                                        call.line,
-                                        "cannot call break/continue at end of function",
-                                    );
-                                }
-                            },
-                            None => Some(LiteralType::Hempty),
-                        }
+                        z.map_or(Some(LiteralType::Hempty), |v| {
+                            if let Stopper::Return(a) = v {
+                                Some(a)
+                            } else {
+                                error(call.line, "cannot call break/continue at end of function");
+                            }
+                        })
                     } else {
-                        error::error(call.line, format!("Function {} is not defined", name));
+                        error(call.line, format!("Function {} is not defined", name));
                     }
                 }
                 TokenType::Delete => {
                     if call.arguments.len() != 1 {
-                        error::error(call.line, "delete takes one argument");
+                        error(call.line, "delete takes one argument");
                     }
-                    match &call.arguments[0] {
-                        Stuff::Identifier(ident) => {
-                            if self.scope.delete_var(&ident.name).is_some() {
-                                None
-                            } else {
-                                error::error(
-                                    ident.line,
-                                    format!("Variable {} is not defined", ident.name),
-                                );
-                            }
+                    if let Stuff::Identifier(ident) = &call.arguments[0] {
+                        if self.scope.delete_var(&ident.name).is_some() {
+                            None
+                        } else {
+                            error(
+                                ident.line,
+                                format!("Variable {} is not defined", ident.name),
+                            );
                         }
-                        _ => error::error(call.line, "delete only takes a variable name"),
+                    } else {
+                        error(call.line, "delete only takes a variable name")
                     }
                 }
                 TokenType::AddWith
                 | TokenType::SubtractWith
                 | TokenType::DivideWith
                 | TokenType::MultiplyWith
-                | TokenType::Set => match &call.arguments[0] {
-                    Stuff::Identifier(ident) => {
+                | TokenType::Set => {
+                    if let Stuff::Identifier(ident) = &call.arguments[0] {
                         if self.scope.has_var(&ident.name, true) {
-                            let mut new_stuff = Vec::new();
-                            for thing in call.arguments.iter().skip(1) {
+                            let mut new_stuff: Vec<LiteralType> = Vec::new();
+                            call.arguments.iter().skip(1).for_each(|thing| {
                                 match self.find_pointer_in_stuff(thing) {
-                                    Some(new_thing) => new_stuff.push(new_thing.clone()),
+                                    Some(new_thing) => new_stuff.push(new_thing),
                                     None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
                                 }
-                            }
+                            });
                             match new_stuff.len() {
                                 1 => {
-                                    let literal = &new_stuff[0];
-                                    let var = match self.scope.get_var(&ident.name) {
+                                    let literal: &LiteralType = &new_stuff[0];
+                                    let var: LiteralOrFile = match self.scope.get_var(&ident.name) {
                                         NewIdentifierType::Vairable(v) => v.value.clone(),
                                         NewIdentifierType::List(..) => {
-                                            error::error(ident.line, "Cannot change entire list");
+                                            error(ident.line, "Cannot change entire list");
                                         }
                                     };
-
                                     match call.keyword {
                                         TokenType::Set => {
                                             self.scope.set_var(
@@ -688,25 +659,22 @@ impl Eval {
                                         }
                                         TokenType::AddWith => match var {
                                             LiteralOrFile::Literal(LiteralType::Number(num)) => {
-                                                match literal {
-                                                    LiteralType::Number(num2) => {
-                                                        let new_val = num + num2;
-                                                        self.scope.set_var(
-                                                            &ident.name,
-                                                            &[LiteralType::Number(new_val)],
-                                                            true,
-                                                        );
-                                                        None
-                                                    }
-                                                    _ => {
-                                                        error::error(
-                                                            call.line,
-                                                            format!(
-                                                                "Variable {} is not a number",
-                                                                ident.name
-                                                            ),
-                                                        );
-                                                    }
+                                                if let LiteralType::Number(num2) = literal {
+                                                    let new_val = num + num2;
+                                                    self.scope.set_var(
+                                                        &ident.name,
+                                                        &[LiteralType::Number(new_val)],
+                                                        true,
+                                                    );
+                                                    None
+                                                } else {
+                                                    error(
+                                                        call.line,
+                                                        format!(
+                                                            "Variable {} is not a number",
+                                                            ident.name
+                                                        ),
+                                                    );
                                                 }
                                             }
                                             LiteralOrFile::Literal(LiteralType::String(mut s)) => {
@@ -750,7 +718,7 @@ impl Eval {
                                                 }
                                             }
                                             _ => {
-                                                error::error(
+                                                error(
                                                     call.line,
                                                     format!(
                                                         "Variable {} is not a number/string",
@@ -761,53 +729,47 @@ impl Eval {
                                         },
                                         TokenType::MultiplyWith => match var {
                                             LiteralOrFile::Literal(LiteralType::Number(num)) => {
-                                                match literal {
-                                                    LiteralType::Number(num2) => {
-                                                        let new_val = num * num2;
-                                                        self.scope.set_var(
-                                                            &ident.name,
-                                                            &[LiteralType::Number(new_val)],
-                                                            true,
-                                                        );
-                                                        None
-                                                    }
-                                                    _ => {
-                                                        error::error(
-                                                            call.line,
-                                                            format!(
-                                                                "Variable {} is not a number",
-                                                                ident.name
-                                                            ),
-                                                        );
-                                                    }
+                                                if let LiteralType::Number(num2) = literal {
+                                                    let new_val: f64 = num * num2;
+                                                    self.scope.set_var(
+                                                        &ident.name,
+                                                        &[LiteralType::Number(new_val)],
+                                                        true,
+                                                    );
+                                                    None
+                                                } else {
+                                                    error(
+                                                        call.line,
+                                                        format!(
+                                                            "Variable {} is not a number",
+                                                            ident.name
+                                                        ),
+                                                    );
                                                 }
                                             }
                                             LiteralOrFile::Literal(LiteralType::String(ref s)) => {
-                                                match literal {
-                                                    LiteralType::Number(num) => {
-                                                        let new_string = (0..*num as i32)
-                                                            .map(|_| s.clone())
-                                                            .collect::<String>();
-                                                        self.scope.set_var(
-                                                            &ident.name,
-                                                            &[LiteralType::String(new_string)],
-                                                            true,
-                                                        );
-                                                        None
-                                                    }
-                                                    _ => {
-                                                        error::error(
-                                                            call.line,
-                                                            format!(
-                                                                "Variable {} is not a number",
-                                                                ident.name
-                                                            ),
-                                                        );
-                                                    }
+                                                if let LiteralType::Number(num) = literal {
+                                                    let new_string: String = (0..*num as i32)
+                                                        .map(|_| s.clone())
+                                                        .collect();
+                                                    self.scope.set_var(
+                                                        &ident.name,
+                                                        &[LiteralType::String(new_string)],
+                                                        true,
+                                                    );
+                                                    None
+                                                } else {
+                                                    error(
+                                                        call.line,
+                                                        format!(
+                                                            "Variable {} is not a number",
+                                                            ident.name
+                                                        ),
+                                                    );
                                                 }
                                             }
                                             _ => {
-                                                error::error(
+                                                error(
                                                     call.line,
                                                     format!(
                                                         "Variable {} is not a number/string",
@@ -817,53 +779,50 @@ impl Eval {
                                             }
                                         },
                                         TokenType::SubtractWith | TokenType::DivideWith => {
-                                            match var {
-                                                LiteralOrFile::Literal(LiteralType::Number(
-                                                    nums,
-                                                )) => match literal {
-                                                    LiteralType::Number(num) => {
-                                                        if call.keyword == TokenType::SubtractWith {
-                                                            let new_val = nums - num;
-                                                            self.scope.set_var(
-                                                                &ident.name,
-                                                                &[LiteralType::Number(new_val)],
-                                                                true,
-                                                            );
-
-                                                            None
-                                                        } else {
-                                                            let new_val = nums / num;
-                                                            self.scope.set_var(
-                                                                &ident.name,
-                                                                &[LiteralType::Number(new_val)],
-                                                                true,
-                                                            );
-                                                            None
-                                                        }
-                                                    }
-                                                    _ => {
-                                                        error::error(
-                                                            call.line,
-                                                            format!(
-                                                                "Variable {} is not a number",
-                                                                ident.name
-                                                            ),
+                                            if let LiteralOrFile::Literal(LiteralType::Number(
+                                                nums,
+                                            )) = var
+                                            {
+                                                if let LiteralType::Number(num) = literal {
+                                                    if call.keyword == TokenType::SubtractWith {
+                                                        let new_val = nums - num;
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::Number(new_val)],
+                                                            true,
                                                         );
+
+                                                        None
+                                                    } else {
+                                                        let new_val = nums / num;
+                                                        self.scope.set_var(
+                                                            &ident.name,
+                                                            &[LiteralType::Number(new_val)],
+                                                            true,
+                                                        );
+                                                        None
                                                     }
-                                                },
-                                                _ => {
-                                                    error::error(
+                                                } else {
+                                                    error(
                                                         call.line,
                                                         format!(
-                                                            "Variable {} is not a number/string",
+                                                            "Variable {} is not a number",
                                                             ident.name
                                                         ),
                                                     );
                                                 }
+                                            } else {
+                                                error(
+                                                    call.line,
+                                                    format!(
+                                                        "Variable {} is not a number/string",
+                                                        ident.name
+                                                    ),
+                                                );
                                             }
                                         }
                                         _ => {
-                                            error::error(
+                                            error(
                                                 call.line,
                                                 format!(
                                                     "Invalid operator for literal {}",
@@ -878,7 +837,7 @@ impl Eval {
                                         self.scope.set_var(&ident.name, &new_stuff, true);
                                         None
                                     } else {
-                                        error::error(
+                                        error(
                                             call.line,
                                             format!(
                                                 "Too many arguments for function {}",
@@ -888,41 +847,37 @@ impl Eval {
                                         );
                                     }
                                 }
-                                _ => error::error(
+                                _ => error(
                                     call.line,
                                     format!("Too many arguments for function {}", call.keyword)
                                         .as_str(),
                                 ),
                             }
                         } else {
-                            error::error(
+                            error(
                                 ident.line,
                                 format!("Variable {} is not defined", ident.name),
                             );
                         }
-                    }
-                    _ => {
-                        error::error(
+                    } else {
+                        error(
                             call.line,
                             format!("First argument of {} must be an identifier", call.keyword)
                                 .as_str(),
                         );
                     }
-                },
-
+                }
                 t => {
-                    let mut new_stuff = Vec::new();
-                    for thing in &call.arguments {
+                    let mut new_stuff: Vec<LiteralType> = Vec::new();
+                    call.arguments.iter().for_each(|thing| {
                         match self.find_pointer_in_stuff(thing) {
-                            Some(new_thing) => new_stuff.push(new_thing.clone()),
+                            Some(new_thing) => new_stuff.push(new_thing),
                             None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
                         }
-                    }
-                    let lit = t.r#do(&new_stuff, call.line);
-                    Some(lit)
+                    });
+                    Some(t.r#do(&new_stuff, call.line))
                 }
             },
-
             _ => Some(LiteralType::from_stuff(stuff.clone())),
         }
     }
