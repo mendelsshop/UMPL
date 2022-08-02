@@ -3,7 +3,7 @@ use log::info;
 use std::{
     collections::HashMap,
     fmt::{self, Display},
-    fs::File,
+    fs::File, io::Read,
 };
 
 use crate::{
@@ -956,7 +956,7 @@ impl Eval {
                     };
                     Some(LiteralOrFile::File(file))
                 }
-                TokenType::Close => {
+                TokenType::Close | TokenType::Read => {
                     arg_error(
                         1,
                         call.arguments.len() as u32,
@@ -967,17 +967,36 @@ impl Eval {
                     // evalute args[0] and check if it is a file
                     match &call.arguments[0] {
                         Stuff::Identifier(ident) => {
-                            let file = self.scope.get_var(&ident.name);
-                            match file {
+                            let files = self.scope.get_var(&ident.name);
+                            match files {
                                 NewIdentifierType::Vairable(var) => {
                                     match var.value {
-                                        LiteralOrFile::File(_) => {
+                                        LiteralOrFile::File(mut file) => {
                                             // set idnetifier to nothing
-                                            self.scope.set_var(
-                                                &ident.name,
-                                                &[LiteralOrFile::Literal(LiteralType::Hempty)],
-                                                true,
-                                            );
+                                            match call.keyword {
+                                                TokenType::Close => {
+                                                    self.scope.set_var(
+                                                        &ident.name,
+                                                        &[LiteralOrFile::Literal(LiteralType::Hempty)],
+                                                        true,
+                                                    );
+                                                }
+                                                TokenType::Read => {
+                                                    let mut contents: String = String::new(); // create a string to hold the contents of the file
+                                                    match file.read_to_string(&mut contents) {
+                                                        Ok(contents) => contents,
+                                                        Err(_) => {
+                                                            error(0, "could not read file");
+                                                        }
+                                                    }; // read the file into the string
+                                                    return Some(LiteralOrFile::Literal(LiteralType::String(
+                                                        contents,
+                                                    ))); // return the string
+                                                }
+                                                _ => {
+                                                }
+                                            }
+
                                         }
                                         _ => error(
                                             call.line,
@@ -993,8 +1012,27 @@ impl Eval {
                         }
                         other => {
                             match self.find_pointer_in_stuff(other) {
-                                Some(LiteralOrFile::File(file)) => {
-                                    drop(file);
+                                Some(LiteralOrFile::File(mut file)) => {
+                                    match call.keyword {
+                                        TokenType::Close => {
+                                            drop(file);
+                                        }
+                                        TokenType::Read => {
+                                            let mut contents: String = String::new(); // create a string to hold the contents of the file
+                                            match file.read_to_string(&mut contents) {
+                                                Ok(contents) => contents,
+                                                Err(_) => {
+                                                    error(0, "could not read file");
+                                                }
+                                            }; // read the file into the string
+                                            return Some(LiteralOrFile::Literal(LiteralType::String(
+                                                contents,
+                                            ))); // return the string
+                                        }
+                                        _ => {
+                                        }
+                                    }
+
                                 }
                                 _ => {
                                     error(

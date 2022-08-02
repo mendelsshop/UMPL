@@ -29,6 +29,8 @@ if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
     (`Hello World`)> ! else print the string Hello World (`Hello World`)>
 ⧽
 create file with ((open `log.yaml`))>
-((close file))>
-
-(file)>
+create z with ((read file))>
+(z)>
+(`asddff`)>
+(z)>
+! (file)>
