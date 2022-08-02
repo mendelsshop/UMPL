@@ -92,7 +92,7 @@ impl Lexer {
     }
 
     fn boolean(&mut self) -> bool {
-        while self.peek().is_alphabetic(){
+        while self.peek().is_alphabetic() {
             self.advance();
         }
         if self.get_text() == "true" {
@@ -106,7 +106,7 @@ impl Lexer {
     }
 
     fn hempty(&mut self) -> bool {
-        while self.peek().is_alphabetic(){
+        while self.peek().is_alphabetic() {
             self.advance();
         }
         if self.get_text() == "hempty" {

@@ -365,18 +365,21 @@ impl Eval {
     }
 
     pub fn find_functions(&mut self, body: Vec<Thing>) -> Vec<Thing> {
-        body.into_iter().filter(|thing| {
-            if let Thing::Function(function) = thing {
-                self.scope.set_function(
-                    function.name,
-                    function.body.to_owned(),
-                    function.num_arguments,
-                );
-                false
-            } else {
-                true
-            }
-        }).map(|thing| thing).collect()
+        body.into_iter()
+            .filter(|thing| {
+                if let Thing::Function(function) = thing {
+                    self.scope.set_function(
+                        function.name,
+                        function.body.to_owned(),
+                        function.num_arguments,
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .map(|thing| thing)
+            .collect()
     }
     #[allow(clippy::too_many_lines)]
     pub fn find_variables(&mut self, body: &[Thing]) -> Option<Stopper> {
