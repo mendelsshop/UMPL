@@ -97,13 +97,13 @@ impl TokenType {
                     }
                 }
                 Self::Plus | Self::Minus | Self::Divide | Self::Multiply => {
-                    match args[0] {
+                    match &args[0] {
                         LiteralType::Number(number) => {
                             // check if minus and only one argument
                             let mut total: f64 = if self == &Self::Minus && args.len() == 1 {
                                 -number
                             } else {
-                                number
+                                *number
                             };
                             for thing in args.iter().skip(1) {
                                 if let LiteralType::Number(number) = thing {
@@ -129,8 +129,8 @@ impl TokenType {
                             }
                             LiteralType::Number(total)
                         }
-                        LiteralType::String(ref string) => {
-                            let mut new_string = string.clone();
+                        LiteralType::String(string) => {
+                            let mut new_string = string.to_string();
                             for (index, thing) in args.iter().skip(1).enumerate() {
                                 match self {
                                     Self::Plus => {
@@ -156,7 +156,6 @@ impl TokenType {
                                                 "Multiply can only be used with the car argument",
                                             );
                                         }
-
                                         match thing {
                                             LiteralType::Number(number) => {
                                                 let mut new_new_string = String::new();
@@ -237,7 +236,6 @@ impl TokenType {
                                         format!("Error parsing string {} to number", string.trim()),
                                     ),
                                 };
-
                                 LiteralType::Number(number.convert::<f64>().inner())
                             }
                             Self::RunCommand => {
@@ -263,7 +261,6 @@ impl TokenType {
                                 };
                                 LiteralType::String(cmd)
                             }
-
                             _ => todo!(),
                         },
                         _ => error::error(line, "Expected string for input operator"),
@@ -277,7 +274,6 @@ impl TokenType {
                         );
                     }
                     let type_ = &args[0];
-
                     let type_1 = &args[1];
                     if type_.type_eq(type_1) {
                     } else {
@@ -289,7 +285,6 @@ impl TokenType {
                             ),
                         );
                     }
-
                     if self == &Self::Equal {
                         LiteralType::Boolean(type_ == type_1)
                     } else {

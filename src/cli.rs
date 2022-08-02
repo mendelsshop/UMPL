@@ -27,7 +27,7 @@ pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
         return (0, ParsedArgs::new(true, String::from("")));
     } else if args[1].ends_with(".umpl") {
         // make sure it's a .umpl file
-        to_return.file = args[1].clone(); // if it is, then set file to the file name
+        to_return.file = args[1].to_string(); // if it is, then set file to the file name
         to_return.repl = false; // and set repl to false
         index += 1; // and increment index
         let file_len = to_return.file.strip_suffix(".umpl").unwrap().len(); // get the length of the file name without the .umpl

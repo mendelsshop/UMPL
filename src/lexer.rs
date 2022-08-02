@@ -25,14 +25,14 @@ impl Lexer {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    pub fn scan_tokens(mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token();
         }
         self.token_list
             .push(Token::new(TokenType::EOF, "", self.line));
-        self.token_list.clone()
+        self.token_list
     }
 
     fn is_at_end(&self) -> bool {
@@ -92,59 +92,26 @@ impl Lexer {
     }
 
     fn boolean(&mut self) -> bool {
-        if self.peek() == 'r' {
+        while self.peek().is_alphabetic(){
             self.advance();
-            if self.peek() == 'u' {
-                self.advance();
-                if self.peek() == 'e' {
-                    self.advance();
-                    if self.peek().is_alphanumeric() || self.peek() == '-' {
-                        return false;
-                    }
-                    self.add_token(TokenType::Boolean { value: true });
-                    return true;
-                }
-            }
-        } else if self.peek() == 'a' {
-            self.advance();
-            if self.peek() == 'l' {
-                self.advance();
-                if self.peek() == 's' {
-                    self.advance();
-                    if self.peek() == 'e' {
-                        self.advance();
-                        if self.peek().is_alphanumeric() || self.peek() == '-' {
-                            return false;
-                        }
-                        self.add_token(TokenType::Boolean { value: false });
-                        return true;
-                    }
-                }
-            }
+        }
+        if self.get_text() == "true" {
+            self.add_token(TokenType::Boolean { value: true });
+            return true;
+        } else if self.get_text() == "false" {
+            self.add_token(TokenType::Boolean { value: false });
+            return true;
         }
         false
     }
 
     fn hempty(&mut self) -> bool {
-        if self.peek() == 'e' {
+        while self.peek().is_alphabetic(){
             self.advance();
-            if self.peek() == 'm' {
-                self.advance();
-                if self.peek() == 'p' {
-                    self.advance();
-                    if self.peek() == 't' {
-                        self.advance();
-                        if self.peek() == 'y' {
-                            self.advance();
-                            if self.peek().is_alphanumeric() || self.peek() == '-' {
-                                return false;
-                            }
-                            self.add_token(TokenType::Hempty);
-                            return true;
-                        }
-                    }
-                }
-            }
+        }
+        if self.get_text() == "hempty" {
+            self.add_token(TokenType::Hempty);
+            return true;
         }
         false
     }
@@ -156,11 +123,9 @@ impl Lexer {
             }
             self.advance();
         }
-
         if self.is_at_end() {
             error::error(self.line, "unterminated string");
         }
-
         self.advance();
         self.start += 1;
         self.current -= 1;
@@ -207,7 +172,6 @@ impl Lexer {
     fn function_agument(&mut self) {
         self.start += 1; // advance start past the $ so that we can parse it into a number
         let hex_char = vec!['A', 'B', 'C', 'D', 'E', 'F'];
-
         while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
             self.advance();
         }

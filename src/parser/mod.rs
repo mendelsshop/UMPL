@@ -130,8 +130,8 @@ impl Parser {
         while !self.done {
             let expr: Option<Thing> = self.parse_from_token();
             if let Some(t) = expr {
-                program.push(t.clone());
                 debug!("{:?}", t);
+                program.push(t);
             }
         }
         info!("Done parsing");
@@ -297,7 +297,6 @@ impl Parser {
                                 self.advance("parse_from_token");
                                 if self.token.token_type == TokenType::With {
                                     self.advance("parse_from_token");
-
                                     info!("create identifier with {}", self.token.token_type);
                                     let thing = self.get_value();
                                     self.variables.push(name.clone());
@@ -463,10 +462,8 @@ impl Parser {
                             return Some(Thing::Return(None, self.token.line));
                         }
                         // TODO: capture the value returned if any
-
                         self.advance("parse_from_token return expecting expression");
                         let thing = self.parse_to_other_stuff();
-
                         Some(Thing::Return(Some(thing), self.token.line))
                     }
                     TokenType::Break => {

@@ -32,7 +32,6 @@ fn main() {
         log4rs::init_file("log.yaml", log4rs::config::Deserializers::default()).unwrap();
         info!("Starting up...");
     }
-
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
         // if we are in repl mode
@@ -70,7 +69,7 @@ fn main() {
                 }
                 break 'l;
             } else if input.trim() == "run" {
-                run(current_repl.clone()); // run the current repl
+                run(current_repl.to_string()); // run the current repl
                 input.clear();
             } else {
                 current_repl.push_str(&input); // add the input to the current line of the repl
@@ -91,7 +90,7 @@ fn main() {
 }
 
 fn run(line: String) {
-    let mut lexer: Lexer = Lexer::new(line);
+    let lexer: Lexer = Lexer::new(line);
     let mut parsed: Parser = Parser::new(lexer.scan_tokens());
-    Eval::new(&parsed.parse());
+    Eval::new(parsed.parse());
 }

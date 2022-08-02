@@ -27,7 +27,7 @@ pub fn arg_error<T: Display>(
     line: i32,
 ) {
     if at_least {
-        if num_args > given_args {
+        if num_args < given_args {
             error(
                 line,
                 format!("{} requires at least {} arguments", function, num_args),

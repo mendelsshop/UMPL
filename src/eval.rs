@@ -187,7 +187,6 @@ impl Scope {
                             NewIdentifierType::List(list) => list,
                             _ => error(0, "expected list"),
                         };
-
                         if name.ends_with(".cdr") {
                             new_var.cdr = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
@@ -216,7 +215,6 @@ impl Scope {
                         NewIdentifierType::List(list) => list,
                         _ => error(0, "expected list"),
                     };
-
                     if name.ends_with(".cdr") {
                         new_var.cdr = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
@@ -254,7 +252,6 @@ impl Scope {
     }
     pub fn get_var(&self, name: &str) -> NewIdentifierType {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
-
         if name.ends_with(".car") || name.ends_with(".cdr") {
             if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4]) {
                 if name.ends_with(".car") {
@@ -318,7 +315,6 @@ impl Scope {
         if !recurse {
             return self.vars.contains_key(name);
         }
-
         if self.vars.contains_key(name) {
             true
         } else {
@@ -351,35 +347,36 @@ pub enum Stopper {
 }
 #[derive(PartialEq, Clone)]
 pub struct Eval {
-    pub level: i32,
     pub scope: Scope,
     pub in_function: bool,
     pub in_loop: bool,
 }
 
 impl Eval {
-    pub fn new(body: &[Thing]) -> Self {
+    pub fn new(mut body: Vec<Thing>) -> Self {
         let mut self_ = Self {
-            level: 0,
             scope: Scope::new(),
             in_function: false,
             in_loop: false,
         };
-        self_.find_functions(body);
-        self_.find_variables(body);
+        body = self_.find_functions(body);
+        self_.find_variables(&body);
         self_
     }
 
-    pub fn find_functions(&mut self, body: &[Thing]) {
-        for thing in body {
+    pub fn find_functions(&mut self, body: Vec<Thing>) -> Vec<Thing> {
+        body.into_iter().filter(|thing| {
             if let Thing::Function(function) = thing {
                 self.scope.set_function(
                     function.name,
-                    function.body.clone(),
+                    function.body.to_owned(),
                     function.num_arguments,
                 );
+                false
+            } else {
+                true
             }
-        }
+        }).map(|thing| thing).collect()
     }
     #[allow(clippy::too_many_lines)]
     pub fn find_variables(&mut self, body: &[Thing]) -> Option<Stopper> {
@@ -409,7 +406,6 @@ impl Eval {
                                 list.car.clone(),
                             )),
                         };
-
                         let cdr: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.cdr) {
                             Some(pointer) => pointer,
                             None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
@@ -442,7 +438,7 @@ impl Eval {
                         );
                     }
                 }
-                Thing::IfStatement(if_statement) => {
+                Thing::IfStatement(mut if_statement) => {
                     let conditon: LiteralType =
                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
                             Some(pointer) => {
@@ -459,14 +455,11 @@ impl Eval {
                         error(if_statement.line, "expected boolean, got something else");
                     }
                     self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
-
                     if conditon == LiteralType::Boolean(true) {
-                        self.find_functions(&if_statement.body_true);
+                        if_statement.body_true = self.find_functions(if_statement.body_true);
                         let body_true: Option<Stopper> =
                             self.find_variables(&if_statement.body_true);
-
                         self.scope.drop_scope();
-
                         if let Some(stop) = body_true {
                             match stop {
                                 Stopper::Break | Stopper::Continue => {
@@ -484,7 +477,7 @@ impl Eval {
                             }
                         }
                     } else {
-                        self.find_functions(&if_statement.body_false);
+                        if_statement.body_false = self.find_functions(if_statement.body_false);
                         let z = self.find_variables(&if_statement.body_false);
                         self.scope.drop_scope();
                         if let Some(stop) = z {
@@ -505,14 +498,11 @@ impl Eval {
                 Thing::LoopStatement(loop_statement) => {
                     'l: loop {
                         self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
-
-                        self.find_functions(&loop_statement.body);
+                        let loop_body = self.find_functions(loop_statement.body.clone());
                         self.in_loop = true;
                         // TODO: find out when break/continue is called
-                        let z: Option<Stopper> = self.find_variables(&loop_statement.body);
-
+                        let z: Option<Stopper> = self.find_variables(&loop_body);
                         self.scope.drop_scope();
-
                         if let Some(stop) = z {
                             match stop {
                                 Stopper::Break => break 'l,
@@ -573,10 +563,9 @@ impl Eval {
                     _ => error(ident.line, "variable is not a literal"),
                 },
             },
-
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
-                    if let Some(function) = self.scope.get_function(*name) {
+                    if let Some(mut function) = self.scope.get_function(*name) {
                         let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             arg_error(
@@ -602,7 +591,7 @@ impl Eval {
                             call.line,
                         );
                         self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
-                        self.find_functions(&function.0);
+                        function.0 = self.find_functions(function.0);
                         // TODO: find if function has return in it and act accordingly
                         self.in_function = true;
                         new_stuff.iter().enumerate().for_each(|(i, l)| {
@@ -851,7 +840,6 @@ impl Eval {
                                                             )],
                                                             true,
                                                         );
-
                                                         None
                                                     } else {
                                                         let new_val = nums / num;
@@ -1019,7 +1007,6 @@ impl Eval {
                             };
                         }
                     }
-
                     Some(LiteralOrFile::Literal(LiteralType::Hempty))
                 }
                 t => {
