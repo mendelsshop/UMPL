@@ -3,7 +3,8 @@ use log::info;
 use std::{
     collections::HashMap,
     fmt::{self, Display},
-    fs::File, io::Read,
+    fs::File,
+    io::Read,
 };
 
 use crate::{
@@ -977,7 +978,9 @@ impl Eval {
                                                 TokenType::Close => {
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralOrFile::Literal(LiteralType::Hempty)],
+                                                        &[LiteralOrFile::Literal(
+                                                            LiteralType::Hempty,
+                                                        )],
                                                         true,
                                                     );
                                                 }
@@ -989,14 +992,12 @@ impl Eval {
                                                             error(0, "could not read file");
                                                         }
                                                     }; // read the file into the string
-                                                    return Some(LiteralOrFile::Literal(LiteralType::String(
-                                                        contents,
-                                                    ))); // return the string
+                                                    return Some(LiteralOrFile::Literal(
+                                                        LiteralType::String(contents),
+                                                    )); // return the string
                                                 }
-                                                _ => {
-                                                }
+                                                _ => {}
                                             }
-
                                         }
                                         _ => error(
                                             call.line,
@@ -1025,14 +1026,12 @@ impl Eval {
                                                     error(0, "could not read file");
                                                 }
                                             }; // read the file into the string
-                                            return Some(LiteralOrFile::Literal(LiteralType::String(
-                                                contents,
-                                            ))); // return the string
+                                            return Some(LiteralOrFile::Literal(
+                                                LiteralType::String(contents),
+                                            )); // return the string
                                         }
-                                        _ => {
-                                        }
+                                        _ => {}
                                     }
-
                                 }
                                 _ => {
                                     error(
