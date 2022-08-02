@@ -370,7 +370,7 @@ impl Eval {
                 if let Thing::Function(function) = thing {
                     self.scope.set_function(
                         function.name,
-                        function.body.to_owned(),
+                        function.body.clone(),
                         function.num_arguments,
                     );
                     false
@@ -378,7 +378,6 @@ impl Eval {
                     true
                 }
             })
-            .map(|thing| thing)
             .collect()
     }
     #[allow(clippy::too_many_lines)]
