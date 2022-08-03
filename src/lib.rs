@@ -9,7 +9,8 @@
     clippy::cast_sign_loss,
     clippy::cognitive_complexity,
     clippy::float_cmp,
-    clippy::similar_names
+    clippy::similar_names,
+    clippy::missing_errors_doc,
 )]
 pub mod cli;
 pub mod error;

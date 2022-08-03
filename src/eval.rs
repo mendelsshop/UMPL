@@ -18,6 +18,36 @@ use crate::{
     },
     token::TokenType,
 };
+
+pub fn read_file(file_name: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let mut file = OpenOptions::new().read(true).open(file_name)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    drop(file);
+    Ok(contents.clone())
+}
+
+pub fn write_file(
+    file_name: &str,
+    contents: &str,
+    mode: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match mode {
+        "w" => {
+            // overwrite existing contents
+            // clear file contents
+            let mut file = OpenOptions::new().write(true).open(file_name)?;
+            file.set_len(0)?;
+            Ok(file.write_all(contents.as_bytes())?)
+        }
+        "a" => {
+            let mut file = OpenOptions::new().append(true).open(file_name)?;
+            Ok(file.write_all(contents.as_bytes())?)
+        }
+        _ => error(0, "invalid mode"),
+    }
+
+}
 #[derive(PartialEq, Debug, Clone)]
 pub struct NewExpression {
     pub inside: LiteralOrFile,
@@ -198,7 +228,7 @@ impl Scope {
                     } else {
                         match self.parent_scope.as_mut() {
                             Some(parent) => {
-                                parent.set_var(name, &mut new_val.to_vec_literaltype(), recurse)
+                                parent.set_var(name, &mut new_val.to_vec_literaltype(), recurse);
                             }
                             None => error(1, "variable not found"),
                         }
@@ -333,64 +363,7 @@ impl Scope {
         self.function.contains_key(&name)
     }
 
-    pub fn read_file(&self, file_name: &str) -> Result<String, Box<dyn std::error::Error>> {
-        //     if !recurse {
-        // match self.files.get(file_name) {
-        // Some(ref mut file) => {
-        let mut file = OpenOptions::new().read(true).open(file_name)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        drop(file);
-        Ok(contents.clone())
-
-        // }
-        // None => Err("file not found")?
-        // }
-        // } else {
-        //     match self.files.get(file_name) {
-        //         Some(ref mut file) => {
-        //             let mut contents = String::new();
-        //             file.read_to_string(&mut contents).unwrap();
-        //             Some(contents)
-        //         },
-        //         None => match &self.parent_scope {
-        //             Some(parent) => parent.read_file(file_name, recurse),
-        //             None => None,
-        //         },
-        //     }
-    }
-    // }
-
-    pub fn write_file(
-        &mut self,
-        file_name: &str,
-        contents: &str,
-        mode: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // match
-        // self.files.get_mut(file_name) {
-        // Some(ref mut file) => {
-
-        match mode {
-            "w" => {
-                // overwrite existing contents
-                // clear file contents
-                let mut file = OpenOptions::new().write(true).open(file_name)?;
-                file.set_len(0)?;
-                Ok(file.write_all(contents.as_bytes())?)
-            }
-            "a" => {
-                let mut file = OpenOptions::new().append(true).open(file_name)?;
-                Ok(file.write_all(contents.as_bytes())?)
-            }
-            _ => error(0, "invalid mode"),
-            // }
-        }
-        // None => {
-        // Err("file not found")?
-        // },
-        // }
-    }
+    
 }
 
 impl Default for Scope {
@@ -973,7 +946,7 @@ impl Eval {
                                     if call.keyword == TokenType::Set {
                                         self.scope.set_var(&ident.name, &mut new_stuff, true);
                                         Some(LiteralOrFile::Literal(LiteralType::String(
-                                            new_stuff.iter().map(|i| i.to_string()).collect(),
+                                            new_stuff.iter().map(std::string::ToString::to_string).collect(),
                                         )))
                                     } else {
                                         error(
@@ -1016,17 +989,8 @@ impl Eval {
                     );
                     // check if the first argument is a string
                     let arg = match self.find_pointer_in_stuff(&call.arguments[0]) {
-                        Some(arg) => match arg {
-                            LiteralOrFile::Literal(LiteralType::String(s)) => s,
-                            _ => {
-                                error(
-                                    call.line,
-                                    format!("First argument of {} must be a string", call.keyword)
-                                        .as_str(),
-                                );
-                            }
-                        },
-                        None => {
+                        Some(LiteralOrFile::Literal(LiteralType::String(s))) => s,
+                        _ => {
                             error(
                                 call.line,
                                 format!("First argument of {} must be a string", call.keyword)
@@ -1035,7 +999,7 @@ impl Eval {
                         }
                     };
                     Some(if std::path::Path::new(&arg).exists() {
-                        LiteralOrFile::File(arg.to_string())
+                        LiteralOrFile::File(arg)
                     } else {
                         error(
                             call.line,
@@ -1072,7 +1036,7 @@ impl Eval {
                                                 }
                                                 TokenType::Read => {
                                                     let contents = // create a string to hold the contents of the file
-                                                    match self.scope.read_file(&file) {
+                                                    match read_file(&file) {
                                                         Ok(contents) => contents,
                                                         Err(err) => {
                                                             println!("{:?}", self.scope.files);
@@ -1080,7 +1044,7 @@ impl Eval {
                                                         }
                                                     }; // read the file into the string
                                                     return Some(LiteralOrFile::Literal(
-                                                        LiteralType::String(contents.to_string()),
+                                                        LiteralType::String(contents),
                                                     )); // return the string
                                                 }
                                                 _ => {}
@@ -1107,7 +1071,7 @@ impl Eval {
                                         }
                                         TokenType::Read => {
                                             let contents: String = String::new(); // create a string to hold the contents of the file
-                                            match self.scope.read_file(&file) {
+                                            match read_file(&file) {
                                                 Ok(contents) => contents,
                                                 Err(err) => {
                                                     error(0, format!("{}", err));
@@ -1181,7 +1145,7 @@ impl Eval {
                         }
                     };
                     // write the string to the file
-                    match self.scope.write_file(&file, &string, &mode) {
+                    match write_file(&file, &string, &mode) {
                         Ok(_) => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
                         Err(err) => {
                             error(0, format!("{}", err).as_str());
