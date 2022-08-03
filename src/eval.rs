@@ -46,7 +46,6 @@ pub fn write_file(
         }
         _ => error(0, "invalid mode"),
     }
-
 }
 #[derive(PartialEq, Debug, Clone)]
 pub struct NewExpression {
@@ -362,8 +361,6 @@ impl Scope {
     pub fn has_function(&self, name: char) -> bool {
         self.function.contains_key(&name)
     }
-
-    
 }
 
 impl Default for Scope {
@@ -946,7 +943,10 @@ impl Eval {
                                     if call.keyword == TokenType::Set {
                                         self.scope.set_var(&ident.name, &mut new_stuff, true);
                                         Some(LiteralOrFile::Literal(LiteralType::String(
-                                            new_stuff.iter().map(std::string::ToString::to_string).collect(),
+                                            new_stuff
+                                                .iter()
+                                                .map(std::string::ToString::to_string)
+                                                .collect(),
                                         )))
                                     } else {
                                         error(
