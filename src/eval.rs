@@ -4,7 +4,7 @@ use std::{
     cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Display},
-    fs::{File, OpenOptions, self},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     mem::swap,
     rc::Rc,
@@ -1270,11 +1270,9 @@ impl Eval {
                     }
                     string = match mode.as_str() {
                         "a" => {
-                            format!("{}{}",  string, lines[line as usize - 1],)
+                            format!("{}{}", string, lines[line as usize - 1],)
                         }
-                        "w" => {
-                            string
-                        }
+                        "w" => string,
                         _ => {
                             error(
                                 call.line,
@@ -1292,10 +1290,9 @@ impl Eval {
                             error(0, format!("{}", err).as_str());
                         }
                     }
-
                 }
                 TokenType::DeleteFile | TokenType::CreateFile => {
-                // takes 1 argument: file
+                    // takes 1 argument: file
                     arg_error(
                         1,
                         call.arguments.len() as u32,
@@ -1316,13 +1313,10 @@ impl Eval {
                     };
                     // match delete or create file
                     match call.keyword {
-                        TokenType::DeleteFile => {
-                            match fs::remove_file(&file) {
-                                Ok(_) => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
-                                Err(err) => {
-                                    error(0, format!("{}", err).as_str());
-                                }
-
+                        TokenType::DeleteFile => match fs::remove_file(&file) {
+                            Ok(_) => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
+                            Err(err) => {
+                                error(0, format!("{}", err).as_str());
                             }
                         },
                         TokenType::CreateFile => {
@@ -1333,11 +1327,9 @@ impl Eval {
                                     error(0, format!("{}", err).as_str());
                                 }
                             }
-                           
+                        }
+                        _ => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
                     }
-                    _ => Some(LiteralOrFile::Literal(LiteralType::Hempty))
-                    
-                }
                 }
                 t => {
                     let mut new_stuff: Vec<LiteralType> = Vec::new();
