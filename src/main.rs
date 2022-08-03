@@ -13,7 +13,7 @@
 use log::info;
 use std::{
     env,
-    fs::File,
+    fs::{File, OpenOptions},
     io::{self, Read, Write},
     path::Path,
     process::exit,
@@ -86,6 +86,23 @@ fn main() {
         }; // read the file into the string
         run(contents); // run the file
     }
+    let mut f = OpenOptions::new()
+        .read(true)
+        // .write(true)
+        .open("test.txt")
+        .unwrap(); // open the file
+                   // f.set_len(0).unwrap(); // set the length of the file to 0
+                   // f.write(b"Hello World!\n").unwrap(); // write the file
+                   // f.write(b"Helrtlo World!\n").unwrap(); // write the file
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).unwrap(); // read the file into the string
+                                              // println!("{}", contents); // print the file
+    drop(f); // drop the file
+    drop(contents); // drop the string
+    let mut y = OpenOptions::new().read(true).open("test.txt").unwrap(); // open the file
+    let mut contents = String::new();
+    y.read_to_string(&mut contents).unwrap();
+    // println!("{}", contents); // print the file
 }
 
 fn run(line: String) {

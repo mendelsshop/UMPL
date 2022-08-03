@@ -4,8 +4,8 @@ use std::{
     cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Display},
-    fs::File,
-    io::Read,
+    fs::{File, OpenOptions},
+    io::{Read, Write},
     mem::swap,
     rc::Rc,
 };
@@ -79,10 +79,10 @@ impl Display for NewList {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LiteralOrFile {
     Literal(LiteralType),
-    File(File),
+    File(String),
 }
 impl PartialEq for LiteralOrFile {
     fn eq(&self, other: &Self) -> bool {
@@ -91,22 +91,14 @@ impl PartialEq for LiteralOrFile {
                 LiteralOrFile::Literal(o) => l == o,
                 _ => false,
             },
-            LiteralOrFile::File(_f) => match other {
-                LiteralOrFile::File(_o) => error(0, "cannot compare files"),
+            LiteralOrFile::File(_) => match other {
+                LiteralOrFile::File(_) => error(0, "cannot compare files"),
                 _ => error(1, "cannot compare files"),
             },
         }
     }
 }
 
-impl Clone for LiteralOrFile {
-    fn clone(&self) -> Self {
-        match self {
-            LiteralOrFile::Literal(l) => Self::Literal(l.clone()),
-            _ => error(0, "cannot clone file"),
-        }
-    }
-}
 impl Display for LiteralOrFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -147,11 +139,12 @@ impl NewIdentifierType {
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Debug)]
 pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
     pub function: HashMap<char, (Vec<Thing>, f64)>,
     pub parent_scope: Option<Box<Scope>>,
+    pub files: HashMap<String, File>,
 }
 
 impl Scope {
@@ -160,6 +153,7 @@ impl Scope {
             vars: HashMap::new(),
             function: HashMap::new(),
             parent_scope: None,
+            files: HashMap::new(),
         }
     }
     pub fn new_with_parent(parent: Box<Self>) -> Self {
@@ -167,6 +161,7 @@ impl Scope {
             vars: HashMap::new(),
             function: HashMap::new(),
             parent_scope: Some(parent),
+            files: HashMap::new(),
         }
     }
     pub fn set_var(&mut self, name: &str, value: &mut Vec<LiteralOrFile>, recurse: bool) {
@@ -279,21 +274,7 @@ impl Scope {
         }
         match self.vars.get(name) {
             Some(v) => match v {
-                NewIdentifierType::Vairable(var) => {
-                    match &var.value {
-                        LiteralOrFile::Literal(_) => v.clone(),
-                        LiteralOrFile::File(_) => {
-                            // let mut temp_file = file.try_clone().unwrap();
-                            // swap(&mut file, &mut temp_file);
-                            // currently the after this the file is dropped from variables and is accessed through the function that calls this one
-                            self.vars.remove(name).unwrap()
-                            // NewIdentifierType::Vairable(Box::new(NewVairable::new(
-
-                            //     LiteralOrFile::File(temp_file),
-                            // )))
-                        }
-                    }
-                }
+                NewIdentifierType::Vairable(_) => v.clone(),
                 NewIdentifierType::List(list) => {
                     // Todoe remove clone
                     NewIdentifierType::List(list.clone())
@@ -351,6 +332,65 @@ impl Scope {
     pub fn has_function(&self, name: char) -> bool {
         self.function.contains_key(&name)
     }
+
+    pub fn read_file(&self, file_name: &str) -> Result<String, Box<dyn std::error::Error>> {
+        //     if !recurse {
+        // match self.files.get(file_name) {
+        // Some(ref mut file) => {
+        let mut file = OpenOptions::new().read(true).open(file_name)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        drop(file);
+        Ok(contents.clone())
+
+        // }
+        // None => Err("file not found")?
+        // }
+        // } else {
+        //     match self.files.get(file_name) {
+        //         Some(ref mut file) => {
+        //             let mut contents = String::new();
+        //             file.read_to_string(&mut contents).unwrap();
+        //             Some(contents)
+        //         },
+        //         None => match &self.parent_scope {
+        //             Some(parent) => parent.read_file(file_name, recurse),
+        //             None => None,
+        //         },
+        //     }
+    }
+    // }
+
+    pub fn write_file(
+        &mut self,
+        file_name: &str,
+        contents: &str,
+        mode: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // match
+        // self.files.get_mut(file_name) {
+        // Some(ref mut file) => {
+
+        match mode {
+            "w" => {
+                // overwrite existing contents
+                // clear file contents
+                let mut file = OpenOptions::new().write(true).open(file_name)?;
+                file.set_len(0)?;
+                Ok(file.write_all(contents.as_bytes())?)
+            }
+            "a" => {
+                let mut file = OpenOptions::new().append(true).open(file_name)?;
+                Ok(file.write_all(contents.as_bytes())?)
+            }
+            _ => error(0, "invalid mode"),
+            // }
+        }
+        // None => {
+        // Err("file not found")?
+        // },
+        // }
+    }
 }
 
 impl Default for Scope {
@@ -364,7 +404,7 @@ pub enum Stopper {
     Continue,
     Return(LiteralOrFile),
 }
-#[derive(Clone)]
+
 pub struct Eval {
     pub scope: Scope,
     pub in_function: bool,
@@ -589,10 +629,7 @@ impl Eval {
                 NewIdentifierType::List(..) => {
                     error(ident.line, "whole list not supported in call")
                 }
-                NewIdentifierType::Vairable(var) => match var.value {
-                    LiteralOrFile::Literal(_) => Some(var.value),
-                    _ => error(ident.line, "variable is not a literal"),
-                },
+                NewIdentifierType::Vairable(var) => Some(var.value),
             },
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
@@ -650,7 +687,7 @@ impl Eval {
                     }
                     if let Stuff::Identifier(ident) = &call.arguments[0] {
                         if self.scope.delete_var(&ident.name).is_some() {
-                            None
+                            Some(LiteralOrFile::Literal(LiteralType::Hempty))
                         } else {
                             error(
                                 ident.line,
@@ -690,10 +727,10 @@ impl Eval {
                                         TokenType::Set => {
                                             self.scope.set_var(
                                                 &ident.name,
-                                                &mut vec![literal],
+                                                &mut vec![literal.clone()],
                                                 true,
                                             );
-                                            None
+                                            Some(literal)
                                         }
                                         TokenType::AddWith => match var {
                                             LiteralOrFile::Literal(LiteralType::Number(num)) => {
@@ -709,7 +746,9 @@ impl Eval {
                                                         )],
                                                         true,
                                                     );
-                                                    None
+                                                    Some(LiteralOrFile::Literal(
+                                                        LiteralType::Number(new_val),
+                                                    ))
                                                 } else {
                                                     error(
                                                         call.line,
@@ -729,11 +768,13 @@ impl Eval {
                                                         self.scope.set_var(
                                                             &ident.name,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s),
+                                                                LiteralType::String(s.clone()),
                                                             )],
                                                             true,
                                                         );
-                                                        None
+                                                        Some(LiteralOrFile::Literal(
+                                                            LiteralType::String(s),
+                                                        ))
                                                     }
                                                     LiteralOrFile::Literal(
                                                         LiteralType::Number(n),
@@ -742,11 +783,13 @@ impl Eval {
                                                         self.scope.set_var(
                                                             &ident.name,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s),
+                                                                LiteralType::String(s.clone()),
                                                             )],
                                                             true,
                                                         );
-                                                        None
+                                                        Some(LiteralOrFile::Literal(
+                                                            LiteralType::String(s),
+                                                        ))
                                                     }
                                                     LiteralOrFile::Literal(
                                                         LiteralType::Boolean(boolean),
@@ -755,22 +798,26 @@ impl Eval {
                                                         self.scope.set_var(
                                                             &ident.name,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s),
+                                                                LiteralType::String(s.clone()),
                                                             )],
                                                             true,
                                                         );
-                                                        None
+                                                        Some(LiteralOrFile::Literal(
+                                                            LiteralType::String(s),
+                                                        ))
                                                     }
                                                     LiteralOrFile::Literal(LiteralType::Hempty) => {
                                                         s.push_str("null");
                                                         self.scope.set_var(
                                                             &ident.name,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s),
+                                                                LiteralType::String(s.clone()),
                                                             )],
                                                             true,
                                                         );
-                                                        None
+                                                        Some(LiteralOrFile::Literal(
+                                                            LiteralType::String(s),
+                                                        ))
                                                     }
                                                     _ => {
                                                         error(
@@ -807,7 +854,9 @@ impl Eval {
                                                         )],
                                                         true,
                                                     );
-                                                    None
+                                                    Some(LiteralOrFile::Literal(
+                                                        LiteralType::Number(new_val),
+                                                    ))
                                                 } else {
                                                     error(
                                                         call.line,
@@ -829,11 +878,13 @@ impl Eval {
                                                     self.scope.set_var(
                                                         &ident.name,
                                                         &mut vec![LiteralOrFile::Literal(
-                                                            LiteralType::String(new_string),
+                                                            LiteralType::String(new_string.clone()),
                                                         )],
                                                         true,
                                                     );
-                                                    None
+                                                    Some(LiteralOrFile::Literal(
+                                                        LiteralType::String(new_string),
+                                                    ))
                                                 } else {
                                                     error(
                                                         call.line,
@@ -872,7 +923,9 @@ impl Eval {
                                                             )],
                                                             true,
                                                         );
-                                                        None
+                                                        Some(LiteralOrFile::Literal(
+                                                            LiteralType::Number(new_val),
+                                                        ))
                                                     } else {
                                                         let new_val = nums / num;
                                                         self.scope.set_var(
@@ -882,7 +935,9 @@ impl Eval {
                                                             )],
                                                             true,
                                                         );
-                                                        None
+                                                        Some(LiteralOrFile::Literal(
+                                                            LiteralType::Number(new_val),
+                                                        ))
                                                     }
                                                 } else {
                                                     error(
@@ -917,7 +972,9 @@ impl Eval {
                                 2 => {
                                     if call.keyword == TokenType::Set {
                                         self.scope.set_var(&ident.name, &mut new_stuff, true);
-                                        None
+                                        Some(LiteralOrFile::Literal(LiteralType::String(
+                                            new_stuff.iter().map(|i| i.to_string()).collect(),
+                                        )))
                                     } else {
                                         error(
                                             call.line,
@@ -958,44 +1015,32 @@ impl Eval {
                         call.line,
                     );
                     // check if the first argument is a string
-                    let arg = if let Stuff::Literal(literal) = &call.arguments[0] {
-                        if let LiteralType::String(s) = &literal.literal {
-                            s
-                        } else {
+                    let arg = match self.find_pointer_in_stuff(&call.arguments[0]) {
+                        Some(arg) => match arg {
+                            LiteralOrFile::Literal(LiteralType::String(s)) => s,
+                            _ => {
+                                error(
+                                    call.line,
+                                    format!("First argument of {} must be a string", call.keyword)
+                                        .as_str(),
+                                );
+                            }
+                        },
+                        None => {
                             error(
                                 call.line,
                                 format!("First argument of {} must be a string", call.keyword)
                                     .as_str(),
                             );
                         }
+                    };
+                    Some(if std::path::Path::new(&arg).exists() {
+                        LiteralOrFile::File(arg.to_string())
                     } else {
                         error(
                             call.line,
-                            format!("First argument of {} must be a string", call.keyword).as_str(),
+                            format!("Could not open file {}: does not exist", arg).as_str(),
                         );
-                    };
-                    // open the file
-
-                    self.files.insert(
-                        arg.to_string(),
-                        match File::open(arg) {
-                            Ok(file) => Rc::new(RefCell::new(file)),
-                            Err(e) => {
-                                error(
-                                    call.line,
-                                    format!("Could not open file {}: {}", arg, e).as_str(),
-                                );
-                            }
-                        },
-                    );
-                    Some(match File::open(arg) {
-                        Ok(file) => LiteralOrFile::File(file),
-                        Err(e) => {
-                            error(
-                                call.line,
-                                format!("Could not open file {}: {}", arg, e).as_str(),
-                            );
-                        }
                     })
                 }
                 TokenType::Close | TokenType::Read => {
@@ -1013,7 +1058,7 @@ impl Eval {
                             match files {
                                 NewIdentifierType::Vairable(var) => {
                                     match var.value {
-                                        LiteralOrFile::File(mut file) => {
+                                        LiteralOrFile::File(file) => {
                                             // set idnetifier to nothing
                                             match call.keyword {
                                                 TokenType::Close => {
@@ -1026,15 +1071,16 @@ impl Eval {
                                                     );
                                                 }
                                                 TokenType::Read => {
-                                                    let mut contents: String = String::new(); // create a string to hold the contents of the file
-                                                    match file.read_to_string(&mut contents) {
+                                                    let contents = // create a string to hold the contents of the file
+                                                    match self.scope.read_file(&file) {
                                                         Ok(contents) => contents,
-                                                        Err(_) => {
-                                                            error(0, "could not read file");
+                                                        Err(err) => {
+                                                            println!("{:?}", self.scope.files);
+                                                            error(0, format!("{}", err));
                                                         }
                                                     }; // read the file into the string
                                                     return Some(LiteralOrFile::Literal(
-                                                        LiteralType::String(contents),
+                                                        LiteralType::String(contents.to_string()),
                                                     )); // return the string
                                                 }
                                                 _ => {}
@@ -1054,17 +1100,17 @@ impl Eval {
                         }
                         other => {
                             match self.find_pointer_in_stuff(other) {
-                                Some(LiteralOrFile::File(mut file)) => {
+                                Some(LiteralOrFile::File(file)) => {
                                     match call.keyword {
                                         TokenType::Close => {
-                                            drop(file);
+                                            self.scope.files.remove(&file);
                                         }
                                         TokenType::Read => {
-                                            let mut contents: String = String::new(); // create a string to hold the contents of the file
-                                            match file.read_to_string(&mut contents) {
+                                            let contents: String = String::new(); // create a string to hold the contents of the file
+                                            match self.scope.read_file(&file) {
                                                 Ok(contents) => contents,
-                                                Err(_) => {
-                                                    error(0, "could not read file");
+                                                Err(err) => {
+                                                    error(0, format!("{}", err));
                                                 }
                                             }; // read the file into the string
                                             return Some(LiteralOrFile::Literal(
@@ -1088,6 +1134,59 @@ impl Eval {
                         }
                     }
                     Some(LiteralOrFile::Literal(LiteralType::Hempty))
+                }
+                TokenType::Write => {
+                    //takes 3 arguments:
+                    // 1. the file
+                    // 2. the string to write
+                    // 3. the mode (a: append or w: overwrite)
+                    arg_error(
+                        3,
+                        call.arguments.len() as u32,
+                        &call.keyword,
+                        false,
+                        call.line,
+                    );
+                    // get the file
+                    let file = match self.find_pointer_in_stuff(&call.arguments[0]) {
+                        Some(LiteralOrFile::File(file)) => file,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("First argument of {} must be a file", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // get the string
+                    let string = match self.find_pointer_in_stuff(&call.arguments[1]) {
+                        Some(LiteralOrFile::Literal(LiteralType::String(string))) => string,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Second argument of {} must be a string", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // get the mode
+                    let mode = match self.find_pointer_in_stuff(&call.arguments[2]) {
+                        Some(LiteralOrFile::Literal(LiteralType::String(mode))) => mode,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Third argument of {} must be a string", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // write the string to the file
+                    match self.scope.write_file(&file, &string, &mode) {
+                        Ok(_) => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
+                        Err(err) => {
+                            error(0, format!("{}", err).as_str());
+                        }
+                    }
                 }
                 t => {
                     let mut new_stuff: Vec<LiteralType> = Vec::new();

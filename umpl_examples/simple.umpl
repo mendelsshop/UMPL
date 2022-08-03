@@ -39,5 +39,8 @@ create file with ((open `test.txt`))>
 list z with [((read file))> true]
 ! currently two things cannot have acces to the a variable that holds a file so when we read the file that takes ownership of the file, and can't be accessed anymore,
 ! so the following line will throw an error that it could not find the variable file
-! create a with ((read file))>
+create a with ((read file))>
 (z.car)>
+(a)>
+(a)>
+((write file `ssdffd\n` `a`))>

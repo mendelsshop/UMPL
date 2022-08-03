@@ -26,7 +26,7 @@ Currenly working keywords for UMPL:
 - [x] runcommand
 - [x] open
 - [x] close
-- [ ] write
+- [x] write
 - [ ] writeline
 - [x] read
 - [ ] readline
