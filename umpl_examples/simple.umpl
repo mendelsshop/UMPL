@@ -18,6 +18,12 @@ create str with `df`
 (str)>>
 ((addwith str 5))<
 (str)>>
+create trt with ((plus str 5))>
+((multiplywith trt 5))<
+(trt)>>
+((addwith trt 5))<
+(str)>>
+((multiplywith str 5))<
 create str with true 
 if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
     if {false} ⧼ ! if true create a code block} ⧼ ! create a nested if statement that checks the boolean expression ((eq true boolean.second))< 
@@ -28,9 +34,10 @@ if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
 ⧽ else ⧼
     (`Hello World`)> ! else print the string Hello World (`Hello World`)>
 ⧽
-create file with ((open `log.yaml`))>
-create z with ((read file))>
-(z)>
+create file with ((open `test.txt`))>
 (`asddff`)>
-(z)>
-! (file)>
+list z with [((read file))> true]
+! currently two things cannot have acces to the a variable that holds a file so when we read the file that takes ownership of the file, and can't be accessed anymore,
+! so the following line will throw an error that it could not find the variable file
+! create a with ((read file))>
+(z.car)>

@@ -113,15 +113,15 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
-    pub fn from_other_stuff(thing: OtherStuff) -> Self {
+    pub fn from_other_stuff(thing: &OtherStuff) -> Self {
         match thing {
-            OtherStuff::Literal(literal) => literal.literal,
+            OtherStuff::Literal(literal) => literal.literal.clone(),
             _ => error::error(0, "not a literal"), // TODO: get line number
         }
     }
-    pub fn from_stuff(thing: Stuff) -> Self {
+    pub fn from_stuff(thing: &Stuff) -> Self {
         match thing {
-            Stuff::Literal(literal) => literal.literal,
+            Stuff::Literal(literal) => literal.literal.clone(),
             _ => error::error(0, "not a literal"), // TODO: get line number
         }
     }

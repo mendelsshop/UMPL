@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     fmt::{self, Display},
     fs::File,
-    io::Read,
+    io::Read, rc::Rc, cell::{RefCell, RefMut}, mem::swap, 
 };
 
 use crate::{
@@ -62,10 +62,10 @@ pub struct NewList {
 }
 
 impl NewList {
-    pub fn new(thing: &[LiteralOrFile]) -> Self {
+    pub fn new(thing: &mut Vec<LiteralOrFile>) -> Self {
         Self {
-            car: LitOrList::Literal(thing[0].clone()),
-            cdr: LitOrList::Literal(thing[1].clone()),
+            car: LitOrList::Literal(thing.remove(0)),
+            cdr: LitOrList::Literal(thing.remove(0)),
         }
     }
 }
@@ -100,13 +100,9 @@ impl Clone for LiteralOrFile {
     fn clone(&self) -> Self {
         match self {
             LiteralOrFile::Literal(l) => Self::Literal(l.clone()),
-            LiteralOrFile::File(file) => Self::File(match file.try_clone() {
-                Ok(f) => f,
-                Err(_) => error(0, "cannot clone file"),
-            }),
-        }
-    }
-}
+            _ => error(0, "cannot clone file"),
+    
+}}}
 impl Display for LiteralOrFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -139,15 +135,15 @@ pub enum NewIdentifierType {
 }
 
 impl NewIdentifierType {
-    pub fn new(thing: &[LiteralOrFile]) -> Self {
-        match thing.len() {
-            0 => error(0, "expected Identifier, got empty list"),
-            1 => Self::Vairable(Box::new(NewVairable::new(thing[0].clone()))),
-            2 => Self::List(Box::new(NewList::new(thing))),
-            _ => error(0, "expected Identifier, got list with more than 2 elements"),
+        pub fn to_vec_literaltype(self) -> Vec<LiteralOrFile> {
+            match self {
+                NewIdentifierType::Vairable(v) => vec![v.value],
+                _ => error(0, "cannot convert to vec"),
+            }
         }
-    }
 }
+    
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
@@ -170,12 +166,12 @@ impl Scope {
             parent_scope: Some(parent),
         }
     }
-    pub fn set_var(&mut self, name: &str, value: &[LiteralOrFile], recurse: bool) {
+    pub fn set_var(&mut self, name: &str, value: &mut Vec<LiteralOrFile>, recurse: bool) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
         let new_val: NewIdentifierType = match value.len() {
             0 => error(0, "expected Identifier, got empty list"),
-            1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value[0].clone()))),
+            1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value.remove(0)))),
             2 => NewIdentifierType::List(Box::new(NewList::new(value))),
             _ => error(0, "expected Identifier, got list with more than 2 elements"),
         };
@@ -192,14 +188,14 @@ impl Scope {
                             new_var.cdr = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
                                 NewIdentifierType::Vairable(var) => {
-                                    LitOrList::Literal(var.value.clone())
+                                    LitOrList::Literal(var.value)
                                 }
                             };
                         } else {
                             new_var.car = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
                                 NewIdentifierType::Vairable(var) => {
-                                    LitOrList::Literal(var.value.clone())
+                                    LitOrList::Literal(var.value)
                                 }
                             };
                         }
@@ -207,7 +203,7 @@ impl Scope {
                             .insert(new_name.to_string(), NewIdentifierType::List(new_var));
                     } else {
                         match self.parent_scope.as_mut() {
-                            Some(parent) => parent.set_var(name, value, recurse),
+                            Some(parent) => parent.set_var(name, &mut new_val.to_vec_literaltype(), recurse),
                             None => error(1, "variable not found"),
                         }
                     }
@@ -220,14 +216,14 @@ impl Scope {
                         new_var.cdr = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
                             NewIdentifierType::Vairable(var) => {
-                                LitOrList::Literal(var.value.clone())
+                                LitOrList::Literal(var.value)
                             }
                         };
                     } else {
                         new_var.car = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
                             NewIdentifierType::Vairable(var) => {
-                                LitOrList::Literal(var.value.clone())
+                                LitOrList::Literal(var.value)
                             }
                         };
                     }
@@ -251,7 +247,7 @@ impl Scope {
             }
         }
     }
-    pub fn get_var(&self, name: &str) -> NewIdentifierType {
+    pub fn get_var(&mut self, name: &str) -> NewIdentifierType {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
         if name.ends_with(".car") || name.ends_with(".cdr") {
             if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4]) {
@@ -285,8 +281,31 @@ impl Scope {
             error(1, "expected list, got something else");
         }
         match self.vars.get(name) {
-            Some(v) => v.clone(),
-            None => match &self.parent_scope {
+            Some(v) => match v {
+                NewIdentifierType::Vairable(var) => {
+                    match &var.value {
+                        LiteralOrFile::Literal(_) => {
+                            v.clone()
+                        }
+                        LiteralOrFile::File(_) => {
+                            // let mut temp_file = file.try_clone().unwrap();
+                            // swap(&mut file, &mut temp_file);
+                            // currently the after this the file is dropped from variables and is accessed through the function that calls this one
+                            self.vars.remove(name).unwrap()
+                            // NewIdentifierType::Vairable(Box::new(NewVairable::new(
+   
+                            //     LiteralOrFile::File(temp_file),
+                            // )))
+                        }
+                    }
+                }
+                NewIdentifierType::List(list) => {
+                    // Todoe remove clone
+                    NewIdentifierType::List(list.clone())
+                }
+            
+            },
+            None => match &mut self.parent_scope {
                 Some(parent) => parent.get_var(name),
                 None => error(1, format!("variable not found {}", name)),
             },
@@ -297,7 +316,7 @@ impl Scope {
     }
     pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64)> {
         match self.function.get(&name) {
-            Some((args, body)) => Some(((*args).clone(), *body)),
+            Some((args, body)) => Some((args.clone(), *body)),
             None => match &self.parent_scope {
                 Some(parent) => parent.get_function(name),
                 None => None,
@@ -326,9 +345,14 @@ impl Scope {
         }
     }
     pub fn drop_scope(&mut self) {
-        self.function = self.parent_scope.as_ref().unwrap().function.clone();
-        self.vars = self.parent_scope.as_ref().unwrap().vars.clone();
-        self.parent_scope = self.parent_scope.as_ref().unwrap().parent_scope.clone();
+        let p_scope: Self = *self.parent_scope.take().unwrap();
+        *self = p_scope;
+    }
+
+    pub fn from_parent(&mut self)  {
+        let mut temp_scope = Self::new();
+        swap(&mut temp_scope, self);
+        *self = Self::new_with_parent(Box::new(temp_scope));
     }
     pub fn has_function(&self, name: char) -> bool {
         self.function.contains_key(&name)
@@ -346,11 +370,12 @@ pub enum Stopper {
     Continue,
     Return(LiteralOrFile),
 }
-#[derive(PartialEq, Clone)]
+#[derive(Clone)]
 pub struct Eval {
     pub scope: Scope,
     pub in_function: bool,
     pub in_loop: bool,
+    pub files : HashMap<String, Rc<RefCell<File>>>,
 }
 
 impl Eval {
@@ -359,15 +384,20 @@ impl Eval {
             scope: Scope::new(),
             in_function: false,
             in_loop: false,
+            files: HashMap::new(),
         };
         body = self_.find_functions(body);
-        self_.find_variables(&body);
+        self_.find_variables(body);
         self_
+    }
+
+    pub fn get_file(&self, name: &str) -> Option<RefMut<'_, File>> {
+        self.files.get(name).map(|file| file.borrow_mut())
     }
 
     pub fn find_functions(&mut self, body: Vec<Thing>) -> Vec<Thing> {
         body.into_iter()
-            .filter(|thing| {
+            .filter(|thing| -> bool {
                 if let Thing::Function(function) = thing {
                     self.scope.set_function(
                         function.name,
@@ -382,21 +412,21 @@ impl Eval {
             .collect()
     }
     #[allow(clippy::too_many_lines)]
-    pub fn find_variables(&mut self, body: &[Thing]) -> Option<Stopper> {
+    pub fn find_variables(&mut self, body: Vec<Thing>) -> Option<Stopper> {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
         for thing in body {
-            match thing.clone() {
+            match thing {
                 Thing::Identifier(ref variable) => match variable.value {
                     IdentifierType::Vairable(ref name) => {
                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
-                            self.scope.set_var(&variable.name, &[pointer], false);
+                            self.scope.set_var(&variable.name, &mut vec![pointer], false);
                         } else {
                             self.scope.set_var(
                                 &variable.name,
-                                &[LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                    name.value.clone(),
+                                &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                    &name.value,
                                 ))],
                                 false,
                             );
@@ -406,23 +436,23 @@ impl Eval {
                         let car: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.car) {
                             Some(pointer) => pointer,
                             None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                list.car.clone(),
+                                &list.car,
                             )),
                         };
                         let cdr: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.cdr) {
                             Some(pointer) => pointer,
                             None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                list.cdr.clone(),
+                                &list.cdr,
                             )),
                         };
-                        self.scope.set_var(&variable.name, &[car, cdr], false);
+                        self.scope.set_var(&variable.name, &mut vec![car, cdr], false);
                     }
                 },
                 Thing::Return(os, _line) => {
                     let ret: LiteralOrFile = match os {
                         Some(os) => match self.find_pointer_in_other_stuff(&os) {
                             Some(identifier) => identifier,
-                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(os)),
+                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(&os)),
                         },
                         None => LiteralOrFile::Literal(LiteralType::Hempty),
                     };
@@ -451,17 +481,18 @@ impl Eval {
                                     _ => error(if_statement.line, "cannot compare files"),
                                 }
                             }
-                            None => LiteralType::from_other_stuff(if_statement.condition),
+                            None => LiteralType::from_other_stuff(&if_statement.condition),
                         };
                     if conditon.type_eq(&LiteralType::Boolean(true)) {
                     } else {
                         error(if_statement.line, "expected boolean, got something else");
                     }
-                    self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+                    // TODO: dont clone the scope
+                    self.scope.from_parent();
                     if conditon == LiteralType::Boolean(true) {
                         if_statement.body_true = self.find_functions(if_statement.body_true);
                         let body_true: Option<Stopper> =
-                            self.find_variables(&if_statement.body_true);
+                            self.find_variables(if_statement.body_true);
                         self.scope.drop_scope();
                         if let Some(stop) = body_true {
                             match stop {
@@ -481,7 +512,7 @@ impl Eval {
                         }
                     } else {
                         if_statement.body_false = self.find_functions(if_statement.body_false);
-                        let z = self.find_variables(&if_statement.body_false);
+                        let z = self.find_variables(if_statement.body_false);
                         self.scope.drop_scope();
                         if let Some(stop) = z {
                             if let Stopper::Return(ret) = stop {
@@ -500,11 +531,12 @@ impl Eval {
                 }
                 Thing::LoopStatement(loop_statement) => {
                     'l: loop {
-                        self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+                        // TODO: dont clone the scope
+                        self.scope.from_parent();
                         let loop_body = self.find_functions(loop_statement.body.clone());
                         self.in_loop = true;
                         // TODO: find out when break/continue is called
-                        let z: Option<Stopper> = self.find_variables(&loop_body);
+                        let z: Option<Stopper> = self.find_variables(loop_body.clone());
                         self.scope.drop_scope();
                         if let Some(stop) = z {
                             match stop {
@@ -547,7 +579,7 @@ impl Eval {
             OtherStuff::Expression(expr) => match self.find_pointer_in_stuff(&expr.inside) {
                 Some(new_expr) => Some(new_expr),
                 None => Some(LiteralOrFile::Literal(LiteralType::from_stuff(
-                    expr.inside.clone(),
+                    &expr.inside,
                 ))),
             },
             _ => None,
@@ -579,10 +611,10 @@ impl Eval {
                                 call.line,
                             );
                             if let Some(new_thing) = self.find_pointer_in_stuff(thing) {
-                                new_stuff.push(new_thing.clone());
+                                new_stuff.push(new_thing);
                             } else {
                                 new_stuff.push(LiteralOrFile::Literal(LiteralType::from_stuff(
-                                    thing.clone(),
+                                    thing,
                                 )));
                             }
                         }
@@ -593,15 +625,14 @@ impl Eval {
                             false,
                             call.line,
                         );
-                        self.scope = Scope::new_with_parent(Box::new(self.scope.clone()));
+                        self.scope.from_parent();
                         function.0 = self.find_functions(function.0);
-                        // TODO: find if function has return in it and act accordingly
                         self.in_function = true;
-                        new_stuff.iter().enumerate().for_each(|(i, l)| {
+                        new_stuff.into_iter().enumerate().for_each(|(i, l)| {
                             self.scope
-                                .set_var(format!("${}", i + 1).as_str(), &[l.clone()], false);
+                                .set_var(format!("${}", i + 1).as_str(), &mut vec![(l)], false);
                         });
-                        let z: Option<Stopper> = self.find_variables(&function.0);
+                        let z: Option<Stopper> = self.find_variables(function.0);
                         self.in_function = false;
                         self.scope.drop_scope();
                         z.map_or(Some(LiteralOrFile::Literal(LiteralType::Hempty)), |v| {
@@ -644,15 +675,15 @@ impl Eval {
                                 match self.find_pointer_in_stuff(thing) {
                                     Some(new_thing) => new_stuff.push(new_thing),
                                     None => new_stuff.push(LiteralOrFile::Literal(
-                                        LiteralType::from_stuff(thing.clone()),
+                                        LiteralType::from_stuff(thing),
                                     )),
                                 }
                             });
                             match new_stuff.len() {
                                 1 => {
-                                    let literal: &LiteralOrFile = &new_stuff[0];
+                                    let literal: LiteralOrFile = new_stuff.remove(0);
                                     let var: LiteralOrFile = match self.scope.get_var(&ident.name) {
-                                        NewIdentifierType::Vairable(v) => v.value.clone(),
+                                        NewIdentifierType::Vairable(v) => v.value,
                                         NewIdentifierType::List(..) => {
                                             error(ident.line, "Cannot change entire list");
                                         }
@@ -660,8 +691,8 @@ impl Eval {
                                     match call.keyword {
                                         TokenType::Set => {
                                             self.scope.set_var(
-                                                &ident.name.clone(),
-                                                &[literal.clone()],
+                                                &ident.name,
+                                                &mut vec![literal],
                                                 true,
                                             );
                                             None
@@ -675,7 +706,7 @@ impl Eval {
                                                     let new_val = num + num2;
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralOrFile::Literal(
+                                                        &mut vec![LiteralOrFile::Literal(
                                                             LiteralType::Number(new_val),
                                                         )],
                                                         true,
@@ -696,10 +727,10 @@ impl Eval {
                                                     LiteralOrFile::Literal(
                                                         LiteralType::String(s2),
                                                     ) => {
-                                                        s.push_str(s2);
+                                                        s.push_str(s2.as_str());
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralOrFile::Literal(
+                                                            &mut vec![LiteralOrFile::Literal(
                                                                 LiteralType::String(s),
                                                             )],
                                                             true,
@@ -712,7 +743,7 @@ impl Eval {
                                                         s.push_str(&n.to_string());
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralOrFile::Literal(
+                                                            &mut vec![LiteralOrFile::Literal(
                                                                 LiteralType::String(s),
                                                             )],
                                                             true,
@@ -725,7 +756,7 @@ impl Eval {
                                                         s.push_str(&boolean.to_string());
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralOrFile::Literal(
+                                                            &mut vec![LiteralOrFile::Literal(
                                                                 LiteralType::String(s),
                                                             )],
                                                             true,
@@ -736,7 +767,7 @@ impl Eval {
                                                         s.push_str("null");
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralOrFile::Literal(
+                                                            &mut vec![LiteralOrFile::Literal(
                                                                 LiteralType::String(s),
                                                             )],
                                                             true,
@@ -773,7 +804,7 @@ impl Eval {
                                                     let new_val: f64 = num * num2;
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralOrFile::Literal(
+                                                        &mut vec![LiteralOrFile::Literal(
                                                             LiteralType::Number(new_val),
                                                         )],
                                                         true,
@@ -794,12 +825,12 @@ impl Eval {
                                                     LiteralType::Number(num),
                                                 ) = literal
                                                 {
-                                                    let new_string: String = (0..*num as i32)
-                                                        .map(|_| s.clone())
+                                                    let new_string: String = (0..num as i32)
+                                                        .map(|_| s.to_string())
                                                         .collect();
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralOrFile::Literal(
+                                                        &mut vec![LiteralOrFile::Literal(
                                                             LiteralType::String(new_string),
                                                         )],
                                                         true,
@@ -838,7 +869,7 @@ impl Eval {
                                                         let new_val = nums - num;
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralOrFile::Literal(
+                                                            &mut vec![LiteralOrFile::Literal(
                                                                 LiteralType::Number(new_val),
                                                             )],
                                                             true,
@@ -848,7 +879,7 @@ impl Eval {
                                                         let new_val = nums / num;
                                                         self.scope.set_var(
                                                             &ident.name,
-                                                            &[LiteralOrFile::Literal(
+                                                            &mut vec![LiteralOrFile::Literal(
                                                                 LiteralType::Number(new_val),
                                                             )],
                                                             true,
@@ -887,7 +918,7 @@ impl Eval {
                                 }
                                 2 => {
                                     if call.keyword == TokenType::Set {
-                                        self.scope.set_var(&ident.name, &new_stuff, true);
+                                        self.scope.set_var(&ident.name, &mut new_stuff, true);
                                         None
                                     } else {
                                         error(
@@ -946,16 +977,25 @@ impl Eval {
                         );
                     };
                     // open the file
-                    let file: File = match File::open(arg) {
-                        Ok(file) => file,
+
+                    self.files.insert(arg.to_string(), match File::open(arg) {
+                        Ok(file) => Rc::new(RefCell::new(file)),
                         Err(e) => {
                             error(
                                 call.line,
                                 format!("Could not open file {}: {}", arg, e).as_str(),
                             );
                         }
-                    };
-                    Some(LiteralOrFile::File(file))
+                    });
+                    Some(match File::open(arg) {
+                        Ok(file) => LiteralOrFile::File(file),
+                        Err(e) => {
+                            error(
+                                call.line,
+                                format!("Could not open file {}: {}", arg, e).as_str(),
+                            );
+                        }
+                    })
                 }
                 TokenType::Close | TokenType::Read => {
                     arg_error(
@@ -978,7 +1018,7 @@ impl Eval {
                                                 TokenType::Close => {
                                                     self.scope.set_var(
                                                         &ident.name,
-                                                        &[LiteralOrFile::Literal(
+                                                        &mut vec![LiteralOrFile::Literal(
                                                             LiteralType::Hempty,
                                                         )],
                                                         true,
@@ -1067,14 +1107,14 @@ impl Eval {
                                     );
                                 }
                             },
-                            None => new_stuff.push(LiteralType::from_stuff(thing.clone())),
+                            None => new_stuff.push(LiteralType::from_stuff(thing)),
                         }
                     });
                     Some(LiteralOrFile::Literal(t.r#do(&new_stuff, call.line)))
                 }
             },
             _ => Some(LiteralOrFile::Literal(LiteralType::from_stuff(
-                stuff.clone(),
+                stuff,
             ))),
         }
     }

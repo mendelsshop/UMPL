@@ -27,7 +27,8 @@ Currenly working keywords for UMPL:
 - [x] open
 - [x] close
 - [ ] write
-- [ ] read
+- [ ] writeline
+- [x] read
 - [ ] readline
 - [x] delete
 
