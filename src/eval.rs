@@ -1,10 +1,13 @@
 use log::info;
 
 use std::{
+    cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Display},
     fs::File,
-    io::Read, rc::Rc, cell::{RefCell, RefMut}, mem::swap, 
+    io::Read,
+    mem::swap,
+    rc::Rc,
 };
 
 use crate::{
@@ -101,8 +104,9 @@ impl Clone for LiteralOrFile {
         match self {
             LiteralOrFile::Literal(l) => Self::Literal(l.clone()),
             _ => error(0, "cannot clone file"),
-    
-}}}
+        }
+    }
+}
 impl Display for LiteralOrFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -135,14 +139,13 @@ pub enum NewIdentifierType {
 }
 
 impl NewIdentifierType {
-        pub fn to_vec_literaltype(self) -> Vec<LiteralOrFile> {
-            match self {
-                NewIdentifierType::Vairable(v) => vec![v.value],
-                _ => error(0, "cannot convert to vec"),
-            }
+    pub fn to_vec_literaltype(self) -> Vec<LiteralOrFile> {
+        match self {
+            NewIdentifierType::Vairable(v) => vec![v.value],
+            _ => error(0, "cannot convert to vec"),
         }
+    }
 }
-    
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Scope {
@@ -187,23 +190,21 @@ impl Scope {
                         if name.ends_with(".cdr") {
                             new_var.cdr = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
-                                NewIdentifierType::Vairable(var) => {
-                                    LitOrList::Literal(var.value)
-                                }
+                                NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                             };
                         } else {
                             new_var.car = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
-                                NewIdentifierType::Vairable(var) => {
-                                    LitOrList::Literal(var.value)
-                                }
+                                NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                             };
                         }
                         self.vars
                             .insert(new_name.to_string(), NewIdentifierType::List(new_var));
                     } else {
                         match self.parent_scope.as_mut() {
-                            Some(parent) => parent.set_var(name, &mut new_val.to_vec_literaltype(), recurse),
+                            Some(parent) => {
+                                parent.set_var(name, &mut new_val.to_vec_literaltype(), recurse)
+                            }
                             None => error(1, "variable not found"),
                         }
                     }
@@ -215,16 +216,12 @@ impl Scope {
                     if name.ends_with(".cdr") {
                         new_var.cdr = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
-                            NewIdentifierType::Vairable(var) => {
-                                LitOrList::Literal(var.value)
-                            }
+                            NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                         };
                     } else {
                         new_var.car = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
-                            NewIdentifierType::Vairable(var) => {
-                                LitOrList::Literal(var.value)
-                            }
+                            NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                         };
                     }
                     self.vars
@@ -284,16 +281,14 @@ impl Scope {
             Some(v) => match v {
                 NewIdentifierType::Vairable(var) => {
                     match &var.value {
-                        LiteralOrFile::Literal(_) => {
-                            v.clone()
-                        }
+                        LiteralOrFile::Literal(_) => v.clone(),
                         LiteralOrFile::File(_) => {
                             // let mut temp_file = file.try_clone().unwrap();
                             // swap(&mut file, &mut temp_file);
                             // currently the after this the file is dropped from variables and is accessed through the function that calls this one
                             self.vars.remove(name).unwrap()
                             // NewIdentifierType::Vairable(Box::new(NewVairable::new(
-   
+
                             //     LiteralOrFile::File(temp_file),
                             // )))
                         }
@@ -303,7 +298,6 @@ impl Scope {
                     // Todoe remove clone
                     NewIdentifierType::List(list.clone())
                 }
-            
             },
             None => match &mut self.parent_scope {
                 Some(parent) => parent.get_var(name),
@@ -349,7 +343,7 @@ impl Scope {
         *self = p_scope;
     }
 
-    pub fn from_parent(&mut self)  {
+    pub fn from_parent(&mut self) {
         let mut temp_scope = Self::new();
         swap(&mut temp_scope, self);
         *self = Self::new_with_parent(Box::new(temp_scope));
@@ -375,7 +369,7 @@ pub struct Eval {
     pub scope: Scope,
     pub in_function: bool,
     pub in_loop: bool,
-    pub files : HashMap<String, Rc<RefCell<File>>>,
+    pub files: HashMap<String, Rc<RefCell<File>>>,
 }
 
 impl Eval {
@@ -421,7 +415,8 @@ impl Eval {
                 Thing::Identifier(ref variable) => match variable.value {
                     IdentifierType::Vairable(ref name) => {
                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
-                            self.scope.set_var(&variable.name, &mut vec![pointer], false);
+                            self.scope
+                                .set_var(&variable.name, &mut vec![pointer], false);
                         } else {
                             self.scope.set_var(
                                 &variable.name,
@@ -435,17 +430,18 @@ impl Eval {
                     IdentifierType::List(ref list) => {
                         let car: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.car) {
                             Some(pointer) => pointer,
-                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                &list.car,
-                            )),
+                            None => {
+                                LiteralOrFile::Literal(LiteralType::from_other_stuff(&list.car))
+                            }
                         };
                         let cdr: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.cdr) {
                             Some(pointer) => pointer,
-                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                &list.cdr,
-                            )),
+                            None => {
+                                LiteralOrFile::Literal(LiteralType::from_other_stuff(&list.cdr))
+                            }
                         };
-                        self.scope.set_var(&variable.name, &mut vec![car, cdr], false);
+                        self.scope
+                            .set_var(&variable.name, &mut vec![car, cdr], false);
                     }
                 },
                 Thing::Return(os, _line) => {
@@ -613,9 +609,8 @@ impl Eval {
                             if let Some(new_thing) = self.find_pointer_in_stuff(thing) {
                                 new_stuff.push(new_thing);
                             } else {
-                                new_stuff.push(LiteralOrFile::Literal(LiteralType::from_stuff(
-                                    thing,
-                                )));
+                                new_stuff
+                                    .push(LiteralOrFile::Literal(LiteralType::from_stuff(thing)));
                             }
                         }
                         arg_error(
@@ -629,8 +624,11 @@ impl Eval {
                         function.0 = self.find_functions(function.0);
                         self.in_function = true;
                         new_stuff.into_iter().enumerate().for_each(|(i, l)| {
-                            self.scope
-                                .set_var(format!("${}", i + 1).as_str(), &mut vec![(l)], false);
+                            self.scope.set_var(
+                                format!("${}", i + 1).as_str(),
+                                &mut vec![(l)],
+                                false,
+                            );
                         });
                         let z: Option<Stopper> = self.find_variables(function.0);
                         self.in_function = false;
@@ -978,15 +976,18 @@ impl Eval {
                     };
                     // open the file
 
-                    self.files.insert(arg.to_string(), match File::open(arg) {
-                        Ok(file) => Rc::new(RefCell::new(file)),
-                        Err(e) => {
-                            error(
-                                call.line,
-                                format!("Could not open file {}: {}", arg, e).as_str(),
-                            );
-                        }
-                    });
+                    self.files.insert(
+                        arg.to_string(),
+                        match File::open(arg) {
+                            Ok(file) => Rc::new(RefCell::new(file)),
+                            Err(e) => {
+                                error(
+                                    call.line,
+                                    format!("Could not open file {}: {}", arg, e).as_str(),
+                                );
+                            }
+                        },
+                    );
                     Some(match File::open(arg) {
                         Ok(file) => LiteralOrFile::File(file),
                         Err(e) => {
@@ -1113,9 +1114,7 @@ impl Eval {
                     Some(LiteralOrFile::Literal(t.r#do(&new_stuff, call.line)))
                 }
             },
-            _ => Some(LiteralOrFile::Literal(LiteralType::from_stuff(
-                stuff,
-            ))),
+            _ => Some(LiteralOrFile::Literal(LiteralType::from_stuff(stuff))),
         }
     }
 }

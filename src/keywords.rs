@@ -59,7 +59,6 @@ impl Keyword {
         Self { keywords }
     }
 
-
     pub fn get(&self, name: &str) -> Option<TokenType> {
         self.keywords.get(name).cloned()
     }
