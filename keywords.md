@@ -27,9 +27,11 @@ Currenly working keywords for UMPL:
 - [x] open
 - [x] close
 - [x] write
-- [ ] writeline
+- [x] writeline
 - [x] read
-- [ ] readline
+- [x] readline
 - [x] delete
+- [x] deletefile
+- [x] createfile
 
 `* only available for numbers`

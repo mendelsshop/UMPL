@@ -4,7 +4,7 @@ use std::{
     cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Display},
-    fs::{File, OpenOptions},
+    fs::{File, OpenOptions, self},
     io::{Read, Write},
     mem::swap,
     rc::Rc,
@@ -1151,6 +1151,193 @@ impl Eval {
                             error(0, format!("{}", err).as_str());
                         }
                     }
+                }
+                TokenType::ReadLine => {
+                    // takes 2 arguments: file, line
+                    arg_error(
+                        2,
+                        call.arguments.len() as u32,
+                        &call.keyword,
+                        false,
+                        call.line,
+                    );
+                    // get the file
+                    let file = match self.find_pointer_in_stuff(&call.arguments[0]) {
+                        Some(LiteralOrFile::File(file)) => file,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("First argument of {} must be a file", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // get the line
+                    let line = match self.find_pointer_in_stuff(&call.arguments[1]) {
+                        Some(LiteralOrFile::Literal(LiteralType::Number(line))) => line,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Second argument of {} must be a line", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // read the the file
+                    match read_file(&file) {
+                        Ok(contents) => {
+                            let lines = contents.split('\n').collect::<Vec<&str>>();
+                            if line as usize > lines.len() {
+                                error(
+                                    call.line,
+                                    format!("Line {} does not exist in file {}", line, file),
+                                );
+                            }
+                            Some(LiteralOrFile::Literal(LiteralType::String(
+                                lines[line as usize - 1].to_string(),
+                            )))
+                        }
+                        Err(err) => {
+                            error(0, format!("{}", err).as_str());
+                        }
+                    }
+                }
+                TokenType::WriteLine => {
+                    // takes 4 arguments: file, line, string and mode (a: append to beging of line or w: overwrite)
+                    arg_error(
+                        4,
+                        call.arguments.len() as u32,
+                        &call.keyword,
+                        false,
+                        call.line,
+                    );
+                    // get the file
+                    let file = match self.find_pointer_in_stuff(&call.arguments[0]) {
+                        Some(LiteralOrFile::File(file)) => file,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("First argument of {} must be a file", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // get the string
+                    let mut string = match self.find_pointer_in_stuff(&call.arguments[1]) {
+                        Some(LiteralOrFile::Literal(LiteralType::String(string))) => string,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Third argument of {} must be a string", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // get the line
+                    let line = match self.find_pointer_in_stuff(&call.arguments[2]) {
+                        Some(LiteralOrFile::Literal(LiteralType::Number(line))) => line as usize,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Second argument of {} must be a line", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // get the mode
+                    let mode = match self.find_pointer_in_stuff(&call.arguments[3]) {
+                        Some(LiteralOrFile::Literal(LiteralType::String(mode))) => mode,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Fourth argument of {} must be a string", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // read the file
+                    let mut contents = match read_file(&file) {
+                        Ok(contents) => contents,
+                        Err(err) => {
+                            error(0, format!("{}", err).as_str());
+                        }
+                    };
+                    // split the contents into lines
+                    let mut lines = contents.split('\n').collect::<Vec<&str>>();
+                    // if the line is greater than the number of lines, add a new line
+                    if line as usize > lines.len() {
+                        error(call.line, "Line does not exist in file");
+                    }
+                    string = match mode.as_str() {
+                        "a" => {
+                            format!("{}{}",  string, lines[line as usize - 1],)
+                        }
+                        "w" => {
+                            string
+                        }
+                        _ => {
+                            error(
+                                call.line,
+                                format!("Mode {} is not a valid mode", mode).as_str(),
+                            );
+                        }
+                    };
+                    lines[line as usize - 1] = string.as_str();
+                    // collect all lines
+                    contents = lines.join("\n");
+                    // write the file
+                    match write_file(&file, &contents, "w") {
+                        Ok(_) => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
+                        Err(err) => {
+                            error(0, format!("{}", err).as_str());
+                        }
+                    }
+
+                }
+                TokenType::DeleteFile | TokenType::CreateFile => {
+                // takes 1 argument: file
+                    arg_error(
+                        1,
+                        call.arguments.len() as u32,
+                        &call.keyword,
+                        false,
+                        call.line,
+                    );
+                    // get the file
+                    let file = match self.find_pointer_in_stuff(&call.arguments[0]) {
+                        Some(LiteralOrFile::File(file)) => file,
+                        _ => {
+                            error(
+                                call.line,
+                                format!("First argument of {} must be a file", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    };
+                    // match delete or create file
+                    match call.keyword {
+                        TokenType::DeleteFile => {
+                            match fs::remove_file(&file) {
+                                Ok(_) => Some(LiteralOrFile::Literal(LiteralType::Hempty)),
+                                Err(err) => {
+                                    error(0, format!("{}", err).as_str());
+                                }
+
+                            }
+                        },
+                        TokenType::CreateFile => {
+                            // create the file
+                            match OpenOptions::new().create(true).open(&file) {
+                                Ok(_) => Some(LiteralOrFile::File(file)),
+                                Err(err) => {
+                                    error(0, format!("{}", err).as_str());
+                                }
+                            }
+                           
+                    }
+                    _ => Some(LiteralOrFile::Literal(LiteralType::Hempty))
+                    
+                }
                 }
                 t => {
                     let mut new_stuff: Vec<LiteralType> = Vec::new();

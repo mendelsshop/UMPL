@@ -80,6 +80,9 @@ pub enum TokenType {
     Program,
     Delete,
     SplitOn,
+    WriteLine,
+    CreateFile,
+    DeleteFile,
 }
 
 impl TokenType {

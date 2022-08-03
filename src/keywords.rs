@@ -56,6 +56,9 @@ impl Keyword {
         keywords.insert("readline".to_string(), TokenType::ReadLine);
         keywords.insert("delete".to_string(), TokenType::Delete);
         keywords.insert("spliton".to_string(), TokenType::SplitOn);
+        keywords.insert("writeline".to_string(), TokenType::WriteLine);
+        keywords.insert("createfile".to_string(), TokenType::CreateFile);
+        keywords.insert("deletefile".to_string(), TokenType::DeleteFile);
         Self { keywords }
     }
 
