@@ -113,16 +113,16 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
-    pub fn from_other_stuff(thing: &OtherStuff) -> Self {
+    pub fn from_other_stuff(thing: &OtherStuff, line: i32) -> Self {
         match thing {
             OtherStuff::Literal(literal) => literal.literal.clone(),
-            _ => error::error(0, "not a literal"), // TODO: get line number
+            _ => error::error(line, "not a literal"), // TODO: get line number
         }
     }
-    pub fn from_stuff(thing: &Stuff) -> Self {
+    pub fn from_stuff(thing: &Stuff , line: i32) -> Self {
         match thing {
             Stuff::Literal(literal) => literal.literal.clone(),
-            _ => error::error(0, "not a literal"), // TODO: get line number
+            _ => error::error(line, "not a literal"), // TODO: get line number
         }
     }
     pub const fn new_string(string: String) -> Self {
@@ -168,12 +168,12 @@ pub enum IdentifierType {
 }
 
 impl IdentifierType {
-    pub fn new(thing: &[OtherStuff]) -> Self {
+    pub fn new(thing: &[OtherStuff], line: i32) -> Self {
         match thing.len() {
-            0 => error::error(0, "expected Identifier, got empty list"),
+            0 => error::error(line, "expected Identifier, got empty list"),
             1 => Self::Vairable(Box::new(Vairable::new(thing[0].clone()))),
             2 => Self::List(Box::new(List::new(thing))),
-            _ => error::error(0, "expected Identifier, got list with more than 2 elements"),
+            _ => error::error(line, "expected Identifier, got list with more than 2 elements"),
         }
     }
 }
@@ -189,7 +189,7 @@ impl Identifier {
     pub fn new(name: String, value: &[OtherStuff], line: i32) -> Self {
         Self {
             name,
-            value: IdentifierType::new(value),
+            value: IdentifierType::new(value, line),
             line,
         }
     }
@@ -251,11 +251,11 @@ pub enum OtherStuff {
 }
 
 impl OtherStuff {
-    pub fn from_stuff(stuff: &Stuff) -> Self {
+    pub fn from_stuff(stuff: &Stuff, line: i32) -> Self {
         match stuff {
             Stuff::Literal(literal) => Self::Literal(literal.clone()),
             Stuff::Identifier(identifier) => Self::Identifier(identifier.clone()),
-            _ => error::error(0, "expected literal or identifier"),
+            _ => error::error(line, "expected literal or identifier"),
         }
     }
 }

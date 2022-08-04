@@ -63,7 +63,7 @@ impl Lexer {
             '`' => self.string(),
             '$' => self.function_agument(),
             c => {
-                if c.is_alphabetic() || c == '-' {
+                if c.is_lowercase() || c == '-' {
                     if c == 't' || c == 'f' {
                         if !self.boolean() {
                             self.identifier();
@@ -136,15 +136,12 @@ impl Lexer {
     }
 
     fn number(&mut self) {
-        let hex_char = vec!['A', 'B', 'B', 'C', 'E', 'F'];
-        while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
+        while self.peek().is_ascii_hexdigit() {
             self.advance();
         }
-        if self.peek() == '.'
-            && (self.peek_next().is_ascii_digit() || hex_char.contains(&self.peek_next()))
-        {
+        if self.peek() == '.' && self.peek_next().is_ascii_hexdigit() {
             self.advance();
-            while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
+            while self.peek().is_ascii_hexdigit() {
                 self.advance();
             }
         }
@@ -157,7 +154,7 @@ impl Lexer {
     }
 
     fn identifier(&mut self) {
-        while self.peek().is_alphanumeric() || self.peek() == '-' {
+        while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
         self.add_token(

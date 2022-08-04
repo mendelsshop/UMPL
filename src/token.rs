@@ -186,7 +186,7 @@ impl TokenType {
                             }
                             LiteralType::String(new_string)
                         }
-                        _ => error::error(0, "Invalid literal arguments"),
+                        _ => error::error(line, "Invalid literal arguments"),
                     }
                 }
                 Self::Error

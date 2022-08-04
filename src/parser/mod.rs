@@ -461,7 +461,6 @@ impl Parser {
                             self.advance("parse_from_token return expecting expression");
                             return Some(Thing::Return(None, self.token.line));
                         }
-                        // TODO: capture the value returned if any
                         self.advance("parse_from_token return expecting expression");
                         let thing = self.parse_to_other_stuff();
                         Some(Thing::Return(Some(thing), self.token.line))
@@ -537,6 +536,12 @@ impl Parser {
             self.advance("after left paren");
             if self.token.token_type == TokenType::New {
                 self.advance("after left paren");
+                match self.token.token_type {
+                    TokenType::FunctionIdentifier { .. } => {}
+                    _ => {
+                        error(self.token.line, "function identifier expected after new");
+                    }
+                }
             }
             let keyword: TokenType = self.token.token_type.clone();
             let line: i32 = self.token.line;

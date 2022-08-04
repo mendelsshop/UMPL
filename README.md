@@ -13,3 +13,5 @@ along with an example or two according of how to use it in the language.
 With UMPL we try to break backwards compatibility, so have fun trying to write the same code for different versions of the language.
 <br>
 To see example code for UMPL you can see [this directory](https://github.com/mendelsshop/UMPL/tree/main/umpl_examples), and to look at the formal language grammar refer to [this file](https://github.com/mendelsshop/UMPL/blob/main/grammer.md).
+<br>
+variables in UMPL must follow the kebab-case naming convention and have no uppercase letters.
