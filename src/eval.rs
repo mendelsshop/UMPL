@@ -214,14 +214,23 @@ impl Scope {
             files: HashMap::new(),
         }
     }
-    pub fn set_var(&mut self, name: &str, value: &mut Vec<LiteralOrFile>, recurse: bool, line: i32) {
+    pub fn set_var(
+        &mut self,
+        name: &str,
+        value: &mut Vec<LiteralOrFile>,
+        recurse: bool,
+        line: i32,
+    ) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
         let new_val: NewIdentifierType = match value.len() {
             0 => error(line, "expected Identifier, got empty list"),
             1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value.remove(0)))),
             2 => NewIdentifierType::List(Box::new(NewList::new(value))),
-            _ => error(line, "expected Identifier, got list with more than 2 elements"),
+            _ => error(
+                line,
+                "expected Identifier, got list with more than 2 elements",
+            ),
         };
         match name {
             name if name.ends_with(".car") | name.ends_with(".cdr") => {
@@ -248,7 +257,12 @@ impl Scope {
                     } else {
                         match self.parent_scope.as_mut() {
                             Some(parent) => {
-                                parent.set_var(name, &mut new_val.to_vec_literaltype(line), recurse, line);
+                                parent.set_var(
+                                    name,
+                                    &mut new_val.to_vec_literaltype(line),
+                                    recurse,
+                                    line,
+                                );
                             }
                             None => error(line, "variable not found"),
                         }
@@ -446,14 +460,18 @@ impl Eval {
                 Thing::Identifier(ref variable) => match variable.value {
                     IdentifierType::Vairable(ref name) => {
                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
-                            self.scope
-                                .set_var(&variable.name, &mut vec![pointer], false, variable.line);
+                            self.scope.set_var(
+                                &variable.name,
+                                &mut vec![pointer],
+                                false,
+                                variable.line,
+                            );
                         } else {
                             self.scope.set_var(
                                 &variable.name,
                                 &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
                                     &name.value,
-                                    variable.line
+                                    variable.line,
                                 ))],
                                 false,
                                 variable.line,
@@ -463,25 +481,33 @@ impl Eval {
                     IdentifierType::List(ref list) => {
                         let car: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.car) {
                             Some(pointer) => pointer,
-                            None => {
-                                LiteralOrFile::Literal(LiteralType::from_other_stuff(&list.car, variable.line))
-                            }
+                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                &list.car,
+                                variable.line,
+                            )),
                         };
                         let cdr: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.cdr) {
                             Some(pointer) => pointer,
-                            None => {
-                                LiteralOrFile::Literal(LiteralType::from_other_stuff(&list.cdr, variable.line))
-                            }
+                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                &list.cdr,
+                                variable.line,
+                            )),
                         };
-                        self.scope
-                            .set_var(&variable.name, &mut vec![car, cdr], false, variable.line);
+                        self.scope.set_var(
+                            &variable.name,
+                            &mut vec![car, cdr],
+                            false,
+                            variable.line,
+                        );
                     }
                 },
                 Thing::Return(os, line) => {
                     let ret: LiteralOrFile = match os {
                         Some(os) => match self.find_pointer_in_other_stuff(&os) {
                             Some(identifier) => identifier,
-                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
+                            None => {
+                                LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line))
+                            }
                         },
                         None => LiteralOrFile::Literal(LiteralType::Hempty),
                     };
@@ -489,16 +515,15 @@ impl Eval {
                 }
                 Thing::Expression(expr) => {
                     let exprs = self.find_pointer_in_stuff(&expr.inside);
-                        print!(
-                            "{}",
-                            NewExpression {
-                                inside: exprs,
-                                print: expr.print,
-                                line: expr.line,
-                                new_line: expr.new_line,
-                            }
-                        );
-                    
+                    print!(
+                        "{}",
+                        NewExpression {
+                            inside: exprs,
+                            print: expr.print,
+                            line: expr.line,
+                            new_line: expr.new_line,
+                        }
+                    );
                 }
                 Thing::IfStatement(mut if_statement) => {
                     let conditon: LiteralType =
@@ -510,7 +535,10 @@ impl Eval {
                                     _ => error(if_statement.line, "cannot compare files"),
                                 }
                             }
-                            None => LiteralType::from_other_stuff(&if_statement.condition, if_statement.line),
+                            None => LiteralType::from_other_stuff(
+                                &if_statement.condition,
+                                if_statement.line,
+                            ),
                         };
                     if conditon.type_eq(&LiteralType::Boolean(true)) {
                     } else {
@@ -628,7 +656,7 @@ impl Eval {
                                 true,
                                 call.line,
                             );
-                                new_stuff.push(self.find_pointer_in_stuff(thing));
+                            new_stuff.push(self.find_pointer_in_stuff(thing));
                         }
                         arg_error(
                             function.1 as u32,
@@ -693,12 +721,13 @@ impl Eval {
                             match new_stuff.len() {
                                 1 => {
                                     let literal: LiteralOrFile = new_stuff.remove(0);
-                                    let var: LiteralOrFile = match self.scope.get_var(&ident.name, call.line) {
-                                        NewIdentifierType::Vairable(v) => v.value,
-                                        NewIdentifierType::List(..) => {
-                                            error(ident.line, "Cannot change entire list");
-                                        }
-                                    };
+                                    let var: LiteralOrFile =
+                                        match self.scope.get_var(&ident.name, call.line) {
+                                            NewIdentifierType::Vairable(v) => v.value,
+                                            NewIdentifierType::List(..) => {
+                                                error(ident.line, "Cannot change entire list");
+                                            }
+                                        };
                                     match call.keyword {
                                         TokenType::Set => {
                                             self.scope.set_var(
@@ -724,9 +753,9 @@ impl Eval {
                                                         true,
                                                         call.line,
                                                     );
-                                                    LiteralOrFile::Literal(
-                                                        LiteralType::Number(new_val),
-                                                    )
+                                                    LiteralOrFile::Literal(LiteralType::Number(
+                                                        new_val,
+                                                    ))
                                                 } else {
                                                     error(
                                                         call.line,
@@ -751,9 +780,9 @@ impl Eval {
                                                             true,
                                                             call.line,
                                                         );
-                                                        LiteralOrFile::Literal(
-                                                            LiteralType::String(s),
-                                                        )
+                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                            s,
+                                                        ))
                                                     }
                                                     LiteralOrFile::Literal(
                                                         LiteralType::Number(n),
@@ -767,9 +796,9 @@ impl Eval {
                                                             true,
                                                             call.line,
                                                         );
-                                                        LiteralOrFile::Literal(
-                                                            LiteralType::String(s),
-                                                        )
+                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                            s,
+                                                        ))
                                                     }
                                                     LiteralOrFile::Literal(
                                                         LiteralType::Boolean(boolean),
@@ -783,9 +812,9 @@ impl Eval {
                                                             true,
                                                             call.line,
                                                         );
-                                                        LiteralOrFile::Literal(
-                                                            LiteralType::String(s),
-                                                        )
+                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                            s,
+                                                        ))
                                                     }
                                                     LiteralOrFile::Literal(LiteralType::Hempty) => {
                                                         s.push_str("hempty");
@@ -797,9 +826,9 @@ impl Eval {
                                                             true,
                                                             call.line,
                                                         );
-                                                        LiteralOrFile::Literal(
-                                                            LiteralType::String(s),
-                                                        )
+                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                            s,
+                                                        ))
                                                     }
                                                     _ => {
                                                         error(
@@ -837,9 +866,9 @@ impl Eval {
                                                         true,
                                                         call.line,
                                                     );
-                                                    LiteralOrFile::Literal(
-                                                        LiteralType::Number(new_val),
-                                                    )
+                                                    LiteralOrFile::Literal(LiteralType::Number(
+                                                        new_val,
+                                                    ))
                                                 } else {
                                                     error(
                                                         call.line,
@@ -866,9 +895,9 @@ impl Eval {
                                                         true,
                                                         call.line,
                                                     );
-                                                    LiteralOrFile::Literal(
-                                                        LiteralType::String(new_string),
-                                                    )
+                                                    LiteralOrFile::Literal(LiteralType::String(
+                                                        new_string,
+                                                    ))
                                                 } else {
                                                     error(
                                                         call.line,
@@ -908,9 +937,9 @@ impl Eval {
                                                             true,
                                                             call.line,
                                                         );
-                                                    LiteralOrFile::Literal(
-                                                            LiteralType::Number(new_val),
-                                                        )
+                                                        LiteralOrFile::Literal(LiteralType::Number(
+                                                            new_val,
+                                                        ))
                                                     } else {
                                                         let new_val = nums / num;
                                                         self.scope.set_var(
@@ -921,9 +950,9 @@ impl Eval {
                                                             true,
                                                             call.line,
                                                         );
-                                                        LiteralOrFile::Literal(
-                                                            LiteralType::Number(new_val),
-                                                        )
+                                                        LiteralOrFile::Literal(LiteralType::Number(
+                                                            new_val,
+                                                        ))
                                                     }
                                                 } else {
                                                     error(
@@ -957,7 +986,12 @@ impl Eval {
                                 }
                                 2 => {
                                     if call.keyword == TokenType::Set {
-                                        self.scope.set_var(&ident.name, &mut new_stuff, true, call.line);
+                                        self.scope.set_var(
+                                            &ident.name,
+                                            &mut new_stuff,
+                                            true,
+                                            call.line,
+                                        );
                                         LiteralOrFile::Literal(LiteralType::String(
                                             new_stuff
                                                 .iter()
@@ -1004,7 +1038,9 @@ impl Eval {
                         call.line,
                     );
                     // check if the first argument is a string
-                    let arg = self.find_pointer_in_stuff(&call.arguments[0]).get_string(call.line, &call.keyword);
+                    let arg = self
+                        .find_pointer_in_stuff(&call.arguments[0])
+                        .get_string(call.line, &call.keyword);
                     if std::path::Path::new(&arg).exists() {
                         LiteralOrFile::File(arg)
                     } else {
@@ -1039,7 +1075,7 @@ impl Eval {
                                                             LiteralType::Hempty,
                                                         )],
                                                         true,
-                                                        call.line
+                                                        call.line,
                                                     );
                                                 }
                                                 TokenType::Read => {
@@ -1084,9 +1120,9 @@ impl Eval {
                                                     error(call.line, format!("{}", err));
                                                 }
                                             }; // read the file into the string
-                                            return LiteralOrFile::Literal(
-                                                LiteralType::String(contents),
-                                            ); // return the string
+                                            return LiteralOrFile::Literal(LiteralType::String(
+                                                contents,
+                                            )); // return the string
                                         }
                                         _ => {}
                                     }
@@ -1119,11 +1155,17 @@ impl Eval {
                         call.line,
                     );
                     // get the file
-                    let file = self.find_pointer_in_stuff(&call.arguments[0]).get_file(call.line, &call.keyword);
+                    let file = self
+                        .find_pointer_in_stuff(&call.arguments[0])
+                        .get_file(call.line, &call.keyword);
                     // get the string
-                    let string = self.find_pointer_in_stuff(&call.arguments[1]).get_string(call.line, &call.keyword);
+                    let string = self
+                        .find_pointer_in_stuff(&call.arguments[1])
+                        .get_string(call.line, &call.keyword);
                     // get the mode
-                    let mode = self.find_pointer_in_stuff(&call.arguments[2]).get_string(call.line, &call.keyword);
+                    let mode = self
+                        .find_pointer_in_stuff(&call.arguments[2])
+                        .get_string(call.line, &call.keyword);
                     // write the string to the file
                     match write_file(&file, &string, &mode) {
                         Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
@@ -1142,9 +1184,13 @@ impl Eval {
                         call.line,
                     );
                     // get the file
-                    let file = self.find_pointer_in_stuff(&call.arguments[0]).get_file(call.line, &call.keyword);
+                    let file = self
+                        .find_pointer_in_stuff(&call.arguments[0])
+                        .get_file(call.line, &call.keyword);
                     // get the line
-                    let line = self.find_pointer_in_stuff(&call.arguments[1]).get_number(call.line, &call.keyword);
+                    let line = self
+                        .find_pointer_in_stuff(&call.arguments[1])
+                        .get_number(call.line, &call.keyword);
                     // read the the file
                     match read_file(&file) {
                         Ok(contents) => {
@@ -1174,13 +1220,21 @@ impl Eval {
                         call.line,
                     );
                     // get the file
-                    let file = self.find_pointer_in_stuff(&call.arguments[0]).get_file(call.line, &call.keyword);
+                    let file = self
+                        .find_pointer_in_stuff(&call.arguments[0])
+                        .get_file(call.line, &call.keyword);
                     // get the string
-                    let mut string = self.find_pointer_in_stuff(&call.arguments[1]).get_string(call.line, &call.keyword);
+                    let mut string = self
+                        .find_pointer_in_stuff(&call.arguments[1])
+                        .get_string(call.line, &call.keyword);
                     // get the line
-                    let line = self.find_pointer_in_stuff(&call.arguments[2]).get_number(call.line, &call.keyword);
+                    let line = self
+                        .find_pointer_in_stuff(&call.arguments[2])
+                        .get_number(call.line, &call.keyword);
                     // get the mode
-                    let mode = self.find_pointer_in_stuff(&call.arguments[3]).get_string(call.line, &call.keyword);
+                    let mode = self
+                        .find_pointer_in_stuff(&call.arguments[3])
+                        .get_string(call.line, &call.keyword);
                     // read the file
                     let mut contents = match read_file(&file) {
                         Ok(contents) => contents,
@@ -1227,7 +1281,9 @@ impl Eval {
                         call.line,
                     );
                     // get the file
-                    let file = self.find_pointer_in_stuff(&call.arguments[0]).get_file(call.line, &call.keyword);
+                    let file = self
+                        .find_pointer_in_stuff(&call.arguments[0])
+                        .get_file(call.line, &call.keyword);
                     // match delete or create file
                     match call.keyword {
                         TokenType::DeleteFile => match fs::remove_file(&file) {

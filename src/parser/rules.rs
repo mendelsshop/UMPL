@@ -119,7 +119,7 @@ impl LiteralType {
             _ => error::error(line, "not a literal"), // TODO: get line number
         }
     }
-    pub fn from_stuff(thing: &Stuff , line: i32) -> Self {
+    pub fn from_stuff(thing: &Stuff, line: i32) -> Self {
         match thing {
             Stuff::Literal(literal) => literal.literal.clone(),
             _ => error::error(line, "not a literal"), // TODO: get line number
@@ -173,7 +173,10 @@ impl IdentifierType {
             0 => error::error(line, "expected Identifier, got empty list"),
             1 => Self::Vairable(Box::new(Vairable::new(thing[0].clone()))),
             2 => Self::List(Box::new(List::new(thing))),
-            _ => error::error(line, "expected Identifier, got list with more than 2 elements"),
+            _ => error::error(
+                line,
+                "expected Identifier, got list with more than 2 elements",
+            ),
         }
     }
 }
