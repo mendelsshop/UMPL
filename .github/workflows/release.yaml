@@ -25,12 +25,15 @@ jobs:
         with:
           name: Linux
           path: target/release/umpl
+      - name: rename:
+        run: |
+          mv target/release/umpl target/release/umpl_linux
       - name: upload to release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/umpl
+          file: target/release/umpl_linux
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
@@ -52,12 +55,15 @@ jobs:
         with:
           name: MacOS
           path: target/release/umpl
+      - name: rename:
+        run: |
+          mv target/release/umpl target/release/umpl_macos
       - name: upload to release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/umpl
+          file: target/release/umpl_macos
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
@@ -79,12 +85,15 @@ jobs:
         with:
           name: Windows
           path: target/release/umpl.exe
+      - name: rename: 
+        run: |
+          mv target/release/umpl.exe target/release/umpl_windows.exe
       - name: upload to release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/umpl.exe
+          file: target/release/umpl_windows.exe
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
