@@ -67,6 +67,7 @@ impl Keyword {
             keywords.remove(key);
             keywords.insert(toggle_case(key.to_string(), num), value.clone());
         }}
+        println!("{:?}", keywords);
         Self { keywords }
     }
 
@@ -84,7 +85,23 @@ impl Default for Keyword {
     }
 }
 
+
 fn toggle_case(string: String, num: i32) -> String {
-    // uppercase every x characters based on num instead of uppercaseing every character
-    string.to_uppercase()
+    println!("{}", string.len()+num as usize%10);
+    let mut num = match string.len() as i32- num  {
+        nums if nums <= 0 => num,
+        nums => nums,
+    };
+    num = num % 50;
+    let mut new_string = String::new();
+    let mut count = 0;
+    for c in string.chars() {
+        if count % num == 0 {
+            new_string.push(c.to_uppercase().next().unwrap());
+        } else {
+            new_string.push(c);
+        }
+        count += 1;
+    }
+    new_string
 }
