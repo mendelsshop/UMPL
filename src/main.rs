@@ -1,7 +1,7 @@
 use log::info;
 use std::{
     env,
-    fs::File,
+    fs::{File,},
     io::{self, Read, Write},
     path::Path,
     process::exit,
@@ -28,7 +28,6 @@ fn main() {
             print!(">> "); // print the prompt
             io::stdout().flush().unwrap();
             io::stdin().read_line(&mut input).unwrap(); // read the input
-            full_repl.push(input.to_string()); // add the input to the the text of the repl so we can write it to a file
             if input.trim() == "exit" {
                 // if the input is exit, then exit
                 info!("Exiting...");
@@ -42,16 +41,14 @@ fn main() {
                         io::stdin().read_line(&mut y_or_n).unwrap();
                         if y_or_n == "n" {
                             // if the user does not want to overwrite the file exit
-                            exit(1);
+                            exit(0);
                         }
                     }
                     let mut file: File = File::create(parsed_args.file)
                         .expect("Error encountered while creating file!"); // create/open the file
-                    for mut line in full_repl {
-                        line.push('\n');
+                    for line in full_repl {
                         file.write_all(line.as_bytes())
                             .expect("Error encountered while writing to file!");
-                        // write the repl to the file
                     }
                 }
                 break 'l;
@@ -60,6 +57,7 @@ fn main() {
                 input.clear();
             } else {
                 current_repl.push_str(&input); // add the input to the current line of the repl
+                full_repl.push(input.to_string()); 
             }
         }
     } else {
