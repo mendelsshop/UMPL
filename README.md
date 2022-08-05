@@ -15,6 +15,6 @@ Too see the understand the keywords and their meaning, refer to [this file](http
 <br>
 There is semi working vscode extension for UMPL, you can find it [here](https://github.com/mendelsshop/UMPL_VSCode_Extension)
 <br>
-At UMPL to fix the null problem, we have invented a new type called `hempty`, which is the same as null, but it sounds better, and it adds to the long list of\ null like types across all the proggraming languages.
+At UMPL to fix the null problem, we have invented a new type called hempty, which is the same as null, but it sounds better, and it adds to the long list of\ null like types across all the proggraming languages.
 <br> 
 All bug reports head straight to /dev/hempty
