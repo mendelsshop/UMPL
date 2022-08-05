@@ -1,7 +1,7 @@
 use log::info;
 use std::{
     env,
-    fs::{File,},
+    fs::File,
     io::{self, Read, Write},
     path::Path,
     process::exit,
@@ -57,7 +57,7 @@ fn main() {
                 input.clear();
             } else {
                 current_repl.push_str(&input); // add the input to the current line of the repl
-                full_repl.push(input.to_string()); 
+                full_repl.push(input.to_string());
             }
         }
     } else {
