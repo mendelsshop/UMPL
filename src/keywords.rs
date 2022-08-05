@@ -61,10 +61,11 @@ impl Keyword {
         keywords.insert("createfile".to_string(), TokenType::CreateFile);
         keywords.insert("deletefile".to_string(), TokenType::DeleteFile);
         if num != 0 {
-        for (key, value) in keywords.clone().iter() {
-            keywords.remove(key);
-            keywords.insert(toggle_case(key.to_string(), num), value.clone());
-        }}
+            for (key, value) in keywords.clone().iter() {
+                keywords.remove(key);
+                keywords.insert(toggle_case(key.to_string(), num), value.clone());
+            }
+        }
         Self { keywords }
     }
 
@@ -82,10 +83,9 @@ impl Default for Keyword {
     }
 }
 
-
 fn toggle_case(string: String, num: i32) -> String {
-    println!("{}", string.len()+num as usize%10);
-    let mut num = match string.len() as i32- num  {
+    println!("{}", string.len() + num as usize % 10);
+    let mut num = match string.len() as i32 - num {
         nums if nums <= 0 => num,
         nums => nums,
     };
@@ -102,4 +102,3 @@ fn toggle_case(string: String, num: i32) -> String {
     }
     new_string
 }
-
