@@ -1,6 +1,5 @@
 [![cargo clippy](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml/badge.svg)](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml)
 # UMPL
-<br>
 If you have any Ideas for the language put contribute them in [this file](https://github.com/mendelsshop/compiler/blob/main/Ideas.md)
 <br>
 along with an example or two according of how to use it in the language.
