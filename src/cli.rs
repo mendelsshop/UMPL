@@ -1,11 +1,15 @@
 use std::process::exit;
+
+use crate::error;
 pub static mut EASY_MODE: bool = false;
+pub static mut TOGGLE_CASE: i32 = 0;
 #[derive(PartialEq, Debug)]
 pub struct ParsedArgs {
     pub repl: bool,   // inerative mode
     pub file: String, // file to read/write
     pub force: bool,  // if true, overwrites file
     pub log: bool,    // if true, logs to file
+    pub evil_mode: bool, 
 }
 
 impl ParsedArgs {
@@ -15,6 +19,7 @@ impl ParsedArgs {
             file,
             force: false,
             log: false,
+            evil_mode: false
         }
     }
 }
@@ -59,13 +64,34 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
         // for each arg after the start index
         if arg.starts_with('-') {
             // if it starts with a dash check if its a correct flag and set the appropriate field if not print usage and exit
-            for char_part_arg in arg.chars().skip(1) {
+            for char_part_arg in  arg.chars().skip(1) {
                 if ['r', 'i'].contains(&char_part_arg) {
                     args_struct.repl = true;
                 } else if ['f'].contains(&char_part_arg) {
                     args_struct.force = true;
                 } else if ['l'].contains(&char_part_arg) {
                     args_struct.log = true;
+                } else if char_part_arg == 'e' {
+                    args_struct.evil_mode = true;
+                    unsafe {EASY_MODE = false;}
+                    let num = match &args_struct.file {
+                        // TODO: use rand
+                        file if file.is_empty() => {0i32}
+                        file => {file.len() as i32} 
+                    };
+                    unsafe {TOGGLE_CASE = num}
+                } else if char_part_arg == 't' {
+                    let number: i32 = match arg.split_once("=") {
+                        Some(n) => match n.1.parse() {
+                            Ok(value)  => value,
+                            Err(error) => error::error(0, error)
+                        },
+                        _ => error::error(0, "option t requires an =number")
+                    };
+                    unsafe {
+                        TOGGLE_CASE = number;
+                    }
+                    break
                 } else {
                     usage();
                 }

@@ -229,10 +229,13 @@ impl TokenType {
                                 }
                             }
                             Self::StrToNum => {
-                                // TODO: check if 0x is already in the string
-                                let number: FloatLiteral = match format!("0x{}", string.trim())
-                                    .parse()
-                                {
+                                let string = match string {
+                                    strings if string.starts_with("0x") => {
+                                        strings.to_owned().trim().to_owned()
+                                    }
+                                    strings => format!("0x{}", strings.trim()).to_owned(),
+                                };
+                                let number: FloatLiteral = match string.parse() {
                                     Ok(value) => value,
                                     Err(_) => error::error(
                                         line,
@@ -264,7 +267,9 @@ impl TokenType {
                                 };
                                 LiteralType::String(cmd)
                             }
-                            _ => todo!(),
+                            _ => {
+                                error::error(line, "command not found");
+                            }
                         },
                         _ => error::error(line, "Expected string for input operator"),
                     }
@@ -414,7 +419,7 @@ impl TokenType {
                     )
                 }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {
-                    todo!()
+                    error::error(line, format!("Keyword not found {}", self));
                 }
                 _ => {
                     error::error(line, format!("Keyword not found {}", self));

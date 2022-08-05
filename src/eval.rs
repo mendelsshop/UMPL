@@ -339,10 +339,7 @@ impl Scope {
         match self.vars.get(name) {
             Some(v) => match v {
                 NewIdentifierType::Vairable(_) => v.clone(),
-                NewIdentifierType::List(list) => {
-                    // Todoe remove clone
-                    NewIdentifierType::List(list.clone())
-                }
+                NewIdentifierType::List(list) => NewIdentifierType::List(list.clone()),
             },
             None => match &mut self.parent_scope {
                 Some(parent) => parent.get_var(name, line),

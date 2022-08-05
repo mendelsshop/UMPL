@@ -2,7 +2,6 @@ use crate::{error, token::TokenType};
 use std::fmt::{self, Debug, Display, Write};
 
 use super::Thing;
-// TODO: make proper constructors for each struct/enum
 #[derive(PartialEq, Clone, Debug)]
 pub struct Expression {
     pub inside: Stuff,
@@ -116,13 +115,13 @@ impl LiteralType {
     pub fn from_other_stuff(thing: &OtherStuff, line: i32) -> Self {
         match thing {
             OtherStuff::Literal(literal) => literal.literal.clone(),
-            _ => error::error(line, "not a literal"), // TODO: get line number
+            _ => error::error(line, "not a literal"), 
         }
     }
     pub fn from_stuff(thing: &Stuff, line: i32) -> Self {
         match thing {
             Stuff::Literal(literal) => literal.literal.clone(),
-            _ => error::error(line, "not a literal"), // TODO: get line number
+            _ => error::error(line, "not a literal"),
         }
     }
     pub const fn new_string(string: String) -> Self {
