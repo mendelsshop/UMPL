@@ -15,3 +15,5 @@ With UMPL we try to break backwards compatibility, so have fun trying to write t
 To see example code for UMPL you can see [this directory](https://github.com/mendelsshop/UMPL/tree/main/umpl_examples), and to look at the formal language grammar refer to [this file](https://github.com/mendelsshop/UMPL/blob/main/grammer.md).
 <br>
 variables in UMPL must follow the kebab-case naming convention and have no uppercase letters.
+<br>
+Too see the understand the keywords and their meaning, refer to [this file](https://github.com/mendelsshop/UMPL/blob/main/keywords.md).
