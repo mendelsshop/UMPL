@@ -9,9 +9,7 @@ pub struct Keyword {
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
 impl Keyword {
     pub fn new() -> Self {
-        let num = unsafe {
-            crate::cli::TOGGLE_CASE
-        };
+        let num = unsafe { crate::cli::TOGGLE_CASE };
         let mut keywords: HashMap<String, TokenType> = HashMap::new();
         keywords.insert("plus".to_string(), TokenType::Plus);
         keywords.insert("minus".to_string(), TokenType::Minus);
@@ -67,7 +65,6 @@ impl Keyword {
             keywords.remove(key);
             keywords.insert(toggle_case(key.to_string(), num), value.clone());
         }}
-        println!("{:?}", keywords);
         Self { keywords }
     }
 
@@ -105,3 +102,4 @@ fn toggle_case(string: String, num: i32) -> String {
     }
     new_string
 }
+
