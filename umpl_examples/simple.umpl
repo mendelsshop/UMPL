@@ -13,7 +13,7 @@ create str  with ((multiply  `ff\n`  5.76))>
 (4)>>
 create str with `df`
 (str)>
-(`fdff\a `)>
+(`fdff\X4\n`)>
 ((multiplywith str 5))<
 (str)>>
 ((addwith str 5))<

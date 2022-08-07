@@ -75,10 +75,10 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     }
                     let num = match &args_struct.file {
                         // TODO: use rand
-                        file if file.is_empty() => 0i32,
-                        file => file.len() as i32,
+                        file if file.is_empty() => 0,
+                        file => file.len(),
                     };
-                    unsafe { TOGGLE_CASE = num }
+                    unsafe { TOGGLE_CASE = num.try_into().unwrap() }
                 } else if char_part_arg == 't' {
                     let number: i32 = match arg.split_once('=') {
                         Some(n) => match n.1.parse() {
