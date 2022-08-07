@@ -121,11 +121,67 @@ impl Lexer {
             if self.peek() == '\n' {
                 self.line += 1;
             }
-            self.advance();
+            // check for escape sequence \` \n \\ \t \r \a \b \f \v \e \Xhh \0ooo \Uhhhhhhhh
+            if self.peek() == '\\' {
+                self.source.remove(self.current);
+                if self.peek() == '`' {
+                    self.advance();
+                } else if self.peek() == 'n' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\n');
+                    self.advance();
+                    self.line += 1;
+                }  else if self.peek() == '\\' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\\');
+                    self.advance();
+                }  else if self.peek() == 't' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\t');
+                    self.advance();
+                }  else if self.peek() == 'r' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\r');
+                    self.advance();
+                }  else if self.peek() == 'a' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\x07');
+                    self.advance();
+                }  else if self.peek() == 'b' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\x08');
+                    self.advance();
+                }  else if self.peek() == 'f' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\x0C');
+                    self.advance();
+                }  else if self.peek() == 'v' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\x0b');
+                    self.advance();
+                }  else if self.peek() == 'e' {
+                    self.source.remove(self.current);
+                    self.source.insert(self.current, '\x1b');
+                    self.advance();
+                }  else if self.peek() == 'X' {
+                    todo!();
+                }  else if self.peek() == 'O' {
+                    todo!();
+                }  else if self.peek() == 'U' {
+                    todo!();
+                }  else {
+                    error::error(self.line, format!("unknown escape sequence {}", self.peek()));
+                }
+            } else {
+                self.advance();
+            }
+
+            // self.advance();
         }
         if self.is_at_end() {
             error::error(self.line, "unterminated string");
         }
+        // println!("{}", self.get_text());
         self.advance();
         self.start += 1;
         self.current -= 1;

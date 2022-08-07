@@ -1,7 +1,7 @@
 create num with 1
 (( multiply 0xA6.A7 6 66 (minus 5)))>
-create str  with ((multiply  `ff\n `  5.76))>
-((plus str ` ` 5  ` ` true  ` ` hempty))>
+create str  with ((multiply  `ff\n`  5.76))>
+((plus str `` 5  ` ` true  ` ` hempty))>
 ((not true))>
 (5)>
 ((and(eq true true) true))>
@@ -13,7 +13,7 @@ create str  with ((multiply  `ff\n `  5.76))>
 (4)>>
 create str with `df`
 (str)>
-(`fdff`)>
+(`fdff\a `)>
 ((multiplywith str 5))<
 (str)>>
 ((addwith str 5))<
