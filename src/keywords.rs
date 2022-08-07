@@ -61,9 +61,9 @@ impl Keyword {
         keywords.insert("createfile".to_string(), TokenType::CreateFile);
         keywords.insert("deletefile".to_string(), TokenType::DeleteFile);
         if num != 0 {
-            for (key, value) in keywords.clone().iter() {
+            for (key, value) in &keywords.clone() {
                 keywords.remove(key);
-                keywords.insert(toggle_case(key.to_string(), num), value.clone());
+                keywords.insert(toggle_case(key, num), value.clone());
             }
         }
         Self { keywords }
@@ -83,22 +83,19 @@ impl Default for Keyword {
     }
 }
 
-fn toggle_case(string: String, num: i32) -> String {
+fn toggle_case(string: &str, num: i32) -> String {
     println!("{}", string.len() + num as usize % 10);
-    let mut num = match string.len() as i32 - num {
-        nums if nums <= 0 => num,
-        nums => nums,
+    let num: usize = match string.len() as i32 - num {
+        nums if nums <= 0 => num as usize % 50,
+        nums => nums as usize % 50,
     };
-    num = num % 50;
     let mut new_string = String::new();
-    let mut count = 0;
-    for c in string.chars() {
+    for (count, c) in string.chars().enumerate() {
         if count % num == 0 {
             new_string.push(c.to_uppercase().next().unwrap());
         } else {
             new_string.push(c);
         }
-        count += 1;
     }
     new_string
 }

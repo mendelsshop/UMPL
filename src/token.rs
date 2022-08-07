@@ -231,9 +231,9 @@ impl TokenType {
                             Self::StrToNum => {
                                 let string = match string {
                                     strings if string.starts_with("0x") => {
-                                        strings.to_owned().trim().to_owned()
+                                        strings.clone().trim().to_owned()
                                     }
-                                    strings => format!("0x{}", strings.trim()).to_owned(),
+                                    strings => format!("0x{}", strings.trim()),
                                 };
                                 let number: FloatLiteral = match string.parse() {
                                     Ok(value) => value,

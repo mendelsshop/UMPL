@@ -9,7 +9,6 @@ pub struct ParsedArgs {
     pub file: String, // file to read/write
     pub force: bool,  // if true, overwrites file
     pub log: bool,    // if true, logs to file
-    pub evil_mode: bool,
 }
 
 impl ParsedArgs {
@@ -19,7 +18,6 @@ impl ParsedArgs {
             file,
             force: false,
             log: false,
-            evil_mode: false,
         }
     }
 }
@@ -72,7 +70,6 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                 } else if ['l'].contains(&char_part_arg) {
                     args_struct.log = true;
                 } else if char_part_arg == 'e' {
-                    args_struct.evil_mode = true;
                     unsafe {
                         EASY_MODE = false;
                     }
@@ -83,7 +80,7 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     };
                     unsafe { TOGGLE_CASE = num }
                 } else if char_part_arg == 't' {
-                    let number: i32 = match arg.split_once("=") {
+                    let number: i32 = match arg.split_once('=') {
                         Some(n) => match n.1.parse() {
                             Ok(value) => value,
                             Err(error) => error::error(0, error),
