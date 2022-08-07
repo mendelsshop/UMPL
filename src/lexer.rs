@@ -167,17 +167,29 @@ impl Lexer {
                     self.source.remove(self.current);
                     match self.source.remove(self.current) {
                         x if x.is_ascii_hexdigit() => match self.source.remove(self.current) {
-                            y if y.is_ascii_hexdigit() =>   {self.source.insert(self.current,  u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap() as char);
-                            self.advance();},
-                            y =>  {self.source.insert(self.current, u8::from_str_radix(format!("{x}").as_str(), 16).unwrap() as char);
-                            self.source.insert(self.current+1, y);
-                        self.advance();}
+                            y if y.is_ascii_hexdigit() => {
+                                self.source.insert(
+                                    self.current,
+                                    u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap()
+                                        as char,
+                                );
+                                self.advance();
+                            }
+                            y => {
+                                self.source.insert(
+                                    self.current,
+                                    u8::from_str_radix(format!("{x}").as_str(), 16).unwrap()
+                                        as char,
+                                );
+                                self.source.insert(self.current + 1, y);
+                                self.advance();
+                            }
                         },
-                        x => {self.source.insert(self.current, x);
+                        x => {
+                            self.source.insert(self.current, x);
                             self.advance();
                         }
                     };
-    
                 } else if self.peek() == 'O' {
                     todo!();
                 } else if self.peek() == 'U' {
