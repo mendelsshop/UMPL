@@ -148,7 +148,7 @@ impl LiteralType {
         }
     }
 
-    pub fn get_type(&self) -> String  {
+    pub fn get_type(&self) -> String {
         match self {
             Self::Number(_) => "number".to_string(),
             Self::String(_) => "string".to_string(),

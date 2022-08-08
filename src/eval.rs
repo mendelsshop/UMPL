@@ -381,7 +381,7 @@ impl Scope {
         }
     }
     pub fn drop_scope(&mut self) {
-        let p_scope: Self = match  self.parent_scope.take(){
+        let p_scope: Self = match self.parent_scope.take() {
             Some(scope) => *scope,
             None => error(0, "no parent scope"),
         };
@@ -691,7 +691,13 @@ impl Eval {
                     }
                 }
                 TokenType::Type => {
-                    arg_error(1, call.arguments.len() as u32, &call.keyword, false, call.line);
+                    arg_error(
+                        1,
+                        call.arguments.len() as u32,
+                        &call.keyword,
+                        false,
+                        call.line,
+                    );
                     match self.find_pointer_in_stuff(&call.arguments[0]) {
                         LiteralOrFile::Literal(a) => {
                             LiteralOrFile::Literal(LiteralType::String(a.get_type()))

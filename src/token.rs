@@ -83,7 +83,7 @@ pub enum TokenType {
     WriteLine,
     CreateFile,
     DeleteFile,
-    Type
+    Type,
 }
 
 impl TokenType {
@@ -196,13 +196,7 @@ impl TokenType {
                 | Self::StrToHempty
                 | Self::StrToNum
                 | Self::RunCommand => {
-                    arg_error(
-                        1,
-                        args.len() as u32,
-                        self,
-                        false,
-                        line
-                    );
+                    arg_error(1, args.len() as u32, self, false, line);
                     match &args[0] {
                         LiteralType::String(ref string) => match self {
                             Self::Error => exit(1),
