@@ -247,7 +247,7 @@ impl Display for Call {
                 } else {
                     ""
                 }
-            })?
+            })?;
         }
         write!(f, "{:?}: [{}]", self.keyword, c)
     }
