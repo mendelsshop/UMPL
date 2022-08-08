@@ -8,21 +8,21 @@ create str  with ((multiply  `ff\n`  5.76))>
 ((ge 5 6))>
 ((setwith num (strtonum (input `>> `))))>
 ((plus num 5))>
-((subtractwith num 4))>>
+((subtractwith num 4))>
 (num)>
-(4)>>
+(4)>
 create str with `df`
 (str)>
-(`fdff\X4\n`)>
+(`fdff\u1f642\`a`)>
 ((multiplywith str 5))<
-(str)>>
+(str)>
 ((addwith str 5))<
-(str)>>
+(str)>
 create trt with ((plus str 5))>
 ((multiplywith trt 5))<
-(trt)>>
+(trt)>
 ((addwith trt 5))<
-(str)>>
+(str)>
 ((multiplywith str 5))<
 create str with true 
 if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
@@ -35,7 +35,7 @@ if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
     (`Hello World`)> ! else print the string Hello World (`Hello World`)>
 ⧽
 create file with ((open `test.txt`))>
-(`asddff`)>
+(`asddff\n`)>
 list z with [((read file))> true]
 ! currently two things cannot have acces to the a variable that holds a file so when we read the file that takes ownership of the file, and can't be accessed anymore,
 ! so the following line will throw an error that it could not find the variable file

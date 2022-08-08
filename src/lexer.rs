@@ -5,7 +5,6 @@ use crate::{
 use hexponent::FloatLiteral;
 
 use unic_emoji_char as emoji;
-
 pub struct Lexer {
     token_list: Vec<Token>,
     source: String,
@@ -123,65 +122,72 @@ impl Lexer {
             }
             // check for escape sequence \` \n \\ \t \r \a \b \f \v \e \Xhh \0ooo \Uhhhhhhhh
             if self.peek() == '\\' {
-                self.source.remove(self.current);
+                self.remove_text(self.current);
                 if self.peek() == '`' {
                     self.advance();
                 } else if self.peek() == 'n' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\n');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\n');
                     self.advance();
-                    self.line += 1;
                 } else if self.peek() == '\\' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\\');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\\');
                     self.advance();
                 } else if self.peek() == 't' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\t');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\t');
                     self.advance();
                 } else if self.peek() == 'r' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\r');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\r');
                     self.advance();
                 } else if self.peek() == 'a' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\x07');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\x07');
                     self.advance();
                 } else if self.peek() == 'b' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\x08');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\x08');
                     self.advance();
                 } else if self.peek() == 'f' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\x0C');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\x0C');
                     self.advance();
                 } else if self.peek() == 'v' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\x0b');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\x0b');
                     self.advance();
                 } else if self.peek() == 'e' {
-                    self.source.remove(self.current);
-                    self.source.insert(self.current, '\x1b');
+                    self.remove_text(self.current);
+                    self.insert_text(self.current, '\x1b');
                     self.advance();
-                } else if self.peek() == 'X' {
-                    self.source.remove(self.current);
-                    match self.source.remove(self.current) {
-                        x if x.is_ascii_hexdigit() => match self.source.remove(self.current) {
-                            y if y.is_ascii_hexdigit() =>   {self.source.insert(self.current,  u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap() as char);
+                } else if self.peek() == 'x' {
+                    self.remove_text(self.current);
+                    match self.remove_text(self.current) {
+                        x if x.is_ascii_hexdigit() => match self.remove_text(self.current) {
+                            y if y.is_ascii_hexdigit() =>   {self.insert_text(self.current,  u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap() as char);
                             self.advance();},
-                            y =>  {self.source.insert(self.current, u8::from_str_radix(format!("{x}").as_str(), 16).unwrap() as char);
-                            self.source.insert(self.current+1, y);
+                            y =>  {self.insert_text(self.current, u8::from_str_radix(format!("{x}").as_str(), 16).unwrap() as char);
+                            self.insert_text(self.current+1, y);
                         self.advance();}
                         },
-                        x => {self.source.insert(self.current, x);
+                        x => {self.insert_text(self.current, x);
                             self.advance();
                         }
-                    };
-    
-                } else if self.peek() == 'O' {
-                    todo!();
-                } else if self.peek() == 'U' {
-                    todo!();
+                    }
+                } else if self.peek() == 'u' {
+                    self.remove_text(self.current);
+                    // can be from 0 to 6 hex digits
+                    // loop until either 6 digits or we find a digit a non-hex digit
+                    // while looping remove the character and append to a string
+                    let mut hex_string = "".to_string();
+                    let mut i = 0;
+                    while i < 6 && self.peek().is_ascii_hexdigit() {
+                        hex_string.push(self.remove_text(self.current));
+                        i += 1;
+                    }
+                    self.insert_text(self.current, char::from_u32(u32::from_str_radix(hex_string.as_str(), 16).unwrap()).unwrap());
+                    self.current += 1;
                 } else {
                     error::error(
                         self.line,
@@ -192,12 +198,10 @@ impl Lexer {
                 self.advance();
             }
 
-            // self.advance();
         }
         if self.is_at_end() {
             error::error(self.line, "unterminated string");
         }
-        // println!("{}", self.get_text());
         self.advance();
         self.start += 1;
         self.current -= 1;
@@ -278,7 +282,6 @@ impl Lexer {
 
     fn add_unicode_token(&mut self, token_type: TokenType) {
         let text: String = format!("{}", self.source.chars().nth(self.start).expect("Error"));
-
         self.token_list
             .push(Token::new(token_type, &text, self.line));
     }
@@ -300,5 +303,20 @@ impl Lexer {
             }
         });
         final_text
+    }
+
+    fn remove_text(&mut self, pos: usize) -> char {
+        // use chars to be able to use unicode, remove the pos 
+        let mut text: Vec<char> = self.source.chars().collect();
+        let to_return = text[pos];
+        text.remove(pos);
+        self.source = text.iter().collect();
+        to_return
+    }
+
+    fn insert_text(&mut self, pos: usize, texts: char,) {
+        let mut text: Vec<char> = self.source.chars().collect();
+        text.insert(pos, texts);
+        self.source = text.iter().collect();
     }
 }
