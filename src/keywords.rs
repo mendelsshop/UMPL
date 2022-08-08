@@ -60,6 +60,7 @@ impl Keyword {
         keywords.insert("writeline".to_string(), TokenType::WriteLine);
         keywords.insert("createfile".to_string(), TokenType::CreateFile);
         keywords.insert("deletefile".to_string(), TokenType::DeleteFile);
+        keywords.insert("type".to_string(), TokenType::Type);
         if num != 0 {
             for (key, value) in &keywords.clone() {
                 keywords.remove(key);

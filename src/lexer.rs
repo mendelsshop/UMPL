@@ -115,6 +115,7 @@ impl Lexer {
         false
     }
 
+    #[allow(clippy::too_many_lines)]
     fn string(&mut self) {
         while self.peek() != '`' && !self.is_at_end() {
             if self.peek() == '\n' {
@@ -168,17 +169,18 @@ impl Lexer {
                             y if y.is_ascii_hexdigit() => {
                                 self.insert_text(
                                     self.current,
-                                    u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap()
-                                        as char,
+                                    u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap_or_else(|_| {
+                                        error::error(self.line, "invalid hex escape sequence");
+                                    }) as char,
                                 );
                                 self.advance();
                             }
                             y => {
                                 self.insert_text(
                                     self.current,
-                                    u8::from_str_radix(format!("{x}").as_str(), 16).unwrap()
-                                        as char,
-                                );
+                                    u8::from_str_radix(format!("{x}").as_str(), 16).unwrap_or_else(|_| {
+                                        error::error(self.line, "invalid hex escape sequence");
+                                    }) as char);
                                 self.insert_text(self.current + 1, y);
                                 self.advance();
                             }
@@ -201,8 +203,11 @@ impl Lexer {
                     }
                     self.insert_text(
                         self.current,
-                        char::from_u32(u32::from_str_radix(hex_string.as_str(), 16).unwrap())
-                            .unwrap(),
+                        char::from_u32(u32::from_str_radix(hex_string.as_str(), 16).unwrap_or_else(|_| {
+                                error::error(self.line, "invalid unicode escape sequence");
+                            } ) ).unwrap_or_else(|| {
+                                error::error(self.line, "invalid unicode escape sequence");
+                            })
                     );
                     self.current += 1;
                 } else {

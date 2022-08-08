@@ -9,7 +9,7 @@ create str  with ((multiply  `ff\n`  5.76))>
 ((setwith num (strtonum (input `>> `))))>
 ((plus num 5))>
 ((subtractwith num 4))>
-(num)>
+((type num))>
 (4)>
 create str with `df`
 (str)>

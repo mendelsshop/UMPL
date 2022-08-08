@@ -147,6 +147,15 @@ impl LiteralType {
             Self::Hempty => matches!(other, Self::Hempty),
         }
     }
+
+    pub fn get_type(&self) -> String  {
+        match self {
+            Self::Number(_) => "number".to_string(),
+            Self::String(_) => "string".to_string(),
+            Self::Boolean(_) => "boolean".to_string(),
+            Self::Hempty => "hempty".to_string(),
+        }
+    }
 }
 
 impl Display for LiteralType {
@@ -238,8 +247,7 @@ impl Display for Call {
                 } else {
                     ""
                 }
-            })
-            .unwrap();
+            })?
         }
         write!(f, "{:?}: [{}]", self.keyword, c)
     }

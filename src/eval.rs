@@ -381,7 +381,10 @@ impl Scope {
         }
     }
     pub fn drop_scope(&mut self) {
-        let p_scope: Self = *self.parent_scope.take().unwrap();
+        let p_scope: Self = match  self.parent_scope.take(){
+            Some(scope) => *scope,
+            None => error(0, "no parent scope"),
+        };
         *self = p_scope;
     }
 
@@ -685,6 +688,17 @@ impl Eval {
                         })
                     } else {
                         error(call.line, format!("Function {} is not defined", name));
+                    }
+                }
+                TokenType::Type => {
+                    arg_error(1, call.arguments.len() as u32, &call.keyword, false, call.line);
+                    match self.find_pointer_in_stuff(&call.arguments[0]) {
+                        LiteralOrFile::Literal(a) => {
+                            LiteralOrFile::Literal(LiteralType::String(a.get_type()))
+                        }
+                        LiteralOrFile::File(_) => {
+                            LiteralOrFile::Literal(LiteralType::String("file".to_string()))
+                        }
                     }
                 }
                 TokenType::Delete => {
@@ -1330,7 +1344,7 @@ impl Eval {
 
 impl fmt::Debug for Eval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "scope {:?}", self.scope).unwrap();
+        write!(f, "scope {:?}", self.scope)?;
         Ok(())
     }
 }

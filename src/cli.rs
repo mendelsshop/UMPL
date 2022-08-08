@@ -78,7 +78,7 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                         file if file.is_empty() => 0,
                         file => file.len(),
                     };
-                    unsafe { TOGGLE_CASE = num.try_into().unwrap() }
+                    unsafe { TOGGLE_CASE = num as i32 };
                 } else if char_part_arg == 't' {
                     let number: i32 = match arg.split_once('=') {
                         Some(n) => match n.1.parse() {

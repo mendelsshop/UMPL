@@ -1,5 +1,5 @@
 use crate::{
-    error,
+    error::{self, arg_error},
     parser::rules::{LiteralType, OtherStuff},
 };
 use hexponent::FloatLiteral;
@@ -83,6 +83,7 @@ pub enum TokenType {
     WriteLine,
     CreateFile,
     DeleteFile,
+    Type
 }
 
 impl TokenType {
@@ -195,12 +196,13 @@ impl TokenType {
                 | Self::StrToHempty
                 | Self::StrToNum
                 | Self::RunCommand => {
-                    if args.len() != 1 {
-                        error::error(
-                            line,
-                            format!("Expected 1 arguments for {:?} operator", self),
-                        );
-                    }
+                    arg_error(
+                        1,
+                        args.len() as u32,
+                        self,
+                        false,
+                        line
+                    );
                     match &args[0] {
                         LiteralType::String(ref string) => match self {
                             Self::Error => exit(1),
@@ -208,8 +210,12 @@ impl TokenType {
                                 let mut input = String::new();
                                 print!("{}", string);
                                 // flush stdout
-                                io::stdout().flush().unwrap();
-                                io::stdin().read_line(&mut input).unwrap();
+                                io::stdout().flush().unwrap_or_else(|_| {
+                                    error::error(line, "Error flushing stdout");
+                                });
+                                io::stdin().read_line(&mut input).unwrap_or_else(|_| {
+                                    error::error(line, "Failed to read input");
+                                });
                                 LiteralType::String(input.trim().to_string())
                             }
                             Self::StrToBool => {

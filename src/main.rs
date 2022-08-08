@@ -16,7 +16,8 @@ fn main() {
         cli::get_dash_args(&args, index, &mut parsed_args);
     }
     if parsed_args.log {
-        log4rs::init_file("log.yaml", log4rs::config::Deserializers::default()).unwrap();
+        log4rs::init_file("log.yaml", log4rs::config::Deserializers::default())
+            .unwrap_or_else(|_| panic!("Failed to initialize log4rs"));
         info!("Starting up...");
     }
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
@@ -26,8 +27,8 @@ fn main() {
         'l: loop {
             let mut input = String::new();
             print!(">> "); // print the prompt
-            io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut input).unwrap(); // read the input
+            io::stdout().flush().unwrap_or_else(|_| panic!("Failed to flush stdout"));
+            io::stdin().read_line(&mut input).unwrap_or_else(|_| panic!("Failed to read stdin"));
             if input.trim() == "exit" {
                 // if the input is exit, then exit
                 info!("Exiting...");
@@ -36,9 +37,9 @@ fn main() {
                     if Path::new(&parsed_args.file).exists() && !parsed_args.force {
                         // if the file exists and we are not forcing it to overwrite
                         print!("Do you want to overwrite the {}? (y/n): ", parsed_args.file); // ask the user if they want to overwrite the file
-                        io::stdout().flush().unwrap();
+                        io::stdout().flush().unwrap_or_else(|_| panic!("Failed to flush stdout"));
                         let mut y_or_n: String = String::new();
-                        io::stdin().read_line(&mut y_or_n).unwrap();
+                        io::stdin().read_line(&mut y_or_n).unwrap_or_else(|_| panic!("Failed to read stdin")); // read the input
                         if y_or_n == "n" {
                             // if the user does not want to overwrite the file exit
                             exit(0);
@@ -62,7 +63,11 @@ fn main() {
         }
     } else {
         // if we are not in repl mode ie we are reading a file
-        let mut file: File = File::open(&parsed_args.file).unwrap(); // open the file
+        let mut file: File = File::open(&parsed_args.file).unwrap_or_else(
+            |_| {
+                error::error(0, "Error encountered while opening file!");
+            },
+        ); // open the file
         let mut contents: String = String::new(); // create a string to hold the contents of the file
         match file.read_to_string(&mut contents) {
             Ok(contents) => contents,
