@@ -165,13 +165,26 @@ impl Lexer {
                     self.remove_text(self.current);
                     match self.remove_text(self.current) {
                         x if x.is_ascii_hexdigit() => match self.remove_text(self.current) {
-                            y if y.is_ascii_hexdigit() =>   {self.insert_text(self.current,  u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap() as char);
-                            self.advance();},
-                            y =>  {self.insert_text(self.current, u8::from_str_radix(format!("{x}").as_str(), 16).unwrap() as char);
-                            self.insert_text(self.current+1, y);
-                        self.advance();}
+                            y if y.is_ascii_hexdigit() => {
+                                self.insert_text(
+                                    self.current,
+                                    u8::from_str_radix(format!("{x}{y}").as_str(), 16).unwrap()
+                                        as char,
+                                );
+                                self.advance();
+                            }
+                            y => {
+                                self.insert_text(
+                                    self.current,
+                                    u8::from_str_radix(format!("{x}").as_str(), 16).unwrap()
+                                        as char,
+                                );
+                                self.insert_text(self.current + 1, y);
+                                self.advance();
+                            }
                         },
-                        x => {self.insert_text(self.current, x);
+                        x => {
+                            self.insert_text(self.current, x);
                             self.advance();
                         }
                     }
@@ -186,7 +199,11 @@ impl Lexer {
                         hex_string.push(self.remove_text(self.current));
                         i += 1;
                     }
-                    self.insert_text(self.current, char::from_u32(u32::from_str_radix(hex_string.as_str(), 16).unwrap()).unwrap());
+                    self.insert_text(
+                        self.current,
+                        char::from_u32(u32::from_str_radix(hex_string.as_str(), 16).unwrap())
+                            .unwrap(),
+                    );
                     self.current += 1;
                 } else {
                     error::error(
@@ -197,7 +214,6 @@ impl Lexer {
             } else {
                 self.advance();
             }
-
         }
         if self.is_at_end() {
             error::error(self.line, "unterminated string");
@@ -306,7 +322,7 @@ impl Lexer {
     }
 
     fn remove_text(&mut self, pos: usize) -> char {
-        // use chars to be able to use unicode, remove the pos 
+        // use chars to be able to use unicode, remove the pos
         let mut text: Vec<char> = self.source.chars().collect();
         let to_return = text[pos];
         text.remove(pos);
@@ -314,7 +330,7 @@ impl Lexer {
         to_return
     }
 
-    fn insert_text(&mut self, pos: usize, texts: char,) {
+    fn insert_text(&mut self, pos: usize, texts: char) {
         let mut text: Vec<char> = self.source.chars().collect();
         text.insert(pos, texts);
         self.source = text.iter().collect();
