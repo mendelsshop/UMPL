@@ -1,104 +1,127 @@
+# UMPL grammar
+
 `anything in "" is part of the language`
-<br>
 
 `anything that is a link is part of the language`
-<br>
 
-`when the + is used it means zero or more` 
-<br>
+`when the + is used it means zero or more`
 
 `when the * is used it means one or more`
-<br>
 
-`when the ? is used it means one or two` 
-<br>
+`when the ? is used it means one or two`
 
 `& means and`
-<br>
 
 `&| means and or`
-<br>
 
 `! means not`
-<br>
 
-# code:
-[`<expression>+`](#expression)   `&|`  [`<definitions>+`](#definitions) `&|` [`<statements>+`](#statements)
+## code
 
-# expression:
-`"(",` [`<stuff>`](#stuff) `, ")", "<" | ">"?` 
+[`<expression>+`](##expression)   `&|`  [`<definitions>+`](##definitions) `&|` [`<statements>+`](##statements)
 
-# stuff:
-[`<literal>`](#literal) `|` [`<calling>`](#calling) `|` [`<identifier>`](#identifier)
-# literal:
-[`<number>`](#number) `|` [`<string>`](#string) `|` [`<boolean>`](#boolean) | `"hempty"`
+## expression
 
-# number:
+`"(",` [`<stuff>`](##stuff) `, ")", "<" | ">"?`
+
+## stuff
+
+[`<literal>`](##literal) `|` [`<calling>`](##calling) `|` [`<identifier>`](##identifier)
+
+## literal
+
+[`<number>`](##number) `|` [`<string>`](##string) `|` [`<boolean>`](##boolean) | `"hempty"`
+
+## number
+
 `"0x" &| 0-9A-F`
 
-# string:
-``"`", Any string of unicode characters, "`"  ``
+## string
 
-# boolean:
+``"`", Any string of Unicode characters, "`"``
+
+## boolean
+
 `"true" | "false"`
 
-# calling:
-`"(",`[ `<internal>`](#internal) `|` [`<functions>`](#functions) `,")"`
+## calling
 
-# internal: 
-[`<fn-keyword>`](#fn-keywords) `,` [`<function-params>`](#function-params)
+`"(",`[<internal>](##internal) `|` [`<functions>`](##functions) `,")"`
 
-# function-params: 
-`"[",` [`<stuff>+`](#stuff) ` ,"]"`
+## internal
 
-# other-stuff:
-[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier)
-# functions:
-`"new"` [`<function>`](#function) `,` [`<function-params>`](#function-params)
+[`<fn-keyword>`](##fn-keywords) `,` [`<function-params>`](##function-params)
 
-# function: 
+## function-params
+
+`"[",` [`<stuff>+`](##stuff) `,"]"`
+
+## other-stuff
+
+[`<literal>`](##literal) `|` [`<expression>`](##expression) `|` [`<identifier>`](##identifier)
+
+## functions
+
+`"new"` [`<function>`](##function) `,` [`<function-params>`](##function-params)
+
+## function
+
 `any single unicode emoji`
 
-# definitions:
-[`<variable-definitions>`](#variable-definitions) `|` [`<function definitions>`](#function-definitions) `|` [`<list-definitions>`](#list-definitions) 
+## definitions
 
-# variable-definitions:
-`"create", ` [`<variable>`](#variable) `,"with",` [`<other-stuff>`](#other-stuff)
+[`<variable-definitions>`](##variable-definitions) `|` [`<function definitions>`](##function-definitions) `|` [`<list-definitions>`](##list-definitions)
 
-# variable:
-[`<identifier>`](#identifier)
+## variable-definitions
 
-# identifier:
-`!` [`<keyword>`](#keyword)
-<br>
-[`<ident-first>`](#ident-first) `,` [`<ident-other>+`](#ident-other)
+`"create",` [`<variable>`](##variable) `,"with",` [`<other-stuff>`](##other-stuff)
 
-# ident-first:
-`!` [`<number>`](#number) `a-z/-`
+## variable
 
-# ident-other:
-[`<number>`](#number) ` | a-z/-`
+[`<identifier>`](##identifier)
 
-# function-definitions:
-`"potato,"` [`<function>`](#function) `,` [`<function-args>`](#functions-args) `,"⧼",` [`<code>`](#code) `&|` [`<return>`](#return) `,` [`"⧽"`
+## identifier
 
-# functions-args:
-[`<number of arguments>`](#number) 
+`!` [`<keyword>`](##keyword)
 
-# return
-`"return" ,` [`<other-stuff>+`](#other-stuff) `| ":"`
-# list-definitions:
-`"list"` [`<variable>`](#variable) `"with"` [`<list-element>`](#list-elements)
+[`<ident-first>`](##ident-first) `,` [`<ident-other>+`](##ident-other)
 
-# list-elements:
-`"[",` [`<stuff>`](#other-stuff) `,` [`<stuff>`](#other-stuff) `,"]", "<" | ">"`
+## ident-first
 
-# statements
-[`<loop>`](#loop) `|` [`if-else`](#if-else)
+`!` [`<number>`](##number) `a-z/-`
 
-# loop 
-`"loop", "⧼"` [`<code>`](#code) `&| ("break" | "continue") ,"⧽"`
+## ident-other
 
-# if-else
-`"if", "{",` ['<boolean: ](#boolean) [(literal |](#literal)[` expression)>`](#expression) `"}", ⧼",` [`<code>`](#code) `,"⧽",
-"else", "⧼,"` [`<code>`](#code) `,"⧽"`
+[`<number>`](##number) `| a-z/-`
+
+## function-definitions
+
+`"potato,"` [`<function>`](##function) `,` [`<function-args>`](##functions-args) `,"⧼",` [`<code>`](##code) `&|` [`<return>`](##return) `,` [`"⧽"`
+
+## functions-args
+
+[`<number of arguments>`](##number)
+
+## return
+
+`"return" ,` [`<other-stuff>+`](##other-stuff) `| ":"`
+
+## list-definitions
+
+`"list"` [`<variable>`](##variable) `"with"` [`<list-element>`](##list-elements)
+
+## list-elements
+
+`"[",` [`<stuff>`](##other-stuff) `,` [`<stuff>`](##other-stuff) `,"]", "<" | ">"`
+
+## statements
+
+[`<loop>`](##loop) `|` [`if-else`](##if-else)
+
+## loop
+
+`"loop", "⧼"` [`<code>`](##code) `&| ("break" | "continue") ,"⧽"`
+
+## if-else
+
+`"if", "{",` [`<boolean:`](#boolean)[`(literal`](#literal)`|`[`expression)>`](#expression) `"}", ⧼",` [`<code>`](#code) `,"⧽","else", "⧼,"` [`<code>`](#code) `,"⧽"`

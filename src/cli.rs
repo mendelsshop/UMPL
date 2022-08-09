@@ -109,8 +109,8 @@ fn usage() {
         OPTIONS: 
         -r, -i: interactive mode
         -h: help
-        -v: version
-        -f: force",
+        -f: force
+        -t=number: toggle case" 
             );
         } else {
             eprintln!("Segmentation fault (core dumped)");
