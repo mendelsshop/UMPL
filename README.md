@@ -29,7 +29,7 @@ There is semi working VSCode extension for UMPL, you can find it [here](https://
 
 ## compiler options
 
-umpl [`File`] [`Options`](###OPTIONS)]
+umpl [`File`] [`Options`](#options)]
 
 ### Options
 
@@ -45,16 +45,16 @@ along with other dark secrets hidden in the code.
 
 table of contents:
 
-- [`Types`](##Types)
-  - [`number`](###number)
-  - [`string`](###string)
-    - [`string escape sequences`](####string-escape-sequences)
-  - [`boolean`](###boolean)
-  - [`hempty`](###hempty)
-  - [`file`](###file)
-- [`Declarations`](##Declarations)
-- [`Methods`](##Control-Flow)
-- [`Keywords`](##KEYWORDS)
+- [`Types`](#types)
+  - [`number`](#number)
+  - [`string`](#string)
+    - [`string escape sequences`](#string-escape-sequences)
+  - [`boolean`](#boolean)
+  - [`hempty`](#hempty)
+  - [`file`](#file)
+- [`Declarations`](#declarations)
+- [`Control Flow`](#control-flow)
+- [`Keywords`](#keywords)
 
 ## Types
 

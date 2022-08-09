@@ -18,19 +18,19 @@
 
 ## code
 
-[`<expression>+`](##expression)   `&|`  [`<definitions>+`](##definitions) `&|` [`<statements>+`](##statements)
+[`<expression>+`](#expression)   `&|`  [`<definitions>+`](#definitions) `&|` [`<statements>+`](#statements)
 
 ## expression
 
-`"(",` [`<stuff>`](##stuff) `, ")", "<" | ">"?`
+`"(",` [`<stuff>`](#stuff) `, ")", "<" | ">"?`
 
 ## stuff
 
-[`<literal>`](##literal) `|` [`<calling>`](##calling) `|` [`<identifier>`](##identifier)
+[`<literal>`](#literal) `|` [`<calling>`](#calling) `|` [`<identifier>`](#identifier)
 
 ## literal
 
-[`<number>`](##number) `|` [`<string>`](##string) `|` [`<boolean>`](##boolean) | `"hempty"`
+[`<number>`](#number) `|` [`<string>`](#string) `|` [`<boolean>`](#boolean) | `"hempty"`
 
 ## number
 
@@ -46,23 +46,23 @@
 
 ## calling
 
-`"(",`[<internal>](##internal) `|` [`<functions>`](##functions) `,")"`
+`"(",`[<internal>](#internal) `|` [`<functions>`](#functions) `,")"`
 
 ## internal
 
-[`<fn-keyword>`](##fn-keywords) `,` [`<function-params>`](##function-params)
+[`<fn-keyword>`](#fn-keywords) `,` [`<function-params>`](#function-params)
 
 ## function-params
 
-`"[",` [`<stuff>+`](##stuff) `,"]"`
+`"[",` [`<stuff>+`](#stuff) `,"]"`
 
 ## other-stuff
 
-[`<literal>`](##literal) `|` [`<expression>`](##expression) `|` [`<identifier>`](##identifier)
+[`<literal>`](#literal) `|` [`<expression>`](#expression) `|` [`<identifier>`](#identifier)
 
 ## functions
 
-`"new"` [`<function>`](##function) `,` [`<function-params>`](##function-params)
+`"new"` [`<function>`](#function) `,` [`<function-params>`](#function-params)
 
 ## function
 
@@ -70,57 +70,57 @@
 
 ## definitions
 
-[`<variable-definitions>`](##variable-definitions) `|` [`<function definitions>`](##function-definitions) `|` [`<list-definitions>`](##list-definitions)
+[`<variable-definitions>`](#variable-definitions) `|` [`<function definitions>`](#function-definitions) `|` [`<list-definitions>`](#list-definitions)
 
 ## variable-definitions
 
-`"create",` [`<variable>`](##variable) `,"with",` [`<other-stuff>`](##other-stuff)
+`"create",` [`<variable>`](#variable) `,"with",` [`<other-stuff>`](#other-stuff)
 
 ## variable
 
-[`<identifier>`](##identifier)
+[`<identifier>`](#identifier)
 
 ## identifier
 
-`!` [`<keyword>`](##keyword)
+`!` [`<keyword>`](#keyword)
 
-[`<ident-first>`](##ident-first) `,` [`<ident-other>+`](##ident-other)
+[`<ident-first>`](#ident-first) `,` [`<ident-other>+`](#ident-other)
 
 ## ident-first
 
-`!` [`<number>`](##number) `a-z/-`
+`!` [`<number>`](#number) `a-z/-`
 
 ## ident-other
 
-[`<number>`](##number) `| a-z/-`
+[`<number>`](#number) `| a-z/-`
 
 ## function-definitions
 
-`"potato,"` [`<function>`](##function) `,` [`<function-args>`](##functions-args) `,"⧼",` [`<code>`](##code) `&|` [`<return>`](##return) `,` [`"⧽"`
+`"potato,"` [`<function>`](#function) `,` [`<function-args>`](#functions-args) `,"⧼",` [`<code>`](#code) `&|` [`<return>`](#return) `,` [`"⧽"`
 
 ## functions-args
 
-[`<number of arguments>`](##number)
+[`<number of arguments>`](#number)
 
 ## return
 
-`"return" ,` [`<other-stuff>+`](##other-stuff) `| ":"`
+`"return" ,` [`<other-stuff>+`](#other-stuff) `| ":"`
 
 ## list-definitions
 
-`"list"` [`<variable>`](##variable) `"with"` [`<list-element>`](##list-elements)
+`"list"` [`<variable>`](#variable) `"with"` [`<list-element>`](#list-elements)
 
 ## list-elements
 
-`"[",` [`<stuff>`](##other-stuff) `,` [`<stuff>`](##other-stuff) `,"]", "<" | ">"`
+`"[",` [`<stuff>`](#other-stuff) `,` [`<stuff>`](#other-stuff) `,"]", "<" | ">"`
 
 ## statements
 
-[`<loop>`](##loop) `|` [`if-else`](##if-else)
+[`<loop>`](#loop) `|` [`if-else`](#if-else)
 
 ## loop
 
-`"loop", "⧼"` [`<code>`](##code) `&| ("break" | "continue") ,"⧽"`
+`"loop", "⧼"` [`<code>`](#code) `&| ("break" | "continue") ,"⧽"`
 
 ## if-else
 
