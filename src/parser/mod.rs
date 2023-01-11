@@ -31,7 +31,7 @@ impl Parser {
             token: Token {
                 token_type: TokenType::EOF,
                 line: 0,
-                lexeme: "".to_string(),
+                lexeme: String::new(),
             },
             done: false,
             weird_bracket_count: 0,
@@ -161,6 +161,7 @@ impl Parser {
                 info!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
                     TokenType::Potato => {
+                        let start_line = self.token.line;
                         self.advance("parse_from_token after function looking for function name");
                         match self.token.token_type.clone() {
                             TokenType::FunctionIdentifier { name } => {
@@ -175,7 +176,7 @@ impl Parser {
                                         } else {
                                             error(
                                                 self.token.line,
-                                                format!("number expected in function declaration found floating point number literal with {}", literal),
+                                                format!("number expected in function declaration found floating point number literal with {literal}"),
                                             );
                                         }
                                     }
@@ -195,10 +196,7 @@ impl Parser {
                                         != TokenType::CodeBlockEnd
                                     {
                                         self.in_function = true; // for funtions inside functions see loop below for more info
-                                        match self.parse_from_token() {
-                                            Some(t) => function.push(t),
-                                            None => {}
-                                        }
+                                        if let Some(t) = self.parse_from_token() { function.push(t) }
                                     }
                                     self.advance("parse_from_token after function body looking for function end");
                                     self.in_function = false;
@@ -207,6 +205,7 @@ impl Parser {
                                         name,
                                         num_args,
                                         &function,
+                                        start_line,
                                         self.token.line,
                                     )))
                                 } else {
@@ -219,7 +218,7 @@ impl Parser {
                             tokentype => {
                                 error(
                                     self.token.line,
-                                    format!("function identifier expected after \"potato\", found TokenType::{:?}", tokentype),
+                                    format!("function identifier expected after \"potato\", found TokenType::{tokentype:?}"),
                                 );
                             }
                         }
@@ -330,6 +329,7 @@ impl Parser {
                     }
                     TokenType::Loop => {
                         info!("loop found");
+                        let start_line = self.token.line;
                         self.advance("parse_from_token looking for loop body");
                         let mut loop_body: Vec<Thing> = Vec::new();
                         if self.token.token_type == TokenType::CodeBlockBegin {
@@ -348,6 +348,7 @@ impl Parser {
                             self.in_loop = false;
                             Some(Thing::LoopStatement(LoopStatement::new(
                                 &loop_body,
+                                start_line,
                                 self.token.line,
                             )))
                         } else {
@@ -355,6 +356,7 @@ impl Parser {
                         }
                     }
                     TokenType::If => {
+                        let start_line = self.token.line;
                         self.advance("parse_from_token after if expecting left brace");
                         if self.token.token_type == TokenType::LeftBrace {
                             info!("if statement");
@@ -425,6 +427,7 @@ impl Parser {
                                                 thing,
                                                 if_body,
                                                 else_body,
+                                                start_line,
                                                 self.token.line,
                                             )))
                                         } else {
@@ -491,6 +494,7 @@ impl Parser {
     }
 
     fn after_left_paren(&mut self) -> Callorexpression {
+        let start_line = self.token.line;
         if self.paren_count == 1 {
             info!("found expresssion");
             self.advance("after_left_paren expression");
@@ -548,6 +552,7 @@ impl Parser {
             info!("found call {}", keyword);
             self.advance("after left paren");
             let mut args = Vec::new();
+
             while self.token.token_type != TokenType::RightParen {
                 info!("looking for args");
                 args.push(self.parse_to_stuff());
@@ -556,7 +561,8 @@ impl Parser {
             Callorexpression::Call(Call {
                 keyword,
                 arguments: args,
-                line,
+                line: start_line,
+                end_line: line,
             })
         }
     }
@@ -630,7 +636,7 @@ impl Parser {
                     Callorexpression::Call(call) => Stuff::Call(call),
                     Callorexpression::Expression(a) => error(
                         self.token.line,
-                        format!("call expected after left parenthesis found {:?}", a),
+                        format!("call expected after left parenthesis found {a:?}"),
                     ),
                 }
             }
@@ -709,20 +715,17 @@ pub enum Thing {
 impl Display for Thing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Thing::Expression(expression) => write!(f, "{}", expression),
-            Thing::Identifier(s) => write!(f, "Identifier({})", s),
-            Thing::Function(function) => write!(f, "{}", function),
-            Thing::IfStatement(if_statement) => write!(f, "{}", if_statement),
-            Thing::LoopStatement(loop_statement) => write!(f, "{}", loop_statement),
-            Thing::Break(_) => write!(f, "Break"),
-            Thing::Continue(_) => write!(f, "Continue"),
-            Thing::Return(stuff, _) => write!(
+            Self::Expression(expression) => write!(f, "{expression}"),
+            Self::Identifier(s) => write!(f, "Identifier({s})"),
+            Self::Function(function) => write!(f, "{function}"),
+            Self::IfStatement(if_statement) => write!(f, "{if_statement}"),
+            Self::LoopStatement(loop_statement) => write!(f, "{loop_statement}"),
+            Self::Break(_) => write!(f, "Break"),
+            Self::Continue(_) => write!(f, "Continue"),
+            Self::Return(stuff, _) => write!(
                 f,
                 "Return{}",
-                match stuff {
-                    Some(stuff) => format!("({})", stuff),
-                    None => String::from(""),
-                }
+                stuff.as_ref().map_or_else(String::new, |stuff| format!("({stuff})")),
             ),
         }
     }
@@ -731,20 +734,17 @@ impl Display for Thing {
 impl fmt::Debug for Thing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Thing::Expression(expression) => write!(f, "{:?}", expression),
-            Thing::Identifier(t) => write!(f, "[Identifier({}) at line: {}]", t, t.line),
-            Thing::Function(function) => write!(f, "{:?}", function),
-            Thing::IfStatement(if_statement) => write!(f, "{:?}", if_statement),
-            Thing::LoopStatement(loop_statement) => write!(f, "{:?}", loop_statement),
-            Thing::Break(line) => write!(f, "[Break at line: {}]", line),
-            Thing::Continue(line) => write!(f, "[Continue at line: {}]", line),
-            Thing::Return(stuff, line) => write!(
+            Self::Expression(expression) => write!(f, "{expression:?}"),
+            Self::Identifier(t) => write!(f, "[Identifier({t}) at line: {}]", t.line),
+            Self::Function(function) => write!(f, "{function:?}"),
+            Self::IfStatement(if_statement) => write!(f, "{if_statement:?}"),
+            Self::LoopStatement(loop_statement) => write!(f, "{loop_statement:?}"),
+            Self::Break(line) => write!(f, "[Break at line: {line}]"),
+            Self::Continue(line) => write!(f, "[Continue at line: {line}]"),
+            Self::Return(stuff, line) => write!(
                 f,
                 "[Return{} at line: {}]",
-                match stuff {
-                    Some(stuff) => format!("({:?})", stuff),
-                    None => String::from(""),
-                },
+                stuff.as_ref().map_or_else(String::new, |stuff| format!("({stuff:?})")),
                 line
             ),
         }

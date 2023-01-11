@@ -67,7 +67,7 @@ impl Display for NewExpression {
                     format!("{}", self.inside)
                 }
             } else {
-                "".to_string()
+                String::new()
             }
         )
     }
@@ -82,8 +82,8 @@ pub enum LitOrList {
 impl Display for LitOrList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LitOrList::Identifier(i) => write!(f, "{}", i),
-            LitOrList::Literal(l) => write!(f, "{}", l),
+            Self::Identifier(i) => write!(f, "{i}"),
+            Self::Literal(l) => write!(f, "{l}"),
         }
     }
 }
@@ -117,33 +117,33 @@ pub enum LiteralOrFile {
 impl LiteralOrFile {
     pub fn get_file(self, line: i32, keyword: &TokenType) -> String {
         match self {
-            LiteralOrFile::File(file) => file,
+            Self::File(file) => file,
             _ => {
-                error(line, format!("{} requires a file", keyword));
+                error(line, format!("{keyword} requires a file"));
             }
         }
     }
     pub fn get_string(self, line: i32, keyword: &TokenType) -> String {
         match self {
-            LiteralOrFile::Literal(LiteralType::String(lit)) => lit,
+            Self::Literal(LiteralType::String(lit)) => lit,
             _ => {
-                error(line, format!("{} requires a string", keyword));
+                error(line, format!("{keyword} requires a string"));
             }
         }
     }
     pub fn get_number(self, line: i32, keyword: &TokenType) -> f64 {
         match self {
-            LiteralOrFile::Literal(LiteralType::Number(lit)) => lit,
+            Self::Literal(LiteralType::Number(lit)) => lit,
             _ => {
-                error(line, format!("{} requires a number", keyword));
+                error(line, format!("{keyword} requires a number"));
             }
         }
     }
     pub fn get_bool(self, line: i32, keyword: &TokenType) -> bool {
         match self {
-            LiteralOrFile::Literal(LiteralType::Boolean(lit)) => lit,
+            Self::Literal(LiteralType::Boolean(lit)) => lit,
             _ => {
-                error(line, format!("{} requires a boolean", keyword));
+                error(line, format!("{keyword} requires a boolean"));
             }
         }
     }
@@ -152,8 +152,8 @@ impl LiteralOrFile {
 impl Display for LiteralOrFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LiteralOrFile::Literal(lit) => write!(f, "{}", lit),
-            LiteralOrFile::File(file) => write!(f, "{}", file),
+            Self::Literal(lit) => write!(f, "{lit}"),
+            Self::File(file) => write!(f, "{file}"),
         }
     }
 }
@@ -183,7 +183,7 @@ pub enum NewIdentifierType {
 impl NewIdentifierType {
     pub fn to_vec_literaltype(self, line: i32) -> Vec<LiteralOrFile> {
         match self {
-            NewIdentifierType::Vairable(v) => vec![v.value],
+            Self::Vairable(v) => vec![v.value],
             _ => error(line, "cannot convert to vec"),
         }
     }
@@ -255,17 +255,14 @@ impl Scope {
                         self.vars
                             .insert(new_name.to_string(), NewIdentifierType::List(new_var));
                     } else {
-                        match self.parent_scope.as_mut() {
-                            Some(parent) => {
-                                parent.set_var(
-                                    name,
-                                    &mut new_val.to_vec_literaltype(line),
-                                    recurse,
-                                    line,
-                                );
-                            }
-                            None => error(line, "variable not found"),
-                        }
+                        self.parent_scope.as_mut().map_or_else(|| error(line, "variable not found"), |parent| {
+                            parent.set_var(
+                                name,
+                                &mut new_val.to_vec_literaltype(line),
+                                recurse,
+                                line,
+                            );
+                        });
                     }
                 } else {
                     let mut new_var: Box<NewList> = match self.get_var(new_name, line) {
@@ -292,10 +289,7 @@ impl Scope {
                     if self.has_var(name, false) {
                         self.vars.insert(name.to_string(), new_val);
                     } else {
-                        match self.parent_scope.as_mut() {
-                            Some(parent) => parent.set_var(name, value, recurse, line),
-                            None => error(line, "variable not found"),
-                        }
+                        self.parent_scope.as_mut().map_or_else(|| error(line, "variable not found"), |parent| parent.set_var(name, value, recurse, line));
                     }
                 } else {
                     self.vars.insert(name.to_string(), new_val);
@@ -341,10 +335,7 @@ impl Scope {
                 NewIdentifierType::Vairable(_) => v.clone(),
                 NewIdentifierType::List(list) => NewIdentifierType::List(list.clone()),
             },
-            None => match &mut self.parent_scope {
-                Some(parent) => parent.get_var(name, line),
-                None => error(line, format!("variable not found {}", name)),
-            },
+            None => self.parent_scope.as_mut().map_or_else(|| error(line, format!("variable not found {name}")), |parent| parent.get_var(name, line)),
         }
     }
     pub fn set_function(&mut self, name: char, args: Vec<Thing>, body: f64) {
@@ -353,10 +344,7 @@ impl Scope {
     pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64)> {
         match self.function.get(&name) {
             Some((args, body)) => Some((args.clone(), *body)),
-            None => match &self.parent_scope {
-                Some(parent) => parent.get_function(name),
-                None => None,
-            },
+            None => self.parent_scope.as_ref().and_then(|parent| parent.get_function(name))
         }
     }
     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
@@ -374,17 +362,11 @@ impl Scope {
         if self.vars.contains_key(name) {
             true
         } else {
-            match &self.parent_scope {
-                Some(parent) => parent.has_var(name, recurse),
-                None => false,
-            }
+            self.parent_scope.as_ref().map_or(false, |parent| parent.has_var(name, recurse))
         }
     }
     pub fn drop_scope(&mut self) {
-        let p_scope: Self = match self.parent_scope.take() {
-            Some(scope) => *scope,
-            None => error(0, "no parent scope"),
-        };
+        let p_scope: Self = self.parent_scope.take().map_or_else(|| error(0, "no parent scope"), |scope| *scope);
         *self = p_scope;
     }
 
@@ -479,20 +461,14 @@ impl Eval {
                         }
                     }
                     IdentifierType::List(ref list) => {
-                        let car: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.car) {
-                            Some(pointer) => pointer,
-                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                &list.car,
-                                variable.line,
-                            )),
-                        };
-                        let cdr: LiteralOrFile = match self.find_pointer_in_other_stuff(&list.cdr) {
-                            Some(pointer) => pointer,
-                            None => LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                &list.cdr,
-                                variable.line,
-                            )),
-                        };
+                        let car: LiteralOrFile = self.find_pointer_in_other_stuff(&list.car).map_or_else(|| LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                            &list.car,
+                            variable.line,
+                        )), |pointer| pointer);
+                        let cdr: LiteralOrFile = self.find_pointer_in_other_stuff(&list.cdr).map_or_else(|| LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                            &list.cdr,
+                            variable.line,
+                        )), |pointer| pointer);
                         self.scope.set_var(
                             &variable.name,
                             &mut vec![car, cdr],
@@ -502,15 +478,7 @@ impl Eval {
                     }
                 },
                 Thing::Return(os, line) => {
-                    let ret: LiteralOrFile = match os {
-                        Some(os) => match self.find_pointer_in_other_stuff(&os) {
-                            Some(identifier) => identifier,
-                            None => {
-                                LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line))
-                            }
-                        },
-                        None => LiteralOrFile::Literal(LiteralType::Hempty),
-                    };
+                    let ret: LiteralOrFile = os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| self.find_pointer_in_other_stuff(&os).map_or_else(|| LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)), |identifier| identifier));
                     return Some(Stopper::Return(ret));
                 }
                 Thing::Expression(expr) => {
@@ -687,7 +655,7 @@ impl Eval {
                             }
                         })
                     } else {
-                        error(call.line, format!("Function {} is not defined", name));
+                        error(call.line, format!("Function {name} is not defined"));
                     }
                 }
                 TokenType::Type => {
@@ -1063,7 +1031,7 @@ impl Eval {
                     } else {
                         error(
                             call.line,
-                            format!("Could not open file {}: does not exist", arg).as_str(),
+                            format!("Could not open file {arg}: does not exist").as_str(),
                         );
                     }
                 }
@@ -1100,7 +1068,7 @@ impl Eval {
                                                     match read_file(&file) {
                                                         Ok(contents) => contents,
                                                         Err(err) => {
-                                                            error(call.line, format!("{}", err));
+                                                            error(call.line, format!("{err}"));
                                                         }
                                                     }; // read the file into the string
                                                     return LiteralOrFile::Literal(
@@ -1134,7 +1102,7 @@ impl Eval {
                                             match read_file(&file) {
                                                 Ok(contents) => contents,
                                                 Err(err) => {
-                                                    error(call.line, format!("{}", err));
+                                                    error(call.line, format!("{err}"));
                                                 }
                                             }; // read the file into the string
                                             return LiteralOrFile::Literal(LiteralType::String(
@@ -1187,7 +1155,7 @@ impl Eval {
                     match write_file(&file, &string, &mode) {
                         Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
                         Err(err) => {
-                            error(call.line, format!("{}", err).as_str());
+                            error(call.line, format!("{err}").as_str());
                         }
                     }
                 }
@@ -1215,7 +1183,7 @@ impl Eval {
                             if line as usize > lines.len() {
                                 error(
                                     call.line,
-                                    format!("Line {} does not exist in file {}", line, file),
+                                    format!("Line {line} does not exist in file {file}"),
                                 );
                             }
                             LiteralOrFile::Literal(LiteralType::String(
@@ -1223,7 +1191,7 @@ impl Eval {
                             ))
                         }
                         Err(err) => {
-                            error(call.line, format!("{}", err).as_str());
+                            error(call.line, format!("{err}").as_str());
                         }
                     }
                 }
@@ -1256,7 +1224,7 @@ impl Eval {
                     let mut contents = match read_file(&file) {
                         Ok(contents) => contents,
                         Err(err) => {
-                            error(call.line, format!("{}", err).as_str());
+                            error(call.line, format!("{err}").as_str());
                         }
                     };
                     // split the contents into lines
@@ -1267,13 +1235,13 @@ impl Eval {
                     }
                     string = match mode.as_str() {
                         "a" => {
-                            format!("{}{}", string, lines[line as usize - 1],)
+                            format!("{string}{}", lines[line as usize - 1],)
                         }
                         "w" => string,
                         _ => {
                             error(
                                 call.line,
-                                format!("Mode {} is not a valid mode", mode).as_str(),
+                                format!("Mode {mode} is not a valid mode").as_str(),
                             );
                         }
                     };
@@ -1284,7 +1252,7 @@ impl Eval {
                     match write_file(&file, &contents, "w") {
                         Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
                         Err(err) => {
-                            error(call.line, format!("{}", err).as_str());
+                            error(call.line, format!("{err}").as_str());
                         }
                     }
                 }
@@ -1306,7 +1274,7 @@ impl Eval {
                         TokenType::DeleteFile => match fs::remove_file(&file) {
                             Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
                             Err(err) => {
-                                error(call.line, format!("{}", err).as_str());
+                                error(call.line, format!("{err}").as_str());
                             }
                         },
                         TokenType::CreateFile => {
@@ -1314,7 +1282,7 @@ impl Eval {
                             match OpenOptions::new().create(true).open(&file) {
                                 Ok(_) => LiteralOrFile::File(file),
                                 Err(err) => {
-                                    error(call.line, format!("{}", err).as_str());
+                                    error(call.line, format!("{err}").as_str());
                                 }
                             }
                         }

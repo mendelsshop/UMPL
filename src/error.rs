@@ -14,7 +14,7 @@ pub fn error<T: Display>(line: i32, message: T) -> ! {
     if message.is_empty() {
         message = "Segmentation fault (core dumped)";
     }
-    eprintln!("[line: {}], Error{}: {}", line, where_, message);
+    eprintln!("[line: {line}], Error{where_}: {message}");
     exit(1);
 }
 
@@ -30,13 +30,13 @@ pub fn arg_error<T: Display>(
         if num_args < given_args {
             error(
                 line,
-                format!("{} requires at least {} arguments", function, num_args),
+                format!("{function} requires at least {num_args} arguments"),
             );
         }
     } else if num_args != given_args {
         error(
             line,
-            format!("{} requires {} arguments", function, num_args),
+            format!("{function} requires {num_args} arguments"),
         );
     }
 }

@@ -27,7 +27,7 @@ impl Display for Expression {
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct IdentifierPointer {
     pub name: String,
     pub line: i32,
@@ -55,9 +55,9 @@ pub enum Stuff {
 impl Display for Stuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Stuff::Literal(literal) => write!(f, "{}", literal),
-            Stuff::Identifier(identifier) => write!(f, "{}", identifier),
-            Stuff::Call(call) => write!(f, "{}", call),
+            Self::Literal(literal) => write!(f, "{literal}"),
+            Self::Identifier(identifier) => write!(f, "{identifier}"),
+            Self::Call(call) => write!(f, "{call}"),
         }
     }
 }
@@ -161,9 +161,9 @@ impl LiteralType {
 impl Display for LiteralType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Number(num) => write!(f, "{}", num),
-            Self::String(string) => write!(f, "{}", string),
-            Self::Boolean(bool) => write!(f, "{}", bool),
+            Self::Number(num) => write!(f, "{num}"),
+            Self::String(string) => write!(f, "{string}"),
+            Self::Boolean(bool) => write!(f, "{bool}"),
             Self::Hempty => write!(f, "hempty"),
         }
     }
@@ -213,8 +213,8 @@ impl Display for Identifier {
             "{} {}",
             self.name,
             match &self.value {
-                IdentifierType::List(list) => format!("list: {}", list),
-                IdentifierType::Vairable(vairable) => format!("variable: {}", vairable),
+                IdentifierType::List(list) => format!("list: {list}"),
+                IdentifierType::Vairable(vairable) => format!("variable: {vairable}"),
             }
         )
     }
@@ -225,21 +225,23 @@ pub struct Call {
     pub keyword: TokenType,
     pub arguments: Vec<Stuff>,
     pub line: i32,
+    pub end_line: i32,
 }
 
 impl Call {
-    pub fn new(arguments: &[Stuff], line: i32, keyword: TokenType) -> Self {
+    pub fn new(arguments: &[Stuff], line: i32, end_line: i32, keyword: TokenType) -> Self {
         Self {
             arguments: arguments.to_vec(),
             line,
             keyword,
+            end_line,
         }
     }
 }
 
 impl Display for Call {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut c = String::from("");
+        let mut c = String::new();
         for arg in self.arguments.iter().enumerate() {
             write!(c, "{}{}", arg.1, {
                 if arg.0 < self.arguments.len() - 1 {
@@ -249,7 +251,7 @@ impl Display for Call {
                 }
             })?;
         }
-        write!(f, "{:?}: [{}]", self.keyword, c)
+        write!(f, "{:?}: [{c}]", self.keyword)
     }
 }
 
@@ -273,9 +275,9 @@ impl OtherStuff {
 impl Display for OtherStuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Literal(literal) => write!(f, "{}", literal),
-            Self::Identifier(identifier) => write!(f, "{}", identifier),
-            Self::Expression(expression) => write!(f, "{}", expression),
+            Self::Literal(literal) => write!(f, "{literal}"),
+            Self::Identifier(identifier) => write!(f, "{identifier}"),
+            Self::Expression(expression) => write!(f, "{expression}"),
         }
     }
 }
@@ -286,15 +288,17 @@ pub struct Function {
     pub num_arguments: f64,
     pub body: Vec<Thing>,
     pub line: i32,
+    pub end_line: i32,
 }
 
 impl Function {
-    pub fn new(name: char, num_arguments: f64, body: &[Thing], line: i32) -> Self {
+    pub fn new(name: char, num_arguments: f64, body: &[Thing], line: i32, end_line: i32) -> Self {
         Self {
             name,
             num_arguments,
             body: body.to_vec(),
             line,
+            end_line,
         }
     }
 }
@@ -359,6 +363,7 @@ pub struct IfStatement {
     pub body_true: Vec<Thing>,
     pub body_false: Vec<Thing>,
     pub line: i32,
+    pub end_line: i32,
 }
 
 impl IfStatement {
@@ -367,12 +372,14 @@ impl IfStatement {
         body_true: Vec<Thing>,
         body_false: Vec<Thing>,
         line: i32,
+        end_line: i32,
     ) -> Self {
         Self {
             condition,
             body_true,
             body_false,
             line,
+            end_line,
         }
     }
 }
@@ -401,13 +408,15 @@ impl Display for IfStatement {
 pub struct LoopStatement {
     pub body: Vec<Thing>,
     pub line: i32,
+    pub end_line: i32,
 }
 
 impl LoopStatement {
-    pub fn new(body: &[Thing], line: i32) -> Self {
+    pub fn new(body: &[Thing], line: i32, end_line: i32) -> Self {
         Self {
             body: body.to_vec(),
             line,
+            end_line,
         }
     }
 }

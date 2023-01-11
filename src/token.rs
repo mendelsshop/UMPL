@@ -202,7 +202,7 @@ impl TokenType {
                             Self::Error => exit(1),
                             Self::Input => {
                                 let mut input = String::new();
-                                print!("{}", string);
+                                print!("{string}");
                                 // flush stdout
                                 io::stdout().flush().unwrap_or_else(|_| {
                                     error::error(line, "Error flushing stdout");
@@ -235,22 +235,19 @@ impl TokenType {
                                     }
                                     strings => format!("0x{}", strings.trim()),
                                 };
-                                let number: FloatLiteral = match string.parse() {
-                                    Ok(value) => value,
-                                    Err(_) => error::error(
-                                        line,
-                                        format!("Error parsing string {} to number", string.trim()),
-                                    ),
-                                };
+let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
+        line,
+        format!("Error parsing string {} to number", string.trim()),
+    ), |value: FloatLiteral| value);
                                 LiteralType::Number(number.convert::<f64>().inner())
                             }
                             Self::RunCommand => {
                                 let cmd = if OS == "windows" {
                                     let mut cmd = Command::new("powershell");
-                                    cmd.args(&["-c", string.trim()]).output()
+                                    cmd.args(["-c", string.trim()]).output()
                                 } else {
                                     let mut cmd = Command::new("sh");
-                                    cmd.args(&["-c", string.trim()]).output()
+                                    cmd.args(["-c", string.trim()]).output()
                                 };
                                 let cmd: String = match cmd {
                                     Ok(value) => {
@@ -278,7 +275,7 @@ impl TokenType {
                     if args.len() != 2 {
                         error::error(
                             line,
-                            format!("Expected 2 arguments for {:?} operator", self),
+                            format!("Expected 2 arguments for {self:?} operator"),
                         );
                     }
                     let type_ = &args[0];
@@ -303,19 +300,19 @@ impl TokenType {
                     if args.len() != 2 {
                         error::error(
                             line,
-                            format!("Expected 2 arguments for {:?} operator", self),
+                            format!("Expected 2 arguments for {self:?} operator"),
                         );
                     }
                     let bool_1 = match &args[0] {
                         LiteralType::Boolean(boolean) => boolean,
                         _ => {
-                            error::error(line, format!("Expected boolean for {:?} operator", self))
+                            error::error(line, format!("Expected boolean for {self:?} operator"))
                         }
                     };
                     let bool_2 = match &args[1] {
                         LiteralType::Boolean(boolean) => boolean,
                         _ => {
-                            error::error(line, format!("Expected boolean for {:?} operator", self))
+                            error::error(line, format!("Expected boolean for {self:?} operator"))
                         }
                     };
                     if bool_1 == bool_2 {
@@ -332,16 +329,16 @@ impl TokenType {
                     if args.len() != 2 {
                         error::error(
                             line,
-                            format!("Expected 2 arguments for {:?} operator", self),
+                            format!("Expected 2 arguments for {self:?} operator"),
                         );
                     }
                     let type_ = match &args[0] {
                         LiteralType::Number(number) => number,
-                        _ => error::error(line, format!("Expected number for {:?} operator", self)),
+                        _ => error::error(line, format!("Expected number for {self:?} operator")),
                     };
                     let type_1 = match &args[1] {
                         LiteralType::Number(number) => number,
-                        _ => error::error(line, format!("Expected number for {:?} operator", self)),
+                        _ => error::error(line, format!("Expected number for {self:?} operator")),
                     };
                     if self == &Self::GreaterThan {
                         LiteralType::Boolean(type_ > type_1)
@@ -359,34 +356,31 @@ impl TokenType {
                             LiteralType::Number(number) => exit(*number as i32),
                             _ => error::error(
                                 line,
-                                format!("Expected number for {:?} operator", self),
+                                format!("Expected number for {self:?} operator"),
                             ),
                         }
                     } else {
-                        error::error(line, format!("Expected 1 argument for {:?} operator", self));
+                        error::error(line, format!("Expected 1 argument for {self:?} operator"));
                     }
                 }
                 Self::SplitOn => {
                     if args.len() < 2 {
                         error::error(
                             line,
-                            format!("Expected al least 2 arguments for {:?} operator", self),
+                            format!("Expected al least 2 arguments for {self:?} operator"),
                         );
                     }
                     let og_string = match &args[0] {
                         LiteralType::String(string) => string,
-                        _ => error::error(line, format!("Expected string for {:?} operator", self)),
+                        _ => error::error(line, format!("Expected string for {self:?} operator")),
                     };
                     let split_on = match &args[1] {
                         LiteralType::String(string) => string,
-                        _ => error::error(line, format!("Expected string for {:?} operator", self)),
+                        _ => error::error(line, format!("Expected string for {self:?} operator")),
                     };
                     // check if there is a third argument (number)
                     args.get(2).map_or_else(
-                        || match og_string.split_once(split_on) {
-                            Some(v) => LiteralType::String(v.0.to_string()),
-                            None => LiteralType::String(og_string.to_string()),
-                        },
+                        || og_string.split_once(split_on).map_or_else(|| LiteralType::String(og_string.to_string()), |v| LiteralType::String(v.0.to_string())),
                         |number| -> LiteralType {
                             if let LiteralType::Number(number) = number {
                                 let number = *number as usize;
@@ -396,7 +390,7 @@ impl TokenType {
                                 if number > string.len() {
                                     error::error(
                                         line,
-                                        format!("{} is greater than the number of splits", number),
+                                        format!("{number} is greater than the number of splits"),
                                     );
                                 }
                                 // loop through the splits and add them to the string if they are less than the number
@@ -404,25 +398,22 @@ impl TokenType {
                                 string.iter().take(number).for_each(|i: &&str| {
                                     ret_string.push_str(i);
                                 });
-                                let ret_string = match ret_string.rsplit_once(split_on) {
-                                    Some(string) => string.0.to_string(),
-                                    None => ret_string,
-                                };
+                                let ret_string = ret_string.rsplit_once(split_on).map_or(og_string.to_string(), |string| string.0.to_string());
                                 LiteralType::String(ret_string)
                             } else {
                                 error::error(
                                     line,
-                                    format!("Expected number for {:?} operator", self),
+                                    format!("Expected number for {self:?} operator"),
                                 )
                             }
                         },
                     )
                 }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {
-                    error::error(line, format!("Keyword not found {}", self));
+                    error::error(line, format!("Keyword not found {self}"));
                 }
                 _ => {
-                    error::error(line, format!("Keyword not found {}", self));
+                    error::error(line, format!("Keyword not found {self}"));
                 }
             }
         } else {
@@ -458,10 +449,10 @@ impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.token_type {
             TokenType::String { literal } => {
-                write!(f, "String: [lexeme {:?}, value {:?}]", self.lexeme, literal)
+                write!(f, "String: [lexeme {:?}, value {literal:?}]", self.lexeme)
             }
             TokenType::Number { literal } => {
-                write!(f, "Number: [lexeme {:?}, value {:?}]", self.lexeme, literal)
+                write!(f, "Number: [lexeme {:?}, value {literal:?}]", self.lexeme)
             }
             _ => write!(f, "{:?}: [lexeme {:?}]", self.token_type, self.lexeme),
         }
@@ -470,6 +461,6 @@ impl Display for Token {
 
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at {}", self, self.line)
+        write!(f, "{self} at {}", self.line)
     }
 }

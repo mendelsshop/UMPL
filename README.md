@@ -1,5 +1,5 @@
 
-# [![cargo clippy](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml/badge.svg)](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml) [![crates.io](https://img.shields.io/crates/v/umpl.svg?label=latest%20version)](https://crates.io/crates/umpl) [![Crates.io](https://img.shields.io/crates/d/umpl?label=crates.io%20downloads)](https://crates.io/crates/umpl)
+# [![cargo clippy](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml/badge.svg)](https://github.com/mendelsshop/UMPL/actions/workflows/cargo_clippy.yml) [![crates.io](https://img.shields.io/crates/v/umpl.svg?label=latest%20version)](https://crates.io/crates/umpl) [![Crates.io](https://img.shields.io/crates/d/umpl?label=crates.io%20downloads)](https://crates.io/crates/umpl) ![msrv](./resources/msrv.svg) [![](https://tokei.rs/b1/github/mendelsshop/UMPL?category=lines)](https://github.com/mendelsshop/UMPL) [![license](https://img.shields.io/github/license/mendelsshop/UMPL)](https://github.com/mendelsshop/UMPL/blob/main/LICENSE)
 
 # UMPL
 

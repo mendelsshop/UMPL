@@ -3,7 +3,7 @@ use std::process::exit;
 use crate::error;
 pub static mut EASY_MODE: bool = false;
 pub static mut TOGGLE_CASE: i32 = 0;
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct ParsedArgs {
     pub repl: bool,   // inerative mode
     pub file: String, // file to read/write
@@ -23,24 +23,24 @@ impl ParsedArgs {
 }
 
 pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
-    let mut to_return: ParsedArgs = ParsedArgs::new(false, String::from(""));
+    let mut to_return: ParsedArgs = ParsedArgs::new(false, String::new());
     let mut index: usize = 1; // start at 1 because index  0 is the program name
     if args.len() < 2 {
         // if there are no arguments run in repl mode with no file
-        return (0, ParsedArgs::new(true, String::from("")));
+        return (0, ParsedArgs::new(true, String::new()));
     } else if args[1].ends_with(".umpl") {
         // make sure it's a .umpl file
         to_return.file = args[1].to_string(); // if it is, then set file to the file name
         to_return.repl = false; // and set repl to false
         index += 1; // and increment index
         let file_len = to_return.file.strip_suffix(".umpl").unwrap().len(); // get the length of the file name without the .umpl
-        if args.len() > 2 && args[2] == format!("{}", file_len) {
+        if args.len() > 2 && args[2] == format!("{file_len}") {
             unsafe {
                 EASY_MODE = true;
             }
             index += 1; // and increment index
         } else if args.len() > 2 && args[2] == "show_length" {
-            println!("{}", file_len); // print the length of the file name without the .umpl
+            println!("{file_len}"); // print the length of the file name without the .umpl
             exit(1);
         }
     } else {
@@ -80,13 +80,10 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     };
                     unsafe { TOGGLE_CASE = num as i32 };
                 } else if char_part_arg == 't' {
-                    let number: i32 = match arg.split_once('=') {
-                        Some(n) => match n.1.parse() {
-                            Ok(value) => value,
-                            Err(error) => error::error(0, error),
-                        },
-                        _ => error::error(0, "option t requires an =number"),
-                    };
+                    let number: i32 = arg.split_once('=').map_or_else(|| error::error(0, "option t requires an =number"), |n| match n.1.parse() {
+                        Ok(value) => value,
+                        Err(error) => error::error(0, error),
+                    });
                     unsafe {
                         TOGGLE_CASE = number;
                     }

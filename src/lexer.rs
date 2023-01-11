@@ -84,7 +84,7 @@ impl Lexer {
                 } else if emoji::is_emoji(c) {
                     self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
                 } else {
-                    error::error(self.line, format!("uknown character {}", c));
+                    error::error(self.line, format!("uknown character {c}"));
                 }
             }
         }
@@ -199,7 +199,7 @@ impl Lexer {
                     // can be from 0 to 6 hex digits
                     // loop until either 6 digits or we find a digit a non-hex digit
                     // while looping remove the character and append to a string
-                    let mut hex_string = "".to_string();
+                    let mut hex_string = String::new();
                     let mut i = 0;
                     while i < 6 && self.peek().is_ascii_hexdigit() {
                         hex_string.push(self.remove_text(self.current));

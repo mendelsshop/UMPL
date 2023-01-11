@@ -16,9 +16,7 @@ fn main() {
         cli::get_dash_args(&args, index, &mut parsed_args);
     }
     if parsed_args.log {
-        log4rs::init_file("log.yaml", log4rs::config::Deserializers::default())
-            .unwrap_or_else(|_| panic!("Failed to initialize log4rs"));
-        info!("Starting up...");
+        simple_file_logger::init_logger!("UMPL", simple_file_logger::LogLevel::Debug).expect("couldn't initialize logger");
     }
     let mut full_repl: Vec<String> = Vec::new(); // create a vector to hold the lines of the repl just in case we need to write it to a file
     if parsed_args.repl {
