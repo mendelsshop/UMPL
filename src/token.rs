@@ -235,10 +235,18 @@ impl TokenType {
                                     }
                                     strings => format!("0x{}", strings.trim()),
                                 };
-let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
-        line,
-        format!("Error parsing string {} to number", string.trim()),
-    ), |value: FloatLiteral| value);
+                                let number: FloatLiteral = string.parse().map_or_else(
+                                    |_| {
+                                        error::error(
+                                            line,
+                                            format!(
+                                                "Error parsing string {} to number",
+                                                string.trim()
+                                            ),
+                                        )
+                                    },
+                                    |value: FloatLiteral| value,
+                                );
                                 LiteralType::Number(number.convert::<f64>().inner())
                             }
                             Self::RunCommand => {
@@ -273,10 +281,7 @@ let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
                 }
                 Self::NotEqual | Self::Equal => {
                     if args.len() != 2 {
-                        error::error(
-                            line,
-                            format!("Expected 2 arguments for {self:?} operator"),
-                        );
+                        error::error(line, format!("Expected 2 arguments for {self:?} operator"));
                     }
                     let type_ = &args[0];
                     let type_1 = &args[1];
@@ -298,22 +303,15 @@ let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
                 }
                 Self::Or | Self::And => {
                     if args.len() != 2 {
-                        error::error(
-                            line,
-                            format!("Expected 2 arguments for {self:?} operator"),
-                        );
+                        error::error(line, format!("Expected 2 arguments for {self:?} operator"));
                     }
                     let bool_1 = match &args[0] {
                         LiteralType::Boolean(boolean) => boolean,
-                        _ => {
-                            error::error(line, format!("Expected boolean for {self:?} operator"))
-                        }
+                        _ => error::error(line, format!("Expected boolean for {self:?} operator")),
                     };
                     let bool_2 = match &args[1] {
                         LiteralType::Boolean(boolean) => boolean,
-                        _ => {
-                            error::error(line, format!("Expected boolean for {self:?} operator"))
-                        }
+                        _ => error::error(line, format!("Expected boolean for {self:?} operator")),
                     };
                     if bool_1 == bool_2 {
                         if bool_1 == &true {
@@ -327,10 +325,7 @@ let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
                 }
                 Self::GreaterThan | Self::LessThan | Self::GreaterEqual | Self::LessEqual => {
                     if args.len() != 2 {
-                        error::error(
-                            line,
-                            format!("Expected 2 arguments for {self:?} operator"),
-                        );
+                        error::error(line, format!("Expected 2 arguments for {self:?} operator"));
                     }
                     let type_ = match &args[0] {
                         LiteralType::Number(number) => number,
@@ -354,10 +349,9 @@ let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
                     if args.len() == 1 {
                         match &args[0] {
                             LiteralType::Number(number) => exit(*number as i32),
-                            _ => error::error(
-                                line,
-                                format!("Expected number for {self:?} operator"),
-                            ),
+                            _ => {
+                                error::error(line, format!("Expected number for {self:?} operator"))
+                            }
                         }
                     } else {
                         error::error(line, format!("Expected 1 argument for {self:?} operator"));
@@ -380,7 +374,12 @@ let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
                     };
                     // check if there is a third argument (number)
                     args.get(2).map_or_else(
-                        || og_string.split_once(split_on).map_or_else(|| LiteralType::String(og_string.to_string()), |v| LiteralType::String(v.0.to_string())),
+                        || {
+                            og_string.split_once(split_on).map_or_else(
+                                || LiteralType::String(og_string.to_string()),
+                                |v| LiteralType::String(v.0.to_string()),
+                            )
+                        },
                         |number| -> LiteralType {
                             if let LiteralType::Number(number) = number {
                                 let number = *number as usize;
@@ -398,13 +397,12 @@ let number: FloatLiteral = string.parse().map_or_else(|_| error::error(
                                 string.iter().take(number).for_each(|i: &&str| {
                                     ret_string.push_str(i);
                                 });
-                                let ret_string = ret_string.rsplit_once(split_on).map_or(og_string.to_string(), |string| string.0.to_string());
+                                let ret_string = ret_string
+                                    .rsplit_once(split_on)
+                                    .map_or(og_string.to_string(), |string| string.0.to_string());
                                 LiteralType::String(ret_string)
                             } else {
-                                error::error(
-                                    line,
-                                    format!("Expected number for {self:?} operator"),
-                                )
+                                error::error(line, format!("Expected number for {self:?} operator"))
                             }
                         },
                     )

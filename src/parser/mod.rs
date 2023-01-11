@@ -196,7 +196,9 @@ impl Parser {
                                         != TokenType::CodeBlockEnd
                                     {
                                         self.in_function = true; // for funtions inside functions see loop below for more info
-                                        if let Some(t) = self.parse_from_token() { function.push(t) }
+                                        if let Some(t) = self.parse_from_token() {
+                                            function.push(t)
+                                        }
                                     }
                                     self.advance("parse_from_token after function body looking for function end");
                                     self.in_function = false;
@@ -725,7 +727,9 @@ impl Display for Thing {
             Self::Return(stuff, _) => write!(
                 f,
                 "Return{}",
-                stuff.as_ref().map_or_else(String::new, |stuff| format!("({stuff})")),
+                stuff
+                    .as_ref()
+                    .map_or_else(String::new, |stuff| format!("({stuff})")),
             ),
         }
     }
@@ -744,7 +748,9 @@ impl fmt::Debug for Thing {
             Self::Return(stuff, line) => write!(
                 f,
                 "[Return{} at line: {}]",
-                stuff.as_ref().map_or_else(String::new, |stuff| format!("({stuff:?})")),
+                stuff
+                    .as_ref()
+                    .map_or_else(String::new, |stuff| format!("({stuff:?})")),
                 line
             ),
         }

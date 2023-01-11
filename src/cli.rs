@@ -80,10 +80,13 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     };
                     unsafe { TOGGLE_CASE = num as i32 };
                 } else if char_part_arg == 't' {
-                    let number: i32 = arg.split_once('=').map_or_else(|| error::error(0, "option t requires an =number"), |n| match n.1.parse() {
-                        Ok(value) => value,
-                        Err(error) => error::error(0, error),
-                    });
+                    let number: i32 = arg.split_once('=').map_or_else(
+                        || error::error(0, "option t requires an =number"),
+                        |n| match n.1.parse() {
+                            Ok(value) => value,
+                            Err(error) => error::error(0, error),
+                        },
+                    );
                     unsafe {
                         TOGGLE_CASE = number;
                     }

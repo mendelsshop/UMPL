@@ -255,14 +255,17 @@ impl Scope {
                         self.vars
                             .insert(new_name.to_string(), NewIdentifierType::List(new_var));
                     } else {
-                        self.parent_scope.as_mut().map_or_else(|| error(line, "variable not found"), |parent| {
-                            parent.set_var(
-                                name,
-                                &mut new_val.to_vec_literaltype(line),
-                                recurse,
-                                line,
-                            );
-                        });
+                        self.parent_scope.as_mut().map_or_else(
+                            || error(line, "variable not found"),
+                            |parent| {
+                                parent.set_var(
+                                    name,
+                                    &mut new_val.to_vec_literaltype(line),
+                                    recurse,
+                                    line,
+                                );
+                            },
+                        );
                     }
                 } else {
                     let mut new_var: Box<NewList> = match self.get_var(new_name, line) {
@@ -289,7 +292,10 @@ impl Scope {
                     if self.has_var(name, false) {
                         self.vars.insert(name.to_string(), new_val);
                     } else {
-                        self.parent_scope.as_mut().map_or_else(|| error(line, "variable not found"), |parent| parent.set_var(name, value, recurse, line));
+                        self.parent_scope.as_mut().map_or_else(
+                            || error(line, "variable not found"),
+                            |parent| parent.set_var(name, value, recurse, line),
+                        );
                     }
                 } else {
                     self.vars.insert(name.to_string(), new_val);
@@ -335,7 +341,10 @@ impl Scope {
                 NewIdentifierType::Vairable(_) => v.clone(),
                 NewIdentifierType::List(list) => NewIdentifierType::List(list.clone()),
             },
-            None => self.parent_scope.as_mut().map_or_else(|| error(line, format!("variable not found {name}")), |parent| parent.get_var(name, line)),
+            None => self.parent_scope.as_mut().map_or_else(
+                || error(line, format!("variable not found {name}")),
+                |parent| parent.get_var(name, line),
+            ),
         }
     }
     pub fn set_function(&mut self, name: char, args: Vec<Thing>, body: f64) {
@@ -344,7 +353,10 @@ impl Scope {
     pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64)> {
         match self.function.get(&name) {
             Some((args, body)) => Some((args.clone(), *body)),
-            None => self.parent_scope.as_ref().and_then(|parent| parent.get_function(name))
+            None => self
+                .parent_scope
+                .as_ref()
+                .and_then(|parent| parent.get_function(name)),
         }
     }
     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
@@ -362,11 +374,16 @@ impl Scope {
         if self.vars.contains_key(name) {
             true
         } else {
-            self.parent_scope.as_ref().map_or(false, |parent| parent.has_var(name, recurse))
+            self.parent_scope
+                .as_ref()
+                .map_or(false, |parent| parent.has_var(name, recurse))
         }
     }
     pub fn drop_scope(&mut self) {
-        let p_scope: Self = self.parent_scope.take().map_or_else(|| error(0, "no parent scope"), |scope| *scope);
+        let p_scope: Self = self
+            .parent_scope
+            .take()
+            .map_or_else(|| error(0, "no parent scope"), |scope| *scope);
         *self = p_scope;
     }
 
@@ -461,14 +478,26 @@ impl Eval {
                         }
                     }
                     IdentifierType::List(ref list) => {
-                        let car: LiteralOrFile = self.find_pointer_in_other_stuff(&list.car).map_or_else(|| LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                            &list.car,
-                            variable.line,
-                        )), |pointer| pointer);
-                        let cdr: LiteralOrFile = self.find_pointer_in_other_stuff(&list.cdr).map_or_else(|| LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                            &list.cdr,
-                            variable.line,
-                        )), |pointer| pointer);
+                        let car: LiteralOrFile =
+                            self.find_pointer_in_other_stuff(&list.car).map_or_else(
+                                || {
+                                    LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                        &list.car,
+                                        variable.line,
+                                    ))
+                                },
+                                |pointer| pointer,
+                            );
+                        let cdr: LiteralOrFile =
+                            self.find_pointer_in_other_stuff(&list.cdr).map_or_else(
+                                || {
+                                    LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                                        &list.cdr,
+                                        variable.line,
+                                    ))
+                                },
+                                |pointer| pointer,
+                            );
                         self.scope.set_var(
                             &variable.name,
                             &mut vec![car, cdr],
@@ -478,7 +507,13 @@ impl Eval {
                     }
                 },
                 Thing::Return(os, line) => {
-                    let ret: LiteralOrFile = os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| self.find_pointer_in_other_stuff(&os).map_or_else(|| LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)), |identifier| identifier));
+                    let ret: LiteralOrFile =
+                        os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
+                            self.find_pointer_in_other_stuff(&os).map_or_else(
+                                || LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
+                                |identifier| identifier,
+                            )
+                        });
                     return Some(Stopper::Return(ret));
                 }
                 Thing::Expression(expr) => {
