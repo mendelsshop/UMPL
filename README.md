@@ -13,6 +13,19 @@ At UMPL to fix the null problem, we have invented a new type called hempty, whic
 
 All bug reports head straight to /dev/hempty
 
+# Installation/Building
+
+## Building
+
+- Install rust and cargo
+- Clone the repository
+- run `cargo build --release`
+
+## Installation
+
+- Install rust and cargo
+- run `cargo install umpl`
+
 ## Case conventions
 
 Variables in UMPL must follow the kebab-case naming convention and have no uppercase letters.
@@ -162,5 +175,5 @@ one or more arguments
 
 # Contributing
 
-If you have any Ideas for the language put contribute them in [this file](https://github.com/mendelsshop/compiler/blob/main/Ideas.md)
+If you have any Ideas for the language put them in [this file](https://github.com/mendelsshop/compiler/blob/main/Ideas.md)
 along with an example or two according of how to use it in the language.
