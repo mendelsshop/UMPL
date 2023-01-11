@@ -23,8 +23,11 @@ All bug reports head straight to /dev/hempty
 
 ## Installation
 
-- Install rust and cargo
-- run `cargo install umpl`
+- cargo
+  - Install rust and cargo
+  - run `cargo install umpl`
+- releases
+  - Download the latest release for your platform from [here](https://github.com/mendelsshop/UMPL/releases)
 
 ## Case conventions
 
