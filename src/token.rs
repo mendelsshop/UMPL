@@ -290,8 +290,7 @@ impl TokenType {
                         error::error(
                             line,
                             format!(
-                                "{} and {} are not the same type which is required for {} operator",
-                                type_, type_1, self
+                                "{type_} and {type_1} are not the same type which is required for {self} operator"
                             ),
                         );
                     }
@@ -415,7 +414,7 @@ impl TokenType {
                 }
             }
         } else {
-            error::error(line, format!("Unknown keyword, {}", self));
+            error::error(line, format!("Unknown keyword, {self}"));
         }
     }
 }

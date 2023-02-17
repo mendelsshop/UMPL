@@ -197,7 +197,7 @@ impl Parser {
                                     {
                                         self.in_function = true; // for funtions inside functions see loop below for more info
                                         if let Some(t) = self.parse_from_token() {
-                                            function.push(t)
+                                            function.push(t);
                                         }
                                     }
                                     self.advance("parse_from_token after function body looking for function end");
@@ -282,8 +282,7 @@ impl Parser {
                                 error(
                                     self.tokens[1].line,
                                     format!(
-                                        "identifier expected, after \"list\" found TokenType::{:?}",
-                                        tokentype
+                                        "identifier expected, after \"list\" found TokenType::{tokentype:?}"
                                     )
                                     .as_str(),
                                 );
@@ -321,8 +320,7 @@ impl Parser {
                                 error(
                                     self.token.line,
                                     format!(
-                                        "identifier expected after \"create\", found TokenType::{:?}",
-                                        tokentype
+                                        "identifier expected after \"create\", found TokenType::{tokentype:?}"
                                     )
                                         .as_str(),
                                 );
@@ -384,8 +382,7 @@ impl Parser {
                                     error(
                                         self.token.line,
                                         format!(
-                                            "boolean expected, in if statement condition found TokenType::{:?}",
-                                            tokentype
+                                            "boolean expected, in if statement condition found TokenType::{tokentype:?}"
                                         )
                                             .as_str(),
                                     );
@@ -619,8 +616,7 @@ impl Parser {
                 error(
                     self.token.line,
                     format!(
-                        "identifier expected, after \"create\" found TokenType::{:?}",
-                        tokentype
+                        "identifier expected, after \"create\" found TokenType::{tokentype:?}"
                     )
                     .as_str(),
                 );

@@ -84,6 +84,7 @@ impl Default for Keyword {
     }
 }
 
+#[allow(clippy::cast_possible_wrap)]
 fn toggle_case(string: &str, num: i32) -> String {
     println!("{}", string.len() + num as usize % 10);
     let num: usize = match string.len() as i32 - num {

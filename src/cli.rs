@@ -56,7 +56,7 @@ pub fn get_string_args(args: &[String]) -> (usize, ParsedArgs) {
     };
     (index, to_return)
 }
-
+#[allow(clippy::cast_possible_wrap)]
 pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut ParsedArgs) {
     args[start_index..].iter().for_each(|arg| {
         // for each arg after the start index
