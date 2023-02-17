@@ -94,7 +94,7 @@ pub struct NewList {
 }
 
 impl NewList {
-    pub fn new(thing: &mut Vec<LiteralOrFile>) -> Self {
+    pub fn new(mut thing: Vec<LiteralOrFile>) -> Self {
         Self {
             car: LitOrList::Literal(thing.remove(0)),
             cdr: LitOrList::Literal(thing.remove(0)),
@@ -225,8 +225,8 @@ impl Scope {
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
         let new_val: NewIdentifierType = match value.len() {
             0 => error(line, "expected Identifier, got empty list"),
-            1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value.remove(0)))),
-            2 => NewIdentifierType::List(Box::new(NewList::new(value))),
+            1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value.clone().remove(0)))),
+            2 => NewIdentifierType::List(Box::new(NewList::new(value.clone()))),
             _ => error(
                 line,
                 "expected Identifier, got list with more than 2 elements",

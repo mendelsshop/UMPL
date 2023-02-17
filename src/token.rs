@@ -415,7 +415,7 @@ impl TokenType {
                 }
             }
         } else {
-            error::error(line, "Unknown keyword");
+            error::error(line, format!("Unknown keyword, {}", self));
         }
     }
 }
