@@ -8,3 +8,5 @@ For using loops look at [this file](https://github.com/mendelsshop/UMPL/blob/mai
 For creating and using functions look at [this file](https://github.com/mendelsshop/UMPL/blob/main/umpl_examples/function.umpl).
 
 For a full-blown example of the language look at [this file](https://github.com/mendelsshop/UMPL/blob/main/umpl_examples/example.umpl).
+
+For an example defining factorial (made by Bing's AI) look at [this file](https://github.com/mendelsshop/UMPL/blob/main/umpl_examples/factorial.umpl).
