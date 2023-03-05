@@ -171,7 +171,8 @@ impl Parser {
                                 info!("function identifier found");
                                 self.advance("parse_from_token after function name looking for function arguments");
                                 // check if the next token is a number and save it in a vairable num_args
-                                let num_of_args_and_extra: (f64, bool) = match self.token.token_type {
+                                let num_of_args_and_extra: (f64, bool) = match self.token.token_type
+                                {
                                     TokenType::Number { literal } => {
                                         if literal.trunc() == literal {
                                             self.advance("parse_from_token found number or args looking for function body");
@@ -189,7 +190,9 @@ impl Parser {
                                         }
                                     }
                                     TokenType::Star => {
-                                        self.advance("parse_from_token found star looking for function body");
+                                        self.advance(
+                                            "parse_from_token found star looking for function body",
+                                        );
                                         (0.0, true)
                                     }
                                     TokenType::CodeBlockBegin => (0.0, false),
@@ -200,7 +203,7 @@ impl Parser {
                                         );
                                     }
                                 };
-                                
+
                                 info!("int function declaration before code block");
                                 if self.token.token_type == TokenType::CodeBlockBegin {
                                     let mut function: Vec<Thing> = Vec::new();

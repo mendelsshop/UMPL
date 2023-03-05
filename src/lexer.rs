@@ -91,7 +91,10 @@ impl Lexer {
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
-                    let c = self.module.as_ref().map_or_else(|| c.to_string(), |module| format!("{module}${c}"));
+                    let c = self
+                        .module
+                        .as_ref()
+                        .map_or_else(|| c.to_string(), |module| format!("{module}${c}"));
                     self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
