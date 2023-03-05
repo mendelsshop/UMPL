@@ -14,4 +14,6 @@ jobs:
           toolchain: stable
           override: true
       - name: Test examples
-        run: ./umpl_examples/test.sh
+        run: |
+          chmod +x umpl_examples/test.sh
+          ./umpl_examples/test.sh
