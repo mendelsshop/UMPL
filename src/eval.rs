@@ -192,7 +192,7 @@ impl NewIdentifierType {
 #[derive(Debug)]
 pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
-    pub function: HashMap<char, (Vec<Thing>, f64)>,
+    pub function: HashMap<String, (Vec<Thing>, f64)>,
     pub parent_scope: Option<Box<Scope>>,
     pub files: HashMap<String, File>,
 }
@@ -347,10 +347,10 @@ impl Scope {
             ),
         }
     }
-    pub fn set_function(&mut self, name: char, args: Vec<Thing>, body: f64) {
+    pub fn set_function(&mut self, name: String, args: Vec<Thing>, body: f64) {
         self.function.insert(name, (args, body));
     }
-    pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64)> {
+    pub fn get_function(&self, name: String) -> Option<(Vec<Thing>, f64)> {
         match self.function.get(&name) {
             Some((args, body)) => Some((args.clone(), *body)),
             None => self
@@ -392,8 +392,8 @@ impl Scope {
         swap(&mut temp_scope, self);
         *self = Self::new_with_parent(Box::new(temp_scope));
     }
-    pub fn has_function(&self, name: char) -> bool {
-        self.function.contains_key(&name)
+    pub fn has_function(&self, name: &str) -> bool {
+        self.function.contains_key(name)
     }
 }
 
@@ -414,6 +414,7 @@ pub struct Eval {
     pub in_function: bool,
     pub in_loop: bool,
     pub files: HashMap<String, Rc<RefCell<File>>>,
+    pub module_name: String,
 }
 
 impl Eval {
@@ -423,6 +424,7 @@ impl Eval {
             in_function: false,
             in_loop: false,
             files: HashMap::new(),
+            module_name: String::new(),
         };
         body = self_.find_functions(body);
         self_.find_variables(body);
@@ -434,11 +436,12 @@ impl Eval {
     }
 
     pub fn find_functions(&mut self, body: Vec<Thing>) -> Vec<Thing> {
-        body.into_iter()
+        let body = body
+            .into_iter()
             .filter(|thing| -> bool {
                 if let Thing::Function(function) = thing {
                     self.scope.set_function(
-                        function.name,
+                        function.name.clone(),
                         function.body.clone(),
                         function.num_arguments,
                     );
@@ -447,8 +450,10 @@ impl Eval {
                     true
                 }
             })
-            .collect()
+            .collect();
+        self.find_imports(body)
     }
+
     #[allow(clippy::too_many_lines)]
     pub fn find_variables(&mut self, body: Vec<Thing>) -> Option<Stopper> {
         // create a vector to return instead of inplace modification
@@ -506,7 +511,7 @@ impl Eval {
                         );
                     }
                 },
-                Thing::Return(os, line) => {
+                Thing::Return(os, line, _) => {
                     let ret: LiteralOrFile =
                         os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
                             self.find_pointer_in_other_stuff(&os).map_or_else(
@@ -610,16 +615,52 @@ impl Eval {
                     }
                     self.in_loop = false;
                 }
-                Thing::Break(_) => {
+                Thing::Break(..) => {
                     return Some(Stopper::Break);
                 }
-                Thing::Continue(_) => {
+                Thing::Continue(..) => {
                     return Some(Stopper::Continue);
                 }
                 _ => {}
             }
         }
         None
+    }
+
+    pub fn find_imports(&mut self, body: Vec<Thing>) -> Vec<Thing> {
+        body.into_iter()
+            .filter(|thing| match thing {
+                Thing::Expression(e) => match &e.inside {
+                    Stuff::Call(call) => match call.keyword {
+                        TokenType::Module => {
+                            let mut new_stuff: Vec<LiteralType> = Vec::new();
+                            call.arguments.iter().for_each(|thing| {
+                                match self.find_pointer_in_stuff(thing) {
+                                    LiteralOrFile::Literal(literal) => {
+                                        new_stuff.push(literal);
+                                    }
+                                    LiteralOrFile::File(_) => {
+                                        error(
+                                            call.line,
+                                            format!(
+                                                "Cannot use file as argument for function {}",
+                                                call.keyword
+                                            )
+                                            .as_str(),
+                                        );
+                                    }
+                                }
+                            });
+                            TokenType::Module.r#do(&new_stuff, call.line, self);
+                            false
+                        }
+                        _ => true,
+                    },
+                    _ => true,
+                },
+                _ => true,
+            })
+            .collect()
     }
 
     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralOrFile> {
@@ -649,7 +690,7 @@ impl Eval {
             },
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
-                    if let Some(mut function) = self.scope.get_function(*name) {
+                    if let Some(mut function) = self.scope.get_function(name.to_string()) {
                         let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
                         for (index, thing) in call.arguments.iter().enumerate() {
                             arg_error(
@@ -1343,7 +1384,7 @@ impl Eval {
                             }
                         }
                     });
-                    LiteralOrFile::Literal(t.r#do(&new_stuff, call.line))
+                    LiteralOrFile::Literal(t.r#do(&new_stuff, call.line, self))
                 }
             },
             Stuff::Literal(lit) => LiteralOrFile::Literal(lit.literal.clone()),

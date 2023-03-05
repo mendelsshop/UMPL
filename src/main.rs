@@ -61,7 +61,7 @@ fn main() {
                 }
                 break 'l;
             } else if input.trim() == "run" {
-                run(current_repl.to_string()); // run the current repl
+                run(current_repl.to_string(), "<stdin>"); // run the current repl
                 input.clear();
             } else {
                 current_repl.push_str(&input); // add the input to the current line of the repl
@@ -80,12 +80,14 @@ fn main() {
                 error::error(0, "could not read file");
             }
         }; // read the file into the string
-        run(contents); // run the file
+        run(contents, &parsed_args.file); // run the file
     }
 }
 
-fn run(line: String) {
-    let lexer: Lexer = Lexer::new(line);
-    let mut parsed: Parser = Parser::new(lexer.scan_tokens());
-    Eval::new(parsed.parse());
+fn run(line: String, name: &str) {
+    let lexer: Lexer = Lexer::new(line, name.to_string());
+    let lexed = lexer.scan_tokens();
+    let mut parsed: Parser = Parser::new(lexed, name.to_string());
+    let parsed = parsed.parse();
+    Eval::new(parsed);
 }

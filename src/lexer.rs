@@ -11,17 +11,25 @@ pub struct Lexer {
     start: usize,
     current: usize,
     line: i32,
+    module: Option<String>,
+    name: String,
 }
 
 impl Lexer {
-    pub const fn new(source: String) -> Self {
+    pub const fn new(source: String, name: String) -> Self {
         Self {
             token_list: Vec::new(),
             source,
             start: 0,   // bytes
             current: 0, // actual number of bytes in source
             line: 1,
+            module: None,
+            name,
         }
+    }
+
+    pub fn set_module(&mut self, module: String) {
+        self.module = Some(module);
     }
 
     pub fn scan_tokens(mut self) -> Vec<Token> {
@@ -30,7 +38,7 @@ impl Lexer {
             self.scan_token();
         }
         self.token_list
-            .push(Token::new(TokenType::EOF, "", self.line));
+            .push(Token::new(TokenType::EOF, "", self.line, &self.name));
         self.token_list
     }
 
@@ -82,6 +90,7 @@ impl Lexer {
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
+                    let c = self.module.as_ref().map_or_else(|| c.to_string(), |module| format!("{module}.{c}"));
                     self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
@@ -261,13 +270,32 @@ impl Lexer {
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
-        self.add_token(
-            crate::KEYWORDS
-                .get(&self.get_text())
-                .unwrap_or(TokenType::Identifier {
+        if self.peek() == '.' {
+            self.advance();
+            // see if the next character is an emoji
+            while self.peek().is_lowercase() && self.peek_next() == '.' {
+                self.advance();
+                self.advance();
+            }
+            if emoji::is_emoji(self.peek()) {
+                self.advance();
+                self.add_unicode_token(TokenType::FunctionIdentifier {
                     name: self.get_text(),
-                }),
-        );
+                });
+            } else {
+                // error out
+                error::error(
+                    self.line,
+                    format!("Unexpected character after . {}", self.peek()),
+                );
+            }
+        } else {
+            self.add_token(crate::KEYWORDS.get(&self.get_text()).unwrap_or(
+                TokenType::Identifier {
+                    name: self.get_text(),
+                },
+            ));
+        }
     }
 
     fn function_agument(&mut self) {
@@ -304,14 +332,18 @@ impl Lexer {
                 final_text.push(i.1);
             }
         });
-        self.token_list
-            .push(Token::new(token_type, final_text.as_str(), self.line));
+        self.token_list.push(Token::new(
+            token_type,
+            final_text.as_str(),
+            self.line,
+            &self.name,
+        ));
     }
 
     fn add_unicode_token(&mut self, token_type: TokenType) {
         let text: String = format!("{}", self.source.chars().nth(self.start).expect("Error"));
         self.token_list
-            .push(Token::new(token_type, &text, self.line));
+            .push(Token::new(token_type, &text, self.line, &self.name));
     }
 
     fn peek(&self) -> char {

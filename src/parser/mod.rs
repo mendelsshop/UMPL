@@ -20,10 +20,11 @@ pub struct Parser {
     in_function: bool,
     in_loop: bool,
     variables: Vec<String>,
+    filename: String,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>, name: String) -> Self {
         Self {
             paren_count: 0,
             current_position: 0,
@@ -32,12 +33,14 @@ impl Parser {
                 token_type: TokenType::EOF,
                 line: 0,
                 lexeme: String::new(),
+                filename: name.clone(),
             },
             done: false,
             weird_bracket_count: 0,
             in_function: false,
             in_loop: false,
             variables: Vec::new(),
+            filename: name,
         }
     }
 
@@ -208,6 +211,7 @@ impl Parser {
                                         num_args,
                                         &function,
                                         start_line,
+                                        self.filename.clone(),
                                         self.token.line,
                                     )))
                                 } else {
@@ -246,6 +250,7 @@ impl Parser {
                                                 name,
                                                 &[thing, thing1],
                                                 self.token.line,
+                                                self.filename.clone(),
                                             )))
                                         } else {
                                             error(
@@ -304,6 +309,7 @@ impl Parser {
                                         name,
                                         &[thing],
                                         self.token.line,
+                                        self.filename.clone(),
                                     )))
                                 } else {
                                     error(
@@ -349,6 +355,7 @@ impl Parser {
                             Some(Thing::LoopStatement(LoopStatement::new(
                                 &loop_body,
                                 start_line,
+                                self.filename.clone(),
                                 self.token.line,
                             )))
                         } else {
@@ -364,9 +371,13 @@ impl Parser {
                             let mut if_body: Vec<Thing>;
                             let mut else_body: Vec<Thing>;
                             let thing: OtherStuff = match self.token.clone().token_type {
-                                TokenType::Boolean { value } => OtherStuff::Literal(
-                                    Literal::new_boolean(value, self.token.line),
-                                ),
+                                TokenType::Boolean { value } => {
+                                    OtherStuff::Literal(Literal::new_boolean(
+                                        value,
+                                        self.token.line,
+                                        self.filename.clone(),
+                                    ))
+                                }
                                 TokenType::LeftParen => match self.after_left_paren() {
                                     Callorexpression::Expression(thing) => {
                                         OtherStuff::Expression(thing)
@@ -427,6 +438,7 @@ impl Parser {
                                                 if_body,
                                                 else_body,
                                                 start_line,
+                                                self.filename.clone(),
                                                 self.token.line,
                                             )))
                                         } else {
@@ -461,19 +473,27 @@ impl Parser {
                     TokenType::Return { .. } => {
                         if self.tokens[self.current_position].token_type == TokenType::Colon {
                             self.advance("parse_from_token return expecting expression");
-                            return Some(Thing::Return(None, self.token.line));
+                            return Some(Thing::Return(
+                                None,
+                                self.token.line,
+                                self.filename.clone(),
+                            ));
                         }
                         self.advance("parse_from_token return expecting expression");
                         let thing = self.parse_to_other_stuff();
-                        Some(Thing::Return(Some(thing), self.token.line))
+                        Some(Thing::Return(
+                            Some(thing),
+                            self.token.line,
+                            self.filename.clone(),
+                        ))
                     }
                     TokenType::Break => {
                         info!("break statement");
-                        Some(Thing::Break(self.token.line))
+                        Some(Thing::Break(self.token.line, self.filename.clone()))
                     }
                     TokenType::Continue => {
                         info!("continue statement");
-                        Some(Thing::Continue(self.token.line))
+                        Some(Thing::Continue(self.token.line, self.filename.clone()))
                     }
                     _ => {
                         error(
@@ -533,6 +553,7 @@ impl Parser {
                 inside: stuff,
                 print: prints,
                 line: self.token.line,
+                filename: self.filename.clone(),
                 new_line,
             })
         } else {
@@ -562,6 +583,7 @@ impl Parser {
                 arguments: args,
                 line: start_line,
                 end_line: line,
+                filename: self.filename.clone(),
             })
         }
     }
@@ -574,7 +596,7 @@ impl Parser {
                     "function arguments are immutable",
                 );
             } else {
-                IdentifierPointer::new(name, self.token.line)
+                IdentifierPointer::new(name, self.token.line, self.filename.clone())
             }
         } else if self.tokens[self.current_position].token_type == TokenType::Dot {
             self.advance("Var");
@@ -584,26 +606,34 @@ impl Parser {
                 info!("found dot {}", self.token.token_type);
                 let name: String =
                     name + "." + &format!("{:?}", self.token.token_type).to_lowercase();
-                IdentifierPointer::new(name, self.token.line)
+                IdentifierPointer::new(name, self.token.line, self.filename.clone())
             } else {
                 error(self.token.line, "car or Cdr expected after dot");
             }
         } else {
-            IdentifierPointer::new(name, self.token.line)
+            IdentifierPointer::new(name, self.token.line, self.filename.clone())
         }
     }
     fn get_value(&mut self) -> OtherStuff {
         match self.token.token_type.clone() {
-            TokenType::Number { literal } => {
-                OtherStuff::Literal(Literal::new_number(literal, self.token.line))
+            TokenType::Number { literal } => OtherStuff::Literal(Literal::new_number(
+                literal,
+                self.token.line,
+                self.filename.clone(),
+            )),
+            TokenType::String { literal } => OtherStuff::Literal(Literal::new_string(
+                literal,
+                self.token.line,
+                self.filename.clone(),
+            )),
+            TokenType::Hempty => {
+                OtherStuff::Literal(Literal::new_hempty(self.token.line, self.filename.clone()))
             }
-            TokenType::String { literal } => {
-                OtherStuff::Literal(Literal::new_string(literal, self.token.line))
-            }
-            TokenType::Hempty => OtherStuff::Literal(Literal::new_hempty(self.token.line)),
-            TokenType::Boolean { value } => {
-                OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
-            }
+            TokenType::Boolean { value } => OtherStuff::Literal(Literal::new_boolean(
+                value,
+                self.token.line,
+                self.filename.clone(),
+            )),
             TokenType::LeftParen => match self.after_left_paren() {
                 Callorexpression::Expression(expression) => OtherStuff::Expression(expression),
                 _ => error(
@@ -615,10 +645,8 @@ impl Parser {
             tokentype => {
                 error(
                     self.token.line,
-                    format!(
-                        "identifier expected, after \"create\" found TokenType::{tokentype:?}"
-                    )
-                    .as_str(),
+                    format!("identifier expected, after \"create\" found TokenType::{tokentype:?}")
+                        .as_str(),
                 );
             }
         }
@@ -638,16 +666,24 @@ impl Parser {
                     ),
                 }
             }
-            TokenType::Number { literal } => {
-                Stuff::Literal(Literal::new_number(literal, self.token.line))
+            TokenType::Number { literal } => Stuff::Literal(Literal::new_number(
+                literal,
+                self.token.line,
+                self.filename.clone(),
+            )),
+            TokenType::String { literal } => Stuff::Literal(Literal::new_string(
+                literal,
+                self.token.line,
+                self.filename.clone(),
+            )),
+            TokenType::Hempty => {
+                Stuff::Literal(Literal::new_hempty(self.token.line, self.filename.clone()))
             }
-            TokenType::String { literal } => {
-                Stuff::Literal(Literal::new_string(literal, self.token.line))
-            }
-            TokenType::Hempty => Stuff::Literal(Literal::new_hempty(self.token.line)),
-            TokenType::Boolean { value } => {
-                Stuff::Literal(Literal::new_boolean(value, self.token.line))
-            }
+            TokenType::Boolean { value } => Stuff::Literal(Literal::new_boolean(
+                value,
+                self.token.line,
+                self.filename.clone(),
+            )),
             TokenType::Identifier { name } => Stuff::Identifier(self.var(name)),
             _ => {
                 error(
@@ -670,16 +706,24 @@ impl Parser {
                     ),
                 }
             }
-            TokenType::Number { literal } => {
-                OtherStuff::Literal(Literal::new_number(literal, self.token.line))
+            TokenType::Number { literal } => OtherStuff::Literal(Literal::new_number(
+                literal,
+                self.token.line,
+                self.filename.clone(),
+            )),
+            TokenType::String { literal } => OtherStuff::Literal(Literal::new_string(
+                literal,
+                self.token.line,
+                self.filename.clone(),
+            )),
+            TokenType::Hempty => {
+                OtherStuff::Literal(Literal::new_hempty(self.token.line, self.filename.clone()))
             }
-            TokenType::String { literal } => {
-                OtherStuff::Literal(Literal::new_string(literal, self.token.line))
-            }
-            TokenType::Hempty => OtherStuff::Literal(Literal::new_hempty(self.token.line)),
-            TokenType::Boolean { value } => {
-                OtherStuff::Literal(Literal::new_boolean(value, self.token.line))
-            }
+            TokenType::Boolean { value } => OtherStuff::Literal(Literal::new_boolean(
+                value,
+                self.token.line,
+                self.filename.clone(),
+            )),
             TokenType::Identifier { name } => OtherStuff::Identifier(self.var(name)),
             _ => {
                 error(
@@ -697,7 +741,7 @@ pub enum Callorexpression {
     Expression(Expression),
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Thing {
     // we have vairants for each type of token that has a value ie number or the name of an identifier
     Identifier(Identifier),
@@ -705,9 +749,9 @@ pub enum Thing {
     Function(Function),
     IfStatement(IfStatement),
     LoopStatement(LoopStatement),
-    Break(i32),
-    Continue(i32),
-    Return(Option<OtherStuff>, i32),
+    Break(i32, String),
+    Continue(i32, String),
+    Return(Option<OtherStuff>, i32, String),
 }
 
 impl Display for Thing {
@@ -718,36 +762,14 @@ impl Display for Thing {
             Self::Function(function) => write!(f, "{function}"),
             Self::IfStatement(if_statement) => write!(f, "{if_statement}"),
             Self::LoopStatement(loop_statement) => write!(f, "{loop_statement}"),
-            Self::Break(_) => write!(f, "Break"),
-            Self::Continue(_) => write!(f, "Continue"),
-            Self::Return(stuff, _) => write!(
+            Self::Break(..) => write!(f, "Break"),
+            Self::Continue(..) => write!(f, "Continue"),
+            Self::Return(stuff, _, _) => write!(
                 f,
                 "Return{}",
                 stuff
                     .as_ref()
                     .map_or_else(String::new, |stuff| format!("({stuff})")),
-            ),
-        }
-    }
-}
-
-impl fmt::Debug for Thing {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Expression(expression) => write!(f, "{expression:?}"),
-            Self::Identifier(t) => write!(f, "[Identifier({t}) at line: {}]", t.line),
-            Self::Function(function) => write!(f, "{function:?}"),
-            Self::IfStatement(if_statement) => write!(f, "{if_statement:?}"),
-            Self::LoopStatement(loop_statement) => write!(f, "{loop_statement:?}"),
-            Self::Break(line) => write!(f, "[Break at line: {line}]"),
-            Self::Continue(line) => write!(f, "[Continue at line: {line}]"),
-            Self::Return(stuff, line) => write!(
-                f,
-                "[Return{} at line: {}]",
-                stuff
-                    .as_ref()
-                    .map_or_else(String::new, |stuff| format!("({stuff:?})")),
-                line
             ),
         }
     }

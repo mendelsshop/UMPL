@@ -1,12 +1,18 @@
 use crate::{
     error::{self, arg_error},
-    parser::rules::{LiteralType, OtherStuff},
+    eval::Eval,
+    lexer::Lexer,
+    parser::{
+        rules::{LiteralType, OtherStuff},
+        Parser,
+    },
 };
 use hexponent::FloatLiteral;
 use std::{
     env::consts::OS,
     fmt::{self, Debug, Display},
-    io::{self, Write},
+    fs::File,
+    io::{self, Read, Write},
     process::{exit, Command},
 };
 #[derive(PartialEq, Debug, Clone)]
@@ -38,7 +44,7 @@ pub enum TokenType {
     Or,
     Not,
     Identifier { name: String },
-    FunctionIdentifier { name: char },
+    FunctionIdentifier { name: String },
     String { literal: String },
     Number { literal: f64 },
     Create,
@@ -84,11 +90,12 @@ pub enum TokenType {
     CreateFile,
     DeleteFile,
     Type,
+    Module,
 }
 
 impl TokenType {
     #[allow(clippy::too_many_lines)]
-    pub fn r#do(&self, args: &[LiteralType], line: i32) -> LiteralType {
+    pub fn r#do(&self, args: &[LiteralType], line: i32, scope: &mut Eval) -> LiteralType {
         if crate::KEYWORDS.is_keyword(self) {
             match self {
                 Self::Not => {
@@ -406,6 +413,45 @@ impl TokenType {
                         },
                     )
                 }
+                Self::Module => {
+                    if args.len() != 2 {
+                        error::error(line, format!("Expected 2 arguments for {self:?} operator"));
+                    }
+                    let module_name = match &args[0] {
+                        LiteralType::String(string) => string,
+                        _ => error::error(line, format!("Expected string for {self:?} operator")),
+                    };
+                    match &args[1] {
+                        LiteralType::String(filename) => {
+                            if scope.module_name.is_empty() {
+                                scope.module_name = module_name.clone();
+                            } else {
+                                scope.module_name = scope.module_name.clone() + "." + module_name;
+                            }
+                            let module_name = scope.module_name.clone();
+                            let file = File::open(filename);
+                            if let Ok(mut file) = file {
+                                let mut buf = String::new();
+                                if let Err(err) = file.read_to_string(&mut buf) {
+                                    error::error(line, format!("Failed to read file: {err}"));
+                                }
+                                let mut lexer = Lexer::new(buf, filename.clone());
+                                lexer.set_module(module_name);
+                                let lexed = lexer.scan_tokens();
+                                let mut parsed = Parser::new(lexed, filename.clone());
+                                let body = parsed.parse();
+                                scope.find_functions(body);
+                                scope.module_name = String::new();
+                            } else {
+                                error::error(line, format!("Could not open file {filename:?}"));
+                            };
+                        }
+                        _ => error::error(line, format!("Expected string for {self:?} operator")),
+                    };
+
+                    // see if there is the second argument is a string
+                    LiteralType::String(module_name.to_string())
+                }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {
                     error::error(line, format!("Keyword not found {self}"));
                 }
@@ -429,15 +475,17 @@ impl Display for TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
+    pub filename: String,
     pub line: i32,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: &str, line: i32) -> Self {
+    pub fn new(token_type: TokenType, lexeme: &str, line: i32, filename: &str) -> Self {
         Self {
             token_type,
             lexeme: lexeme.to_string(),
             line,
+            filename: filename.to_string(),
         }
     }
 }

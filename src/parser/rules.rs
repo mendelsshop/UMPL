@@ -8,15 +8,23 @@ pub struct Expression {
     pub print: bool,
     pub line: i32,
     pub new_line: bool,
+    pub filename: String,
 }
 
 impl Expression {
-    pub const fn new(inside: Stuff, print: bool, line: i32, new_line: bool) -> Self {
+    pub const fn new(
+        inside: Stuff,
+        print: bool,
+        line: i32,
+        filename: String,
+        new_line: bool,
+    ) -> Self {
         Self {
             inside,
             print,
             line,
             new_line,
+            filename,
         }
     }
 }
@@ -31,11 +39,16 @@ impl Display for Expression {
 pub struct IdentifierPointer {
     pub name: String,
     pub line: i32,
+    pub filename: String,
 }
 
 impl IdentifierPointer {
-    pub const fn new(name: String, line: i32) -> Self {
-        Self { name, line }
+    pub const fn new(name: String, line: i32, filename: String) -> Self {
+        Self {
+            name,
+            line,
+            filename,
+        }
     }
 }
 
@@ -66,34 +79,39 @@ impl Display for Stuff {
 pub struct Literal {
     pub literal: LiteralType,
     pub line: i32,
+    pub filename: String,
 }
 
 impl Literal {
-    pub const fn new_string(string: String, line: i32) -> Self {
+    pub const fn new_string(string: String, line: i32, filename: String) -> Self {
         Self {
             literal: LiteralType::String(string),
             line,
+            filename,
         }
     }
 
-    pub const fn new_number(number: f64, line: i32) -> Self {
+    pub const fn new_number(number: f64, line: i32, filename: String) -> Self {
         Self {
             literal: LiteralType::Number(number),
             line,
+            filename,
         }
     }
 
-    pub const fn new_boolean(boolean: bool, line: i32) -> Self {
+    pub const fn new_boolean(boolean: bool, line: i32, filename: String) -> Self {
         Self {
             literal: LiteralType::Boolean(boolean),
             line,
+            filename,
         }
     }
 
-    pub const fn new_hempty(line: i32) -> Self {
+    pub const fn new_hempty(line: i32, filename: String) -> Self {
         Self {
             literal: LiteralType::Hempty,
             line,
+            filename,
         }
     }
 }
@@ -194,14 +212,16 @@ pub struct Identifier {
     pub name: String,
     pub value: IdentifierType,
     pub line: i32,
+    pub filename: String,
 }
 
 impl Identifier {
-    pub fn new(name: String, value: &[OtherStuff], line: i32) -> Self {
+    pub fn new(name: String, value: &[OtherStuff], line: i32, filename: String) -> Self {
         Self {
             name,
             value: IdentifierType::new(value, line),
             line,
+            filename,
         }
     }
 }
@@ -226,15 +246,23 @@ pub struct Call {
     pub arguments: Vec<Stuff>,
     pub line: i32,
     pub end_line: i32,
+    pub filename: String,
 }
 
 impl Call {
-    pub fn new(arguments: &[Stuff], line: i32, end_line: i32, keyword: TokenType) -> Self {
+    pub fn new(
+        arguments: &[Stuff],
+        line: i32,
+        filename: String,
+        end_line: i32,
+        keyword: TokenType,
+    ) -> Self {
         Self {
             arguments: arguments.to_vec(),
             line,
             keyword,
             end_line,
+            filename,
         }
     }
 }
@@ -262,16 +290,6 @@ pub enum OtherStuff {
     Expression(Expression),
 }
 
-impl OtherStuff {
-    pub fn from_stuff(stuff: &Stuff, line: i32) -> Self {
-        match stuff {
-            Stuff::Literal(literal) => Self::Literal(literal.clone()),
-            Stuff::Identifier(identifier) => Self::Identifier(identifier.clone()),
-            _ => error::error(line, "expected literal or identifier"),
-        }
-    }
-}
-
 impl Display for OtherStuff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -284,21 +302,30 @@ impl Display for OtherStuff {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Function {
-    pub name: char,
+    pub name: String,
     pub num_arguments: f64,
     pub body: Vec<Thing>,
     pub line: i32,
     pub end_line: i32,
+    pub filename: String,
 }
 
 impl Function {
-    pub fn new(name: char, num_arguments: f64, body: &[Thing], line: i32, end_line: i32) -> Self {
+    pub fn new(
+        name: String,
+        num_arguments: f64,
+        body: &[Thing],
+        line: i32,
+        filename: String,
+        end_line: i32,
+    ) -> Self {
         Self {
             name,
             num_arguments,
             body: body.to_vec(),
             line,
             end_line,
+            filename,
         }
     }
 }
@@ -364,6 +391,7 @@ pub struct IfStatement {
     pub body_false: Vec<Thing>,
     pub line: i32,
     pub end_line: i32,
+    pub filename: String,
 }
 
 impl IfStatement {
@@ -372,6 +400,7 @@ impl IfStatement {
         body_true: Vec<Thing>,
         body_false: Vec<Thing>,
         line: i32,
+        filename: String,
         end_line: i32,
     ) -> Self {
         Self {
@@ -380,6 +409,7 @@ impl IfStatement {
             body_false,
             line,
             end_line,
+            filename,
         }
     }
 }
@@ -409,14 +439,16 @@ pub struct LoopStatement {
     pub body: Vec<Thing>,
     pub line: i32,
     pub end_line: i32,
+    pub filename: String,
 }
 
 impl LoopStatement {
-    pub fn new(body: &[Thing], line: i32, end_line: i32) -> Self {
+    pub fn new(body: &[Thing], line: i32, filename: String, end_line: i32) -> Self {
         Self {
             body: body.to_vec(),
             line,
             end_line,
+            filename,
         }
     }
 }
