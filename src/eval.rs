@@ -192,7 +192,7 @@ impl NewIdentifierType {
 #[derive(Debug)]
 pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
-    pub function: HashMap<String, (Vec<Thing>, f64)>,
+    pub function: HashMap<String, (Vec<Thing>, f64, bool)>,
     pub parent_scope: Option<Box<Scope>>,
     pub files: HashMap<String, File>,
 }
@@ -347,12 +347,12 @@ impl Scope {
             ),
         }
     }
-    pub fn set_function(&mut self, name: String, args: Vec<Thing>, body: f64) {
-        self.function.insert(name, (args, body));
+    pub fn set_function(&mut self, name: String, body: Vec<Thing>, args: f64, extra: bool) {
+        self.function.insert(name, (body, args, extra));
     }
-    pub fn get_function(&self, name: String) -> Option<(Vec<Thing>, f64)> {
+    pub fn get_function(&self, name: String) -> Option<(Vec<Thing>, f64, bool)> {
         match self.function.get(&name) {
-            Some((args, body)) => Some((args.clone(), *body)),
+            Some((body, args, extra)) => Some((body.clone(), *args, *extra)),
             None => self
                 .parent_scope
                 .as_ref()
@@ -444,6 +444,7 @@ impl Eval {
                         function.name.clone(),
                         function.body.clone(),
                         function.num_arguments,
+                        function.extra_arguments,
                     );
                     false
                 } else {
@@ -691,27 +692,22 @@ impl Eval {
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
                     if let Some(mut function) = self.scope.get_function(name.to_string()) {
-                        let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
-                        for (index, thing) in call.arguments.iter().enumerate() {
-                            arg_error(
-                                function.1 as u32,
-                                index as u32,
-                                &call.keyword,
-                                true,
-                                call.line,
-                            );
-                            new_stuff.push(self.find_pointer_in_stuff(thing));
-                        }
+                        let new_stuff: Vec<LiteralOrFile> = call
+                            .arguments
+                            .iter()
+                            .map(|thing| self.find_pointer_in_stuff(thing))
+                            .collect();
                         arg_error(
                             function.1 as u32,
                             new_stuff.len() as u32,
                             &call.keyword,
-                            false,
+                            function.2,
                             call.line,
                         );
                         self.scope.from_parent();
                         function.0 = self.find_functions(function.0);
                         self.in_function = true;
+                        // TODO: once we have more than ammount of arguments specified in function we should label the rest as under one variable $n which is a list
                         new_stuff.into_iter().enumerate().for_each(|(i, l)| {
                             self.scope.set_var(
                                 format!("${}", i + 1).as_str(),

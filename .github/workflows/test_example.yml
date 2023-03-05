@@ -1,0 +1,17 @@
+on: 
+  push:
+  workflow_dispatch:
+
+name: Test examples
+
+jobs:
+  test_examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Test examples
+        run: ./umpl_examples/test.sh

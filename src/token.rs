@@ -24,6 +24,7 @@ pub enum TokenType {
     LessThanSymbol,
     Dot,
     Bang,
+    Star,
     RightBracket,
     LeftBracket,
     RightBrace,
@@ -423,10 +424,11 @@ impl TokenType {
                     };
                     match &args[1] {
                         LiteralType::String(filename) => {
+                            let prev_module_name = scope.module_name.clone();
                             if scope.module_name.is_empty() {
                                 scope.module_name = module_name.clone();
                             } else {
-                                scope.module_name = scope.module_name.clone() + "." + module_name;
+                                scope.module_name = scope.module_name.clone() + "$" + module_name;
                             }
                             let module_name = scope.module_name.clone();
                             let file = File::open(filename);
@@ -441,7 +443,7 @@ impl TokenType {
                                 let mut parsed = Parser::new(lexed, filename.clone());
                                 let body = parsed.parse();
                                 scope.find_functions(body);
-                                scope.module_name = String::new();
+                                scope.module_name = prev_module_name;
                             } else {
                                 error::error(line, format!("Could not open file {filename:?}"));
                             };

@@ -304,6 +304,7 @@ impl Display for OtherStuff {
 pub struct Function {
     pub name: String,
     pub num_arguments: f64,
+    pub extra_arguments: bool,
     pub body: Vec<Thing>,
     pub line: i32,
     pub end_line: i32,
@@ -318,6 +319,7 @@ impl Function {
         line: i32,
         filename: String,
         end_line: i32,
+        extra_arguments: bool,
     ) -> Self {
         Self {
             name,
@@ -326,6 +328,7 @@ impl Function {
             line,
             end_line,
             filename,
+            extra_arguments,
         }
     }
 }
