@@ -32,7 +32,7 @@ static START_TOKEN: Token<'static> = Token {
     lexeme: String::new(),
 };
 
-impl <'a> Parser<'a> {
+impl<'a> Parser<'a> {
     pub fn new(tokens: Vec<Token<'a>>, name: String) -> Self {
         Self {
             paren_count: 0,

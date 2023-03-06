@@ -2,10 +2,13 @@ use crate::{error, token::TokenType};
 use std::fmt::{self, Debug, Display, Write};
 
 use super::Thing;
-pub mod new_rules {
+pub mod new_parser {
     use std::fmt::{self, Display};
 
-    use crate::token::{Info, Token, TokenType};
+    use crate::{
+        error::erToken::new(TokenType::Eof, Info::new(0, 0, 0, 0)),ror,
+        token::{Info, Token, TokenType},
+    };
 
     #[derive(Debug, Clone, PartialEq)]
     pub struct Expr<'a> {
@@ -404,14 +407,120 @@ pub mod new_rules {
 
     pub struct Parser<'a> {
         tokens: Vec<Token<'a>>,
-        current: usize,
+        current_position: usize,
+        done: bool,
+        token: Token<'a>,
+        in_function: bool,
+        in_loop: bool,
+        paren_count: usize,
+        weird_bracket_count: usize,
+        file_path: &'a str,
     }
+    static START_TOKEN: Token<'static> = Token {
+        token_type: TokenType::EOF,
+        info: Info::new("", 0, 0),
+        lexeme: String::new(),
+    };
 
     type Module<'a> = Vec<Expr<'a>>;
+    impl<'a> Parser<'a> {
+        pub fn new(tokens: Vec<Token<'a>>, file_path: &'a str) -> Self {
+            Self {
+                tokens,
+                current_position: 0,
+                done: false,
+                token: START_TOKEN.clone(),
+                in_function: false,
+                in_loop: false,
+                paren_count: 0,
+                weird_bracket_count: 0,
+                file_path,
+            }
+        }
 
-    pub fn parse<'a>(tokens: Vec<Token<'_>>) -> Module<'a> {
-        let mut module = Vec::new();
-        module
+        pub fn parse(&mut self) -> Module<'a> {
+            let mut module = Vec::new();
+            while !self.done {
+                if let Some(token) = self.parse_from_token() {
+                    module.push(token);
+                }
+            }
+            module
+        }
+
+        fn parse_from_token(&mut self) -> Option<Expr<'a>> {
+            None
+        }
+
+        fn advance(&mut self) {
+            match self.tokens[self.current_position].token_type {
+                TokenType::Return { .. } => {
+                    if self.in_function {
+                        self.token = self.tokens[self.current_position].clone();
+                    } else {
+                        error(
+                            self.tokens[self.current_position].info.line,
+                            "Return statement outside of function",
+                        );
+                    }
+                }
+                TokenType::Break | TokenType::Continue => {
+                    if self.in_loop {
+                        self.token = self.tokens[self.current_position].clone();
+                    } else {
+                        error(
+                            self.tokens[self.current_position].info.line,
+                            "Break or continue statement outside of loop",
+                        );
+                    }
+                }
+                TokenType::EOF => {
+                    self.done = true;
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                TokenType::LeftParen => {
+                    self.paren_count += 1;
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                TokenType::RightParen => {
+                    if self.paren_count == 0 {
+                        error(
+                            self.tokens[self.current_position].info.line,
+                            "unmatched right parenthesis",
+                        );
+                    }
+                    self.paren_count -= 1;
+                    if !(vec![TokenType::GreaterThanSymbol, TokenType::LessThanSymbol]
+                            .contains(&self.tokens[self.current_position + 1].token_type))
+                    {
+                        error(
+                            self.tokens[self.current_position].info.line,
+                            format!(
+                                "greater than symbol (>) or less than symbol (<) expected found {}",
+                                self.tokens[self.current_position + 1].token_type
+                            )
+                            .as_str(),
+                        )
+                    }
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                TokenType::CodeBlockBegin => {
+                    self.weird_bracket_count += 1;
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                TokenType::CodeBlockEnd => {
+                    self.weird_bracket_count -= 1;
+                    self.token = self.tokens[self.current_position].clone();
+                }
+                TokenType::GreaterThanSymbol | TokenType::LessThanSymbol => {
+                        self.token = self.tokens[self.current_position].clone();
+                }
+                _ => {
+                    self.token = self.tokens[self.current_position].clone();
+                }
+            };
+            self.current_position += 1;
+        }
     }
 }
 

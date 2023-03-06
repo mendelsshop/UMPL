@@ -16,7 +16,7 @@ pub struct Lexer<'a> {
     text_buffer: String,
 }
 
-impl <'a,> Lexer<'a,> {
+impl<'a> Lexer<'a> {
     pub fn new(source: &'a str, name: &'a str) -> Self {
         Self {
             token_list: Vec::new(),
@@ -53,18 +53,18 @@ impl <'a,> Lexer<'a,> {
         }
         let info = self.get_info();
 
-        self.token_list
-            .push(Token::new(TokenType::EOF, "", info));
+        self.token_list.push(Token::new(TokenType::EOF, "", info));
         self.token_list
     }
-
 
     fn is_at_end(&self) -> bool {
         (self.current) >= (self.source.chars().count())
     }
 
-    fn scan_token<'b>(&mut self) -> Option<Token<'b>> 
-    where 'a: 'b {
+    fn scan_token<'b>(&mut self) -> Option<Token<'b>>
+    where
+        'a: 'b,
+    {
         let c: char = self.advance();
         match c {
             '(' => Some(self.add_token(TokenType::LeftParen)),
@@ -85,7 +85,8 @@ impl <'a,> Lexer<'a,> {
             '.' => Some(self.add_token(TokenType::Dot)),
             '<' => Some(self.add_token(TokenType::LessThanSymbol)),
             '>' => Some(self.add_token(TokenType::GreaterThanSymbol)),
-            '\n' => {self.line += 1;
+            '\n' => {
+                self.line += 1;
                 None
             }
             '`' => Some(self.string()),
@@ -137,7 +138,6 @@ impl <'a,> Lexer<'a,> {
             Some(self.add_token(TokenType::Boolean { value: true }))
         } else if self.get_text() == "false" {
             Some(self.add_token(TokenType::Boolean { value: false }))
-            
         } else {
             None
         }
@@ -152,7 +152,6 @@ impl <'a,> Lexer<'a,> {
         } else {
             None
         }
-    
     }
 
     #[allow(clippy::too_many_lines)]
@@ -321,11 +320,13 @@ impl <'a,> Lexer<'a,> {
                 );
             }
         } else {
-            self.add_token(crate::KEYWORDS.get(&self.get_text()).unwrap_or(
-                TokenType::Identifier {
-                    name: self.get_text(),
-                },
-            ))
+            self.add_token(
+                crate::KEYWORDS
+                    .get(&self.get_text())
+                    .unwrap_or(TokenType::Identifier {
+                        name: self.get_text(),
+                    }),
+            )
         }
     }
 
@@ -363,7 +364,7 @@ impl <'a,> Lexer<'a,> {
                 final_text.push(i.1);
             }
         });
-    Token::new(token_type, final_text.as_str(), self.get_info())
+        Token::new(token_type, final_text.as_str(), self.get_info())
     }
 
     fn add_unicode_token(&mut self, token_type: TokenType) -> Token<'a> {
@@ -398,11 +399,10 @@ impl <'a,> Lexer<'a,> {
         self.text_buffer = text_list.iter().collect();
     }
 
-    fn remove_text(&mut self, pos: usize) -> char{
+    fn remove_text(&mut self, pos: usize) -> char {
         let mut text_list: Vec<char> = self.text_buffer.chars().collect();
         let t = text_list.remove(pos);
         self.text_buffer = text_list.iter().collect();
         t
     }
-
 }
