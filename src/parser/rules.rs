@@ -5,30 +5,7 @@ use super::Thing;
 pub mod new_rules {
     use std::fmt::{self, Display};
 
-    use crate::token::TokenType;
-
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub struct Info<'a> {
-        pub file_name: &'a str,
-        pub line: u32,
-        pub end_line: u32,
-    }
-
-    impl<'a> Info<'a> {
-        pub fn new(file_name: &'a str, line: u32, end_line: u32) -> Self {
-            Self {
-                file_name,
-                line,
-                end_line,
-            }
-        }
-    }
-
-    impl Display for Info<'_> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}:{}..{}", self.file_name, self.line, self.end_line)
-        }
-    }
+    use crate::token::{Info, Token, TokenType};
 
     #[derive(Debug, Clone, PartialEq)]
     pub struct Expr<'a> {
@@ -61,7 +38,7 @@ pub mod new_rules {
             }
         }
 
-        pub fn new_fn(info: Info<'a>, value: FnDef<'a>)-> Self {
+        pub fn new_fn(info: Info<'a>, value: FnDef<'a>) -> Self {
             Self {
                 info,
                 expr: ExprType::Fn(Box::new(value)),
@@ -197,10 +174,13 @@ pub mod new_rules {
 
     impl<'a> Display for List<'a> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "list: [car: {} cdr: {} [{}]]", self.car, self.cdr, self.info)
+            write!(
+                f,
+                "list: [car: {} cdr: {} [{}]]",
+                self.car, self.cdr, self.info
+            )
         }
     }
-
 
     #[derive(Debug, Clone, PartialEq)]
     pub enum FnExpr<'a> {
@@ -223,11 +203,17 @@ pub mod new_rules {
         pub name: &'a str,
         pub param_count: usize,
         pub extra_params: bool,
-        pub body: FnExpr<'a>,
+        pub body: Vec<FnExpr<'a>>,
     }
 
     impl<'a> FnDef<'a> {
-        pub fn new(info: Info<'a>, name: &'a str, param_count: usize, extra_params: bool, body: FnExpr<'a>) -> Self {
+        pub fn new(
+            info: Info<'a>,
+            name: &'a str,
+            param_count: usize,
+            extra_params: bool,
+            body: Vec<FnExpr<'a>>,
+        ) -> Self {
             Self {
                 info,
                 name,
@@ -240,7 +226,19 @@ pub mod new_rules {
 
     impl<'a> Display for FnDef<'a> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "fn: [{} with {} {} parameters {} [{}]]", self.name, if self.extra_params { "at least" } else { "" }, self.param_count, self.body, self.info)
+            write!(
+                f,
+                "fn: [{} with {} {} parameters {} [{}]]",
+                self.name,
+                if self.extra_params { "at least" } else { "" },
+                self.param_count,
+                self.body
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                self.info
+            )
         }
     }
     #[derive(Debug, Clone, PartialEq)]
@@ -288,7 +286,10 @@ pub mod new_rules {
             write!(
                 f,
                 "fn: {}({}) with {} args [{}]",
-                self.fn_name, self.args.iter().map(|e| e.to_string()).collect::<String>(), self.args.len(), self.info
+                self.fn_name,
+                self.args.iter().map(|e| e.to_string()).collect::<String>(),
+                self.args.len(),
+                self.info
             )
         }
     }
@@ -297,12 +298,17 @@ pub mod new_rules {
     pub struct If<'a> {
         pub info: Info<'a>,
         pub condition: Expr<'a>,
-        pub then: Expr<'a>,
-        pub otherwise: Expr<'a>,
+        pub then: Vec<Expr<'a>>,
+        pub otherwise: Vec<Expr<'a>>,
     }
 
     impl<'a> If<'a> {
-        pub fn new(info: Info<'a>, condition: Expr<'a>, then: Expr<'a>, otherwise: Expr<'a>) -> Self {
+        pub fn new(
+            info: Info<'a>,
+            condition: Expr<'a>,
+            then: Vec<Expr<'a>>,
+            otherwise: Vec<Expr<'a>>,
+        ) -> Self {
             Self {
                 info,
                 condition,
@@ -317,7 +323,18 @@ pub mod new_rules {
             write!(
                 f,
                 "if {} then {} else {} [{}]",
-                self.condition, self.then, self.otherwise, self.info
+                self.condition,
+                self.then
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                self.otherwise
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                self.info
             )
         }
     }
@@ -338,22 +355,31 @@ pub mod new_rules {
             }
         }
     }
-    
+
     #[derive(Debug, Clone, PartialEq)]
     pub struct Loop<'a> {
         pub info: Info<'a>,
-        pub body: LoopExpr<'a>,
+        pub body: Vec<LoopExpr<'a>>,
     }
 
     impl<'a> Loop<'a> {
-        pub fn new(info: Info<'a>, body: LoopExpr<'a>) -> Self {
+        pub fn new(info: Info<'a>, body: Vec<LoopExpr<'a>>) -> Self {
             Self { info, body }
         }
     }
 
     impl<'a> Display for Loop<'a> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "loop {} [{}]", self.body, self.info)
+            write!(
+                f,
+                "loop {} [{}]",
+                self.body
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                self.info
+            )
         }
     }
 
@@ -372,21 +398,28 @@ pub mod new_rules {
 
     impl<'a> Display for Var<'a> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                f,
-                "var {} = {} [{}]",
-                self.name, self.value, self.info
-            )
+            write!(f, "var {} = {} [{}]", self.name, self.value, self.info)
         }
     }
-}
 
+    pub struct Parser<'a> {
+        tokens: Vec<Token<'a>>,
+        current: usize,
+    }
+
+    type Module<'a> = Vec<Expr<'a>>;
+
+    pub fn parse<'a>(tokens: Vec<Token<'_>>) -> Module<'a> {
+        let mut module = Vec::new();
+        module
+    }
+}
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Expression {
     pub inside: Stuff,
     pub print: bool,
-    pub line: i32,
+    pub line: u32,
     pub new_line: bool,
     pub filename: String,
 }
@@ -395,7 +428,7 @@ impl Expression {
     pub const fn new(
         inside: Stuff,
         print: bool,
-        line: i32,
+        line: u32,
         filename: String,
         new_line: bool,
     ) -> Self {
@@ -418,12 +451,12 @@ impl Display for Expression {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct IdentifierPointer {
     pub name: String,
-    pub line: i32,
+    pub line: u32,
     pub filename: String,
 }
 
 impl IdentifierPointer {
-    pub const fn new(name: String, line: i32, filename: String) -> Self {
+    pub const fn new(name: String, line: u32, filename: String) -> Self {
         Self {
             name,
             line,
@@ -464,12 +497,12 @@ impl Display for Stuff {
 #[derive(PartialEq, Clone, Debug)]
 pub struct Literal {
     pub literal: LiteralType,
-    pub line: i32,
+    pub line: u32,
     pub filename: String,
 }
 
 impl Literal {
-    pub const fn new_string(string: String, line: i32, filename: String) -> Self {
+    pub const fn new_string(string: String, line: u32, filename: String) -> Self {
         Self {
             literal: LiteralType::String(string),
             line,
@@ -477,7 +510,7 @@ impl Literal {
         }
     }
 
-    pub const fn new_number(number: f64, line: i32, filename: String) -> Self {
+    pub const fn new_number(number: f64, line: u32, filename: String) -> Self {
         Self {
             literal: LiteralType::Number(number),
             line,
@@ -485,7 +518,7 @@ impl Literal {
         }
     }
 
-    pub const fn new_boolean(boolean: bool, line: i32, filename: String) -> Self {
+    pub const fn new_boolean(boolean: bool, line: u32, filename: String) -> Self {
         Self {
             literal: LiteralType::Boolean(boolean),
             line,
@@ -493,7 +526,7 @@ impl Literal {
         }
     }
 
-    pub const fn new_hempty(line: i32, filename: String) -> Self {
+    pub const fn new_hempty(line: u32, filename: String) -> Self {
         Self {
             literal: LiteralType::Hempty,
             line,
@@ -516,13 +549,13 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
-    pub fn from_other_stuff(thing: &OtherStuff, line: i32) -> Self {
+    pub fn from_other_stuff(thing: &OtherStuff, line: u32) -> Self {
         match thing {
             OtherStuff::Literal(literal) => literal.literal.clone(),
             _ => error::error(line, "not a literal"),
         }
     }
-    pub fn from_stuff(thing: &Stuff, line: i32) -> Self {
+    pub fn from_stuff(thing: &Stuff, line: u32) -> Self {
         match thing {
             Stuff::Literal(literal) => literal.literal.clone(),
             _ => error::error(line, "not a literal"),
@@ -580,7 +613,7 @@ pub enum IdentifierType {
 }
 
 impl IdentifierType {
-    pub fn new(thing: &[OtherStuff], line: i32) -> Self {
+    pub fn new(thing: &[OtherStuff], line: u32) -> Self {
         match thing.len() {
             0 => error::error(line, "expected Identifier, got empty list"),
             1 => Self::Vairable(Box::new(Vairable::new(thing[0].clone()))),
@@ -597,12 +630,12 @@ impl IdentifierType {
 pub struct Identifier {
     pub name: String,
     pub value: IdentifierType,
-    pub line: i32,
+    pub line: u32,
     pub filename: String,
 }
 
 impl Identifier {
-    pub fn new(name: String, value: &[OtherStuff], line: i32, filename: String) -> Self {
+    pub fn new(name: String, value: &[OtherStuff], line: u32, filename: String) -> Self {
         Self {
             name,
             value: IdentifierType::new(value, line),
@@ -630,17 +663,17 @@ impl Display for Identifier {
 pub struct Call {
     pub keyword: TokenType,
     pub arguments: Vec<Stuff>,
-    pub line: i32,
-    pub end_line: i32,
+    pub line: u32,
+    pub end_line: u32,
     pub filename: String,
 }
 
 impl Call {
     pub fn new(
         arguments: &[Stuff],
-        line: i32,
+        line: u32,
         filename: String,
-        end_line: i32,
+        end_line: u32,
         keyword: TokenType,
     ) -> Self {
         Self {
@@ -692,8 +725,8 @@ pub struct Function {
     pub num_arguments: f64,
     pub extra_arguments: bool,
     pub body: Vec<Thing>,
-    pub line: i32,
-    pub end_line: i32,
+    pub line: u32,
+    pub end_line: u32,
     pub filename: String,
 }
 
@@ -702,9 +735,9 @@ impl Function {
         name: String,
         num_arguments: f64,
         body: &[Thing],
-        line: i32,
+        line: u32,
         filename: String,
-        end_line: i32,
+        end_line: u32,
         extra_arguments: bool,
     ) -> Self {
         Self {
@@ -778,8 +811,8 @@ pub struct IfStatement {
     pub condition: OtherStuff,
     pub body_true: Vec<Thing>,
     pub body_false: Vec<Thing>,
-    pub line: i32,
-    pub end_line: i32,
+    pub line: u32,
+    pub end_line: u32,
     pub filename: String,
 }
 
@@ -788,9 +821,9 @@ impl IfStatement {
         condition: OtherStuff,
         body_true: Vec<Thing>,
         body_false: Vec<Thing>,
-        line: i32,
+        line: u32,
         filename: String,
-        end_line: i32,
+        end_line: u32,
     ) -> Self {
         Self {
             condition,
@@ -826,13 +859,13 @@ impl Display for IfStatement {
 #[derive(PartialEq, Clone, Debug)]
 pub struct LoopStatement {
     pub body: Vec<Thing>,
-    pub line: i32,
-    pub end_line: i32,
+    pub line: u32,
+    pub end_line: u32,
     pub filename: String,
 }
 
 impl LoopStatement {
-    pub fn new(body: &[Thing], line: i32, filename: String, end_line: i32) -> Self {
+    pub fn new(body: &[Thing], line: u32, filename: String, end_line: u32) -> Self {
         Self {
             body: body.to_vec(),
             line,

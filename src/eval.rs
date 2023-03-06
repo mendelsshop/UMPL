@@ -51,7 +51,7 @@ pub fn write_file(
 pub struct NewExpression {
     pub inside: LiteralOrFile,
     pub print: bool,
-    pub line: i32,
+    pub line: u32,
     pub new_line: bool,
 }
 
@@ -127,7 +127,7 @@ pub enum LiteralOrFile {
 }
 
 impl LiteralOrFile {
-    pub fn get_file(self, line: i32, keyword: &TokenType) -> String {
+    pub fn get_file(self, line: u32, keyword: &TokenType) -> String {
         match self {
             Self::File(file) => file,
             _ => {
@@ -135,7 +135,7 @@ impl LiteralOrFile {
             }
         }
     }
-    pub fn get_string(self, line: i32, keyword: &TokenType) -> String {
+    pub fn get_string(self, line: u32, keyword: &TokenType) -> String {
         match self {
             Self::Literal(LiteralType::String(lit)) => lit,
             _ => {
@@ -143,7 +143,7 @@ impl LiteralOrFile {
             }
         }
     }
-    pub fn get_number(self, line: i32, keyword: &TokenType) -> f64 {
+    pub fn get_number(self, line: u32, keyword: &TokenType) -> f64 {
         match self {
             Self::Literal(LiteralType::Number(lit)) => lit,
             _ => {
@@ -151,7 +151,7 @@ impl LiteralOrFile {
             }
         }
     }
-    pub fn get_bool(self, line: i32, keyword: &TokenType) -> bool {
+    pub fn get_bool(self, line: u32, keyword: &TokenType) -> bool {
         match self {
             Self::Literal(LiteralType::Boolean(lit)) => lit,
             _ => {
@@ -193,7 +193,7 @@ pub enum NewIdentifierType {
 }
 
 impl NewIdentifierType {
-    pub fn to_vec_literaltype(self, line: i32) -> Vec<LiteralOrFile> {
+    pub fn to_vec_literaltype(self, line: u32) -> Vec<LiteralOrFile> {
         match self {
             Self::Vairable(v) => vec![v.value],
             _ => error(line, "cannot convert to vec"),
@@ -231,7 +231,7 @@ impl Scope {
         name: &str,
         value: &mut Vec<LiteralOrFile>,
         recurse: bool,
-        line: i32,
+        line: u32,
     ) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
@@ -315,7 +315,7 @@ impl Scope {
             }
         }
     }
-    pub fn set_list(&mut self, name: &str, value: NewList, recurse: bool, line: i32) {
+    pub fn set_list(&mut self, name: &str, value: NewList, recurse: bool, line: u32) {
         if recurse {
             if self.has_var(name, false) {
                 self.vars.insert(
@@ -335,7 +335,7 @@ impl Scope {
             );
         }
     }
-    pub fn get_var(&mut self, name: &str, line: i32) -> NewIdentifierType {
+    pub fn get_var(&mut self, name: &str, line: u32) -> NewIdentifierType {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
         if name.ends_with(".car") || name.ends_with(".cdr") {
             if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4], line) {

@@ -1,21 +1,21 @@
 use crate::{
     error,
-    token::{Token, TokenType},
+    token::{Info, Token, TokenType},
 };
 use hexponent::FloatLiteral;
 
 use unic_emoji_char as emoji;
-pub struct Lexer {
-    token_list: Vec<Token>,
+pub struct Lexer<'a> {
+    token_list: Vec<Token<'a>>,
     source: String,
     start: usize,
     current: usize,
-    line: i32,
+    line: u32,
     module: Option<String>,
     name: String,
 }
 
-impl Lexer {
+impl <'a> Lexer<'a> {
     pub const fn new(source: String, name: String) -> Self {
         Self {
             token_list: Vec::new(),
@@ -28,17 +28,25 @@ impl Lexer {
         }
     }
 
+    pub fn get_info(&'a self) -> Info<'a> {
+        Info {
+            line: self.line as u32,
+            end_line: self.line as u32,
+            file_name: &self.name,
+        }
+    }
+
     pub fn set_module(&mut self, module: String) {
         self.module = Some(module);
     }
 
-    pub fn scan_tokens(mut self) -> Vec<Token> {
+    pub fn scan_tokens(mut self) -> Vec<Token<'a>> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token();
         }
         self.token_list
-            .push(Token::new(TokenType::EOF, "", self.line, &self.name));
+            .push(Token::new(TokenType::EOF, "", self.get_info()));
         self.token_list
     }
 
@@ -46,7 +54,7 @@ impl Lexer {
         (self.current) >= (self.source.chars().count())
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&'a mut self) {
         let c: char = self.advance();
         match c {
             '(' => self.add_token(TokenType::LeftParen),
@@ -103,7 +111,7 @@ impl Lexer {
         }
     }
 
-    fn boolean(&mut self) -> bool {
+    fn boolean(&'a mut self) -> bool {
         while self.peek().is_alphabetic() {
             self.advance();
         }
@@ -117,7 +125,7 @@ impl Lexer {
         false
     }
 
-    fn hempty(&mut self) -> bool {
+    fn hempty(&'a mut self) -> bool {
         while self.peek().is_alphabetic() {
             self.advance();
         }
@@ -129,7 +137,7 @@ impl Lexer {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn string(&mut self) {
+    fn string(&'a mut self) {
         while self.peek() != '`' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -270,7 +278,7 @@ impl Lexer {
         });
     }
 
-    fn identifier(&mut self) {
+    fn identifier(&'a mut self) {
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
@@ -328,7 +336,7 @@ impl Lexer {
         char_vec[self.current - 1]
     }
 
-    fn add_token(&mut self, token_type: TokenType) {
+    fn add_token(&'a mut self, token_type: TokenType) {
         let text: std::str::Chars<'_> = self.source.chars();
         let mut final_text: String = String::new();
         text.enumerate().for_each(|i| {
@@ -336,18 +344,14 @@ impl Lexer {
                 final_text.push(i.1);
             }
         });
-        self.token_list.push(Token::new(
-            token_type,
-            final_text.as_str(),
-            self.line,
-            &self.name,
-        ));
+        self.token_list
+            .push(Token::new(token_type, final_text.as_str(), self.get_info()));
     }
 
-    fn add_unicode_token(&mut self, token_type: TokenType) {
+    fn add_unicode_token(&'a mut self, token_type: TokenType) {
         let text: String = format!("{}", self.source.chars().nth(self.start).expect("Error"));
         self.token_list
-            .push(Token::new(token_type, &text, self.line, &self.name));
+            .push(Token::new(token_type, &text, self.get_info()));
     }
 
     fn peek(&self) -> char {

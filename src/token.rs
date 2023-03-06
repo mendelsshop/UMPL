@@ -15,6 +15,30 @@ use std::{
     io::{self, Read, Write},
     process::{exit, Command},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Info<'a> {
+    pub file_name: &'a str,
+    pub line: u32,
+    pub end_line: u32,
+}
+
+impl<'a> Info<'a> {
+    pub const fn new(file_name: &'a str, line: u32, end_line: u32) -> Self {
+        Self {
+            file_name,
+            line,
+            end_line,
+        }
+    }
+}
+
+impl Display for Info<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}..{}", self.file_name, self.line, self.end_line)
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub enum TokenType {
@@ -96,7 +120,7 @@ pub enum TokenType {
 
 impl TokenType {
     #[allow(clippy::too_many_lines)]
-    pub fn r#do(&self, args: &[LiteralType], line: i32, scope: &mut Eval) -> LiteralType {
+    pub fn r#do(&self, args: &[LiteralType], line: u32, scope: &mut Eval) -> LiteralType {
         if crate::KEYWORDS.is_keyword(self) {
             match self {
                 Self::Not => {
@@ -474,25 +498,23 @@ impl Display for TokenType {
 }
 
 #[derive(PartialEq, Clone)]
-pub struct Token {
+pub struct Token<'a> {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub filename: String,
-    pub line: i32,
+    pub info: Info<'a>,
 }
 
-impl Token {
-    pub fn new(token_type: TokenType, lexeme: &str, line: i32, filename: &str) -> Self {
+impl<'a> Token<'a> {
+    pub fn new(token_type: TokenType, lexeme: &str, info: Info<'a>) -> Self {
         Self {
             token_type,
             lexeme: lexeme.to_string(),
-            line,
-            filename: filename.to_string(),
+            info,
         }
     }
 }
 
-impl Display for Token {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.token_type {
             TokenType::String { literal } => {
@@ -506,8 +528,8 @@ impl Display for Token {
     }
 }
 
-impl fmt::Debug for Token {
+impl fmt::Debug for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self} at {}", self.line)
+        write!(f, "{self} at {}", self.info)
     }
 }

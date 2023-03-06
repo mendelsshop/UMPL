@@ -1,7 +1,7 @@
 use crate::cli::EASY_MODE;
 use std::{fmt::Display, process::exit};
 
-pub fn error<T: Display>(line: i32, message: T) -> ! {
+pub fn error<T: Display>(line: u32, message: T) -> ! {
     let where_ = "";
     let message = message.to_string();
     let mut message = message.as_str();
@@ -24,7 +24,7 @@ pub fn arg_error<T: Display>(
     given_args: u32,
     function: T,
     at_least: bool,
-    line: i32,
+    line: u32,
 ) {
     if at_least {
         if num_args > given_args {
