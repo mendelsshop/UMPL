@@ -63,6 +63,9 @@ pub enum Stuff {
     Literal(Literal),
     Identifier(IdentifierPointer),
     Call(Call),
+    Function(Function),
+    If(Box<IfStatement>),
+    List(Box<List>),
 }
 
 impl Display for Stuff {
@@ -71,6 +74,9 @@ impl Display for Stuff {
             Self::Literal(literal) => write!(f, "{literal}"),
             Self::Identifier(identifier) => write!(f, "{identifier}"),
             Self::Call(call) => write!(f, "{call}"),
+            Self::Function(function) => write!(f, "{function}"),
+            Self::If(if_statement) => write!(f, "{if_statement}"),
+            Self::List(list) => write!(f, "{list}"),
         }
     }
 }

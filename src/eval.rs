@@ -235,7 +235,6 @@ impl Scope {
     ) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
-        println!("setting var: {} to: {:?}", name, value);
         let new_val: NewIdentifierType = match value.len() {
             0 => error(line, "expected Identifier, got empty list"),
             1 => NewIdentifierType::Vairable(NewVairable::new(value.clone().remove(0))),
@@ -250,7 +249,7 @@ impl Scope {
                 let new_name = name.trim_end_matches(".car").trim_end_matches(".cdr");
                 if recurse {
                     if self.has_var(new_name, false) {
-                        let mut new_var = match self.get_var(new_name, line) {
+                        let new_var = match self.get_var(new_name, line) {
                             NewIdentifierType::List(list) => list,
                             _ => error(line, "expected list"),
                         };
@@ -281,7 +280,7 @@ impl Scope {
                         );
                     }
                 } else {
-                    let mut new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
+                    let new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
                         NewIdentifierType::List(list) => list,
                         _ => error(line, "expected list"),
                     };
@@ -491,11 +490,6 @@ impl Eval {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-        println!("find variables in scope");
-        // print variables in scope
-        for (name, var) in &self.scope.vars {
-            println!("{}: {:?}", name, var);
-        }
         for thing in body {
             match thing {
                 Thing::Identifier(ref variable) => match variable.value {
@@ -725,6 +719,9 @@ impl Eval {
                 }
                 NewIdentifierType::Vairable(var) => var.value,
             },
+            Stuff::If(ifs) => {
+                todo!("evaluate if statements");                
+            }
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {
                     if let Some(mut function) = self.scope.get_function(name.to_string()) {
@@ -835,7 +832,6 @@ impl Eval {
                 | TokenType::DivideWith
                 | TokenType::MultiplyWith
                 | TokenType::Set => {
-                    println!("{} {:?}", call.keyword, call.arguments);
                     if let Stuff::Identifier(ident) = &call.arguments[0] {
                         if self.scope.has_var(&ident.name, true) {
                             let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
@@ -1451,6 +1447,12 @@ impl Eval {
                 }
             },
             Stuff::Literal(lit) => LiteralOrFile::Literal(lit.literal.clone()),
+            Stuff::Function(fn_def) => {
+                todo!("evaluate function definition");
+            }
+            Stuff::List(list) => {
+                todo!("evaluate list definition");
+            }
         }
     }
 }

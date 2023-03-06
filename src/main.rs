@@ -87,6 +87,7 @@ fn main() {
 fn run(line: String, name: &str) {
     let lexer: Lexer = Lexer::new(line, name.to_string());
     let lexed = lexer.scan_tokens();
+    println!("{:#?}", lexed);
     let mut parsed: Parser = Parser::new(lexed, name.to_string());
     let parsed = parsed.parse();
     Eval::new(parsed);
