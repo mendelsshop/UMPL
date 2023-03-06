@@ -461,7 +461,7 @@ impl TokenType {
                                 if let Err(err) = file.read_to_string(&mut buf) {
                                     error::error(line, format!("Failed to read file: {err}"));
                                 }
-                                let mut lexer = Lexer::new(buf, filename.clone());
+                                let mut lexer = Lexer::new(&buf, filename);
                                 lexer.set_module(module_name);
                                 let lexed = lexer.scan_tokens();
                                 let mut parsed = Parser::new(lexed, filename.clone());

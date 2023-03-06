@@ -7,16 +7,17 @@ use hexponent::FloatLiteral;
 use unic_emoji_char as emoji;
 pub struct Lexer<'a> {
     token_list: Vec<Token<'a>>,
-    source: String,
+    source: &'a str,
     start: usize,
     current: usize,
     line: u32,
     module: Option<String>,
-    name: String,
+    name: &'a str,
+    text_buffer: String,
 }
 
 impl <'a> Lexer<'a> {
-    pub const fn new(source: String, name: String) -> Self {
+    pub fn new(source: &'a str, name: &'a str) -> Self {
         Self {
             token_list: Vec::new(),
             source,
@@ -25,6 +26,7 @@ impl <'a> Lexer<'a> {
             line: 1,
             module: None,
             name,
+            text_buffer: name.to_string(),
         }
     }
 
@@ -260,7 +262,7 @@ impl <'a> Lexer<'a> {
         self.add_token(TokenType::String { literal: string });
     }
 
-    fn number(&mut self) {
+    fn number(&'a mut self) {
         while self.peek().is_ascii_hexdigit() {
             self.advance();
         }
@@ -310,7 +312,7 @@ impl <'a> Lexer<'a> {
         }
     }
 
-    fn function_agument(&mut self) {
+    fn function_agument(&'a mut self) {
         self.start += 1; // advance start past the $ so that we can parse it into a number
         let hex_char = vec!['A', 'B', 'C', 'D', 'E', 'F'];
         while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
@@ -373,18 +375,17 @@ impl <'a> Lexer<'a> {
         final_text
     }
 
-    fn remove_text(&mut self, pos: usize) -> char {
-        // use chars to be able to use unicode, remove the pos
-        let mut text: Vec<char> = self.source.chars().collect();
-        let to_return = text[pos];
-        text.remove(pos);
-        self.source = text.iter().collect();
-        to_return
+    fn insert_text(&mut self, pos: usize, text: char) {
+        let mut text_list: Vec<char> = self.text_buffer.chars().collect();
+        text_list.insert(pos, text);
+        self.text_buffer = text_list.iter().collect();
     }
 
-    fn insert_text(&mut self, pos: usize, texts: char) {
-        let mut text: Vec<char> = self.source.chars().collect();
-        text.insert(pos, texts);
-        self.source = text.iter().collect();
+    fn remove_text(&mut self, pos: usize) -> char{
+        let mut text_list: Vec<char> = self.text_buffer.chars().collect();
+        let t = text_list.remove(pos);
+        self.text_buffer = text_list.iter().collect();
+        t
     }
+
 }
