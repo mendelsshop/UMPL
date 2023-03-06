@@ -720,7 +720,7 @@ impl Eval {
                 NewIdentifierType::Vairable(var) => var.value,
             },
             Stuff::If(ifs) => {
-                todo!("evaluate if statements");                
+                todo!("evaluate if statements");
             }
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name } => {

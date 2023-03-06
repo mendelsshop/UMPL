@@ -1,14 +1,15 @@
 pub(crate) mod rules;
 use crate::{
     error::error,
-    token::{Token, TokenType}, parser::rules::{IdentifierType, LiteralType},
+    parser::rules::{IdentifierType, LiteralType},
+    token::{Token, TokenType},
 };
 use log::{debug, info, warn};
 use rules::{
     Call, Expression, Function, Identifier, IdentifierPointer, IfStatement, Literal, LoopStatement,
     OtherStuff, Stuff,
 };
-use std::fmt::{self, Display, format};
+use std::fmt::{self, format, Display};
 
 use self::rules::List;
 
@@ -162,12 +163,8 @@ impl Parser {
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 info!("found keyword {}", self.token.token_type);
                 match self.token.token_type.clone() {
-                    TokenType::Potato => {
-                        Some(Thing::Function(self.get_function()))
-                    }
-                    TokenType::List => {
-                        Some(Thing::Identifier(self.get_list()))
-                    }
+                    TokenType::Potato => Some(Thing::Function(self.get_function())),
+                    TokenType::List => Some(Thing::Identifier(self.get_list())),
                     TokenType::Create => {
                         self.advance("parse_from_token");
                         match self.token.token_type.clone() {
@@ -236,9 +233,7 @@ impl Parser {
                             error(self.token.line, "code block expected after \"loop\"");
                         }
                     }
-                    TokenType::If => {
-                        Some(Thing::IfStatement(self.get_if()))
-                    }
+                    TokenType::If => Some(Thing::IfStatement(self.get_if())),
                     TokenType::Return { .. } => {
                         if self.tokens[self.current_position].token_type == TokenType::Colon {
                             self.advance("parse_from_token return expecting expression");
@@ -290,19 +285,13 @@ impl Parser {
             let mut if_body: Vec<Thing>;
             let mut else_body: Vec<Thing>;
             let thing: OtherStuff = match self.token.clone().token_type {
-                TokenType::Boolean { value } => {
-                    OtherStuff::Literal(Literal::new_boolean(
-                        value,
-                        self.token.line,
-                        self.filename.clone(),
-                    ))
-                }
-                TokenType::LeftParen => {
-                    OtherStuff::Expression(self.after_left_paren())
-                }
-                TokenType::Identifier { name } => {
-                    OtherStuff::Identifier(self.var(name))
-                }
+                TokenType::Boolean { value } => OtherStuff::Literal(Literal::new_boolean(
+                    value,
+                    self.token.line,
+                    self.filename.clone(),
+                )),
+                TokenType::LeftParen => OtherStuff::Expression(self.after_left_paren()),
+                TokenType::Identifier { name } => OtherStuff::Identifier(self.var(name)),
                 tokentype => {
                     error(
                         self.token.line,
@@ -319,13 +308,10 @@ impl Parser {
                 self.advance("parse_from_token looking for if body");
                 if self.token.token_type == TokenType::CodeBlockBegin {
                     if_body = Vec::new();
-                    while self.tokens[self.current_position].token_type
-                        != TokenType::CodeBlockEnd
-                    {
+                    while self.tokens[self.current_position].token_type != TokenType::CodeBlockEnd {
                         info!(
                             "c {:?} n {}",
-                            self.token.token_type,
-                            self.tokens[self.current_position].token_type
+                            self.token.token_type, self.tokens[self.current_position].token_type
                         );
                         if let Some(token) = self.parse_from_token() {
                             if_body.push(token);
@@ -356,16 +342,10 @@ impl Parser {
                                 self.token.line,
                             )
                         } else {
-                            error(
-                                self.token.line,
-                                "code block expected after \"else\"",
-                            );
+                            error(self.token.line, "code block expected after \"else\"");
                         }
                     } else {
-                        error(
-                            self.token.line,
-                            "else keyword expected after if statement",
-                        );
+                        error(self.token.line, "else keyword expected after if statement");
                     }
                 } else {
                     error(self.token.line, "code block expected after \"if\"");
@@ -385,7 +365,7 @@ impl Parser {
         }
     }
 
-    fn get_list(&mut self) -> Identifier{
+    fn get_list(&mut self) -> Identifier {
         self.advance("parse_from_token");
         match self.token.token_type.clone() {
             TokenType::Identifier { name } => {
@@ -442,10 +422,8 @@ impl Parser {
             tokentype => {
                 error(
                     self.tokens[1].line,
-                    format!(
-                        "identifier expected, after \"list\" found TokenType::{tokentype:?}"
-                    )
-                    .as_str(),
+                    format!("identifier expected, after \"list\" found TokenType::{tokentype:?}")
+                        .as_str(),
                 );
             }
         }
@@ -459,13 +437,16 @@ impl Parser {
                 info!("function identifier found");
                 self.advance("parse_from_token after function name looking for function arguments");
                 // check if the next token is a number and save it in a vairable num_args
-                let num_of_args_and_extra: (f64, bool) = match self.token.token_type
-                {
+                let num_of_args_and_extra: (f64, bool) = match self.token.token_type {
                     TokenType::Number { literal } => {
                         if literal.trunc() == literal {
-                            self.advance("parse_from_token found number or args looking for function body");
+                            self.advance(
+                                "parse_from_token found number or args looking for function body",
+                            );
                             if self.token.token_type == TokenType::Star {
-                                self.advance("parse_from_token found star looking for function body");
+                                self.advance(
+                                    "parse_from_token found star looking for function body",
+                                );
                                 (literal, true)
                             } else {
                                 (literal, false)
@@ -478,16 +459,17 @@ impl Parser {
                         }
                     }
                     TokenType::Star => {
-                        self.advance(
-                            "parse_from_token found star looking for function body",
-                        );
+                        self.advance("parse_from_token found star looking for function body");
                         (0.0, true)
                     }
                     TokenType::CodeBlockBegin => (0.0, false),
                     _ => {
                         error(
                             self.token.line,
-                            format!("number expected after function identifier, found {}", self.token),
+                            format!(
+                                "number expected after function identifier, found {}",
+                                self.token
+                            ),
                         );
                     }
                 };
@@ -496,9 +478,7 @@ impl Parser {
                 if self.token.token_type == TokenType::CodeBlockBegin {
                     let mut function: Vec<Thing> = Vec::new();
                     self.in_function = true;
-                    while self.tokens[self.current_position].token_type
-                        != TokenType::CodeBlockEnd
-                    {
+                    while self.tokens[self.current_position].token_type != TokenType::CodeBlockEnd {
                         self.in_function = true; // for funtions inside functions see loop below for more info
                         if let Some(t) = self.parse_from_token() {
                             function.push(t);
@@ -507,7 +487,7 @@ impl Parser {
                     self.advance("parse_from_token after function body looking for function end");
                     self.in_function = false;
                     debug!("new function {:?}", function);
-                   Function::new(
+                    Function::new(
                         name,
                         num_of_args_and_extra.0,
                         &function,
@@ -519,7 +499,10 @@ impl Parser {
                 } else {
                     error(
                         self.token.line,
-                        format!("code block expected after function identifier, found {}", self.token.token_type),
+                        format!(
+                            "code block expected after function identifier, found {}",
+                            self.token.token_type
+                        ),
                     );
                 }
             }
@@ -534,77 +517,68 @@ impl Parser {
 
     fn after_left_paren(&mut self) -> Expression {
         let start_line = self.token.line;
- 
+
+        self.advance("after left paren");
+        if self.token.token_type == TokenType::New {
             self.advance("after left paren");
-            if self.token.token_type == TokenType::New {
-                self.advance("after left paren");
-                match self.token.token_type {
-                    TokenType::FunctionIdentifier { .. } => {}
-                    _ => {
-                        error(self.token.line, "function identifier expected after new");
-                    }
+            match self.token.token_type {
+                TokenType::FunctionIdentifier { .. } => {}
+                _ => {
+                    error(self.token.line, "function identifier expected after new");
                 }
             }
-            let keyword: TokenType = self.token.token_type.clone();
-            let line: i32 = self.token.line;
-            info!("found call {}", keyword);
-            // check if keyword is a literal if it is then it is an expression
-            let value = match &keyword {
-                TokenType::Number { literal } => Some(LiteralType::Number(*literal)),
-                TokenType::String { literal } => Some(LiteralType::String(literal.to_string())),
-                TokenType::Boolean { value } => Some(LiteralType::Boolean(*value)),
-                TokenType::Hempty => Some(LiteralType::Hempty),
-                _ => None,
-                
-            };
-            if let Some(t) = value {
-                self.advance("after left paren");
-                if self.token.token_type != TokenType::RightParen {
-                    error(self.token.line, "right paren expected after literal");
-                }
-                return Expression::new(
-                    Stuff::Literal(Literal {
-                        literal: t,
-                        line: start_line,
-                        filename: self.filename.clone(),
-                    }),
-                    false,
-                    start_line,
-                    self.filename.clone(),
-                    false,
-                );
-            }
+        }
+        let keyword: TokenType = self.token.token_type.clone();
+        let line: i32 = self.token.line;
+        info!("found call {}", keyword);
+        // check if keyword is a literal if it is then it is an expression
+        let value = match &keyword {
+            TokenType::Number { literal } => Some(LiteralType::Number(*literal)),
+            TokenType::String { literal } => Some(LiteralType::String(literal.to_string())),
+            TokenType::Boolean { value } => Some(LiteralType::Boolean(*value)),
+            TokenType::Hempty => Some(LiteralType::Hempty),
+            _ => None,
+        };
+        if let Some(t) = value {
             self.advance("after left paren");
-            let mut args = Vec::new();
-
-            while self.token.token_type != TokenType::RightParen {
-                info!("looking for args");
-                println!("looking for args");
-                args.push(self.parse_to_stuff());
-                self.advance("after left paren");
+            if self.token.token_type != TokenType::RightParen {
+                error(self.token.line, "right paren expected after literal");
             }
-
-            self.check_end(LitorExpr::Call(
-                Call {
-                    keyword,
-                    arguments: args,
+            return Expression::new(
+                Stuff::Literal(Literal {
+                    literal: t,
                     line: start_line,
-                    end_line: line,
                     filename: self.filename.clone(),
-                
-            
-            }
-            ))
+                }),
+                false,
+                start_line,
+                self.filename.clone(),
+                false,
+            );
+        }
+        self.advance("after left paren");
+        let mut args = Vec::new();
 
+        while self.token.token_type != TokenType::RightParen {
+            info!("looking for args");
+            println!("looking for args");
+            args.push(self.parse_to_stuff());
+            self.advance("after left paren");
+        }
+
+        self.check_end(LitorExpr::Call(Call {
+            keyword,
+            arguments: args,
+            line: start_line,
+            end_line: line,
+            filename: self.filename.clone(),
+        }))
     }
 
-    fn check_end(&mut self, value: LitorExpr) ->Expression {
+    fn check_end(&mut self, value: LitorExpr) -> Expression {
         // check if the paren count
         todo!()
-
-
     }
-    
 
     fn var(&mut self, name: String) -> IdentifierPointer {
         if name.starts_with('$') && self.in_function {
@@ -719,7 +693,7 @@ impl Parser {
                 let list = self.get_list();
                 match list.value {
                     IdentifierType::List(list) => Stuff::List(list),
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
             _ => {
@@ -735,7 +709,7 @@ impl Parser {
         match self.token.token_type.clone() {
             TokenType::LeftParen => {
                 // self.advance("parse to other stuff");
-                OtherStuff::Expression(self.after_left_paren()) 
+                OtherStuff::Expression(self.after_left_paren())
             }
             TokenType::Number { literal } => OtherStuff::Literal(Literal::new_number(
                 literal,
