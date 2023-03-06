@@ -75,14 +75,14 @@ impl Display for NewExpression {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum LitOrList {
-    Identifier(Box<NewList>),
+    Identifier(Rc<RefCell<NewList>>),
     Literal(LiteralOrFile),
 }
 
 impl Display for LitOrList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Identifier(i) => write!(f, "{i}"),
+            Self::Identifier(i) => write!(f, "{}", i.borrow()),
             Self::Literal(l) => write!(f, "{l}"),
         }
     }
@@ -98,6 +98,18 @@ impl NewList {
         Self {
             car: LitOrList::Literal(thing.remove(0)),
             cdr: LitOrList::Literal(thing.remove(0)),
+        }
+    }
+
+    pub fn set_last(&mut self, new_item: LitOrList)  {
+        match &self.cdr {
+            LitOrList::Identifier(i) => i.borrow_mut().set_last(new_item),
+            LitOrList::Literal(i) => {
+                // check if cdr is hempty
+                if i == &LiteralOrFile::Literal(LiteralType::Hempty) {
+                    self.cdr = new_item;
+                }
+            }
         }
     }
 }
@@ -176,8 +188,8 @@ impl Display for NewVairable {
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum NewIdentifierType {
-    List(Box<NewList>),
-    Vairable(Box<NewVairable>),
+    List(Rc<RefCell<NewList>>),
+    Vairable(NewVairable),
 }
 
 impl NewIdentifierType {
@@ -223,10 +235,11 @@ impl Scope {
     ) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
+        println!("setting var: {} to: {:?}", name, value);
         let new_val: NewIdentifierType = match value.len() {
             0 => error(line, "expected Identifier, got empty list"),
-            1 => NewIdentifierType::Vairable(Box::new(NewVairable::new(value.clone().remove(0)))),
-            2 => NewIdentifierType::List(Box::new(NewList::new(value.clone()))),
+            1 => NewIdentifierType::Vairable(NewVairable::new(value.clone().remove(0))),
+            2 => NewIdentifierType::List(Rc::new(RefCell::new(NewList::new(value.clone())))),
             _ => error(
                 line,
                 "expected Identifier, got list with more than 2 elements",
@@ -242,12 +255,12 @@ impl Scope {
                             _ => error(line, "expected list"),
                         };
                         if name.ends_with(".cdr") {
-                            new_var.cdr = match new_val {
+                            new_var.borrow_mut().cdr = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
                                 NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                             };
                         } else {
-                            new_var.car = match new_val {
+                            new_var.borrow_mut().car = match new_val {
                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
                                 NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                             };
@@ -268,17 +281,17 @@ impl Scope {
                         );
                     }
                 } else {
-                    let mut new_var: Box<NewList> = match self.get_var(new_name, line) {
+                    let mut new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
                         NewIdentifierType::List(list) => list,
                         _ => error(line, "expected list"),
                     };
                     if name.ends_with(".cdr") {
-                        new_var.cdr = match new_val {
+                        new_var.borrow_mut().cdr = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
                             NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                         };
                     } else {
-                        new_var.car = match new_val {
+                        new_var.borrow_mut().car = match new_val {
                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
                             NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
                         };
@@ -303,32 +316,48 @@ impl Scope {
             }
         }
     }
+    pub fn set_list(&mut self, name: &str, value: NewList, recurse: bool, line: i32) {
+        if recurse {
+            if self.has_var(name, false) {
+                self.vars
+                    .insert(name.to_string(), NewIdentifierType::List(Rc::new(RefCell::new(value))));
+            } else {
+                self.parent_scope.as_mut().map_or_else(
+                    || error(line, "variable not found"),
+                    |parent| parent.set_list(name, value, recurse, line),
+                );
+            }
+        } else {
+            self.vars
+                .insert(name.to_string(), NewIdentifierType::List(Rc::new(RefCell::new(value))));
+        }
+    }
     pub fn get_var(&mut self, name: &str, line: i32) -> NewIdentifierType {
         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
         if name.ends_with(".car") || name.ends_with(".cdr") {
             if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4], line) {
                 if name.ends_with(".car") {
-                    match list.car {
+                    match &list.borrow_mut().car {
                         LitOrList::Identifier(list2) => {
-                            return NewIdentifierType::List(list2);
+                            return NewIdentifierType::List(Rc::clone(list2));
                         }
                         LitOrList::Literal(var) => match var {
                             LiteralOrFile::Literal(_) => {
-                                return NewIdentifierType::Vairable(Box::new(NewVairable::new(
-                                    var,
-                                )));
+                                return NewIdentifierType::Vairable(NewVairable::new(
+                                    var.clone(),
+                                ));
                             }
                             _ => error(line, "expected literal"),
                         },
                     }
                 }
-                match list.cdr {
+                match &list.borrow_mut().cdr {
                     LitOrList::Identifier(list2) => {
-                        return NewIdentifierType::List(list2);
+                        return NewIdentifierType::List(Rc::clone(&list2));
                     }
                     LitOrList::Literal(var) => match var {
                         LiteralOrFile::Literal(_) => {
-                            return NewIdentifierType::Vairable(Box::new(NewVairable::new(var)));
+                            return NewIdentifierType::Vairable(NewVairable::new(var.clone()));
                         }
                         _ => error(line, "expected literal"),
                     },
@@ -460,6 +489,11 @@ impl Eval {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
+        println!("find variables in scope");
+        // print variables in scope
+        for (name, var) in &self.scope.vars {
+            println!("{}: {:?}", name, var);
+        }
         for thing in body {
             match thing {
                 Thing::Identifier(ref variable) => match variable.value {
@@ -707,15 +741,41 @@ impl Eval {
                         self.scope.from_parent();
                         function.0 = self.find_functions(function.0);
                         self.in_function = true;
+                        let mut extra_args: Option<NewList> = None;
+
                         // TODO: once we have more than ammount of arguments specified in function we should label the rest as under one variable $n which is a list
                         new_stuff.into_iter().enumerate().for_each(|(i, l)| {
-                            self.scope.set_var(
-                                format!("${}", i + 1).as_str(),
-                                &mut vec![(l)],
+                            if i as f64 >= function.1 {
+                                if let Some(ref mut list) = extra_args  {
+                                    list.set_last(LitOrList::Identifier(Rc::new(RefCell::new(NewList {
+                                        car : LitOrList::Literal(l),
+                                        cdr : LitOrList::Literal(LiteralOrFile::Literal(LiteralType::Hempty)),
+                                    }))));
+
+
+                                } else {
+                                    extra_args = Some(NewList {
+                                        car : LitOrList::Literal(l),
+                                        cdr : LitOrList::Literal(LiteralOrFile::Literal(LiteralType::Hempty)),
+                                    });
+                                }
+                            } else {
+                                self.scope.set_var(
+                                    format!("${}", i + 1).as_str(),
+                                    &mut vec![(l)],
+                                    false,
+                                    call.line,
+                                );
+                            }
+                        });
+                        if let Some(list) = extra_args {
+                            self.scope.set_list(
+                                format!("${}", function.1 as usize + 1).as_str(),
+                                list,
                                 false,
                                 call.line,
                             );
-                        });
+                        }
                         let z: Option<Stopper> = self.find_variables(function.0);
                         self.in_function = false;
                         self.scope.drop_scope();
@@ -769,6 +829,7 @@ impl Eval {
                 | TokenType::DivideWith
                 | TokenType::MultiplyWith
                 | TokenType::Set => {
+                    println!("{} {:?}", call.keyword, call.arguments);
                     if let Stuff::Identifier(ident) = &call.arguments[0] {
                         if self.scope.has_var(&ident.name, true) {
                             let mut new_stuff: Vec<LiteralOrFile> = Vec::new();

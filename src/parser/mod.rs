@@ -699,6 +699,21 @@ impl Parser {
                 self.filename.clone(),
             )),
             TokenType::Identifier { name } => Stuff::Identifier(self.var(name)),
+            TokenType::Create => {
+                todo!("variables created in an expression");
+            }
+            TokenType::If => {
+                todo!("if statements in an expression");
+            }
+            TokenType::Loop => {
+                todo!("loops in an expression");
+            }
+            TokenType::Potato => {
+                todo!("function definitions in an expression");
+            }
+            TokenType::List => {
+                todo!("list definitions in an expression");
+            }
             _ => {
                 error(
                     self.token.line,
