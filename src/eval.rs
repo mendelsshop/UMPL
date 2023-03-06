@@ -101,7 +101,7 @@ impl NewList {
         }
     }
 
-    pub fn set_last(&mut self, new_item: LitOrList)  {
+    pub fn set_last(&mut self, new_item: LitOrList) {
         match &self.cdr {
             LitOrList::Identifier(i) => i.borrow_mut().set_last(new_item),
             LitOrList::Literal(i) => {
@@ -319,8 +319,10 @@ impl Scope {
     pub fn set_list(&mut self, name: &str, value: NewList, recurse: bool, line: i32) {
         if recurse {
             if self.has_var(name, false) {
-                self.vars
-                    .insert(name.to_string(), NewIdentifierType::List(Rc::new(RefCell::new(value))));
+                self.vars.insert(
+                    name.to_string(),
+                    NewIdentifierType::List(Rc::new(RefCell::new(value))),
+                );
             } else {
                 self.parent_scope.as_mut().map_or_else(
                     || error(line, "variable not found"),
@@ -328,8 +330,10 @@ impl Scope {
                 );
             }
         } else {
-            self.vars
-                .insert(name.to_string(), NewIdentifierType::List(Rc::new(RefCell::new(value))));
+            self.vars.insert(
+                name.to_string(),
+                NewIdentifierType::List(Rc::new(RefCell::new(value))),
+            );
         }
     }
     pub fn get_var(&mut self, name: &str, line: i32) -> NewIdentifierType {
@@ -343,9 +347,7 @@ impl Scope {
                         }
                         LitOrList::Literal(var) => match var {
                             LiteralOrFile::Literal(_) => {
-                                return NewIdentifierType::Vairable(NewVairable::new(
-                                    var.clone(),
-                                ));
+                                return NewIdentifierType::Vairable(NewVairable::new(var.clone()));
                             }
                             _ => error(line, "expected literal"),
                         },
@@ -746,17 +748,21 @@ impl Eval {
                         // TODO: once we have more than ammount of arguments specified in function we should label the rest as under one variable $n which is a list
                         new_stuff.into_iter().enumerate().for_each(|(i, l)| {
                             if i as f64 >= function.1 {
-                                if let Some(ref mut list) = extra_args  {
-                                    list.set_last(LitOrList::Identifier(Rc::new(RefCell::new(NewList {
-                                        car : LitOrList::Literal(l),
-                                        cdr : LitOrList::Literal(LiteralOrFile::Literal(LiteralType::Hempty)),
-                                    }))));
-
-
+                                if let Some(ref mut list) = extra_args {
+                                    list.set_last(LitOrList::Identifier(Rc::new(RefCell::new(
+                                        NewList {
+                                            car: LitOrList::Literal(l),
+                                            cdr: LitOrList::Literal(LiteralOrFile::Literal(
+                                                LiteralType::Hempty,
+                                            )),
+                                        },
+                                    ))));
                                 } else {
                                     extra_args = Some(NewList {
-                                        car : LitOrList::Literal(l),
-                                        cdr : LitOrList::Literal(LiteralOrFile::Literal(LiteralType::Hempty)),
+                                        car: LitOrList::Literal(l),
+                                        cdr: LitOrList::Literal(LiteralOrFile::Literal(
+                                            LiteralType::Hempty,
+                                        )),
                                     });
                                 }
                             } else {
