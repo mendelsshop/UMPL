@@ -16,7 +16,7 @@ pub struct Lexer<'a> {
     text_buffer: String,
 }
 
-impl <'a> Lexer<'a> {
+impl <'a,> Lexer<'a,> {
     pub fn new(source: &'a str, name: &'a str) -> Self {
         Self {
             token_list: Vec::new(),
@@ -25,12 +25,12 @@ impl <'a> Lexer<'a> {
             current: 0, // actual number of bytes in source
             line: 1,
             module: None,
-            name,
-            text_buffer: name.to_string(),
+            name: name,
+            text_buffer: source.to_string(),
         }
     }
 
-    pub fn get_info(&'a self) -> Info<'a> {
+    pub fn get_info(&self) -> Info<'a> {
         Info {
             line: self.line as u32,
             end_line: self.line as u32,
@@ -43,69 +43,85 @@ impl <'a> Lexer<'a> {
     }
 
     pub fn scan_tokens(mut self) -> Vec<Token<'a>> {
-        while !self.is_at_end() {
+        let mut at_end = self.is_at_end();
+        while !at_end {
             self.start = self.current;
-            self.scan_token();
+            if let Some(t) = self.scan_token() {
+                self.token_list.push(t);
+            }
+            at_end = self.is_at_end();
         }
+        let info = self.get_info();
+
         self.token_list
-            .push(Token::new(TokenType::EOF, "", self.get_info()));
+            .push(Token::new(TokenType::EOF, "", info));
         self.token_list
     }
+
 
     fn is_at_end(&self) -> bool {
         (self.current) >= (self.source.chars().count())
     }
 
-    fn scan_token(&'a mut self) {
+    fn scan_token<'b>(&mut self) -> Option<Token<'b>> 
+    where 'a: 'b {
         let c: char = self.advance();
         match c {
-            '(' => self.add_token(TokenType::LeftParen),
-            '{' => self.add_token(TokenType::LeftBrace),
-            '[' => self.add_token(TokenType::LeftBracket),
-            '}' => self.add_token(TokenType::RightBrace),
-            ')' => self.add_token(TokenType::RightParen),
-            ']' => self.add_token(TokenType::RightBracket),
-            '⧼' => self.add_token(TokenType::CodeBlockBegin),
-            '⧽' => self.add_token(TokenType::CodeBlockEnd),
+            '(' => Some(self.add_token(TokenType::LeftParen)),
+            '{' => Some(self.add_token(TokenType::LeftBrace)),
+            '[' => Some(self.add_token(TokenType::LeftBracket)),
+            '}' => Some(self.add_token(TokenType::RightBrace)),
+            ')' => Some(self.add_token(TokenType::RightParen)),
+            ']' => Some(self.add_token(TokenType::RightBracket)),
+            '⧼' => Some(self.add_token(TokenType::CodeBlockBegin)),
+            '⧽' => Some(self.add_token(TokenType::CodeBlockEnd)),
             '!' => {
                 while self.peek() != '\n' && !self.is_at_end() {
                     self.advance();
                 }
+                None
             }
-            ':' => self.add_token(TokenType::Colon),
-            '.' => self.add_token(TokenType::Dot),
-            '<' => self.add_token(TokenType::LessThanSymbol),
-            '>' => self.add_token(TokenType::GreaterThanSymbol),
-            '\n' => self.line += 1,
-            '`' => self.string(),
-            '$' => self.function_agument(),
-            '*' => self.add_token(TokenType::Star),
+            ':' => Some(self.add_token(TokenType::Colon)),
+            '.' => Some(self.add_token(TokenType::Dot)),
+            '<' => Some(self.add_token(TokenType::LessThanSymbol)),
+            '>' => Some(self.add_token(TokenType::GreaterThanSymbol)),
+            '\n' => {self.line += 1;
+                None
+            }
+            '`' => Some(self.string()),
+            '$' => Some(self.function_agument()),
+            '*' => Some(self.add_token(TokenType::Star)),
             c => {
                 if c.is_lowercase() || c == '-' {
                     if c == 't' || c == 'f' {
-                        if !self.boolean() {
-                            self.identifier();
+                        if let Some(t) = self.boolean() {
+                            Some(t)
+                        } else {
+                            Some(self.identifier())
                         }
                     } else if c == 'h' {
-                        if !self.hempty() {
-                            self.identifier();
+                        if let Some(t) = self.hempty() {
+                            Some(t)
+                        } else {
+                            Some(self.identifier())
                         }
                     } else {
-                        self.identifier();
+                        Some(self.identifier())
                     }
                 } else if c.is_ascii_whitespace() {
+                    None
                 } else if c.is_ascii_digit() {
                     if self.peek() == 'x' {
                         self.advance();
                         self.start += 2;
                     }
-                    self.number();
+                    Some(self.number())
                 } else if emoji::is_emoji(c) {
                     let c = self
                         .module
                         .as_ref()
                         .map_or_else(|| c.to_string(), |module| format!("{module}${c}"));
-                    self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
+                    Some(self.add_unicode_token(TokenType::FunctionIdentifier { name: c }))
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
                 }
@@ -113,33 +129,34 @@ impl <'a> Lexer<'a> {
         }
     }
 
-    fn boolean(&'a mut self) -> bool {
+    fn boolean(&mut self) -> Option<Token<'a>> {
         while self.peek().is_alphabetic() {
             self.advance();
         }
         if self.get_text() == "true" {
-            self.add_token(TokenType::Boolean { value: true });
-            return true;
+            Some(self.add_token(TokenType::Boolean { value: true }))
         } else if self.get_text() == "false" {
-            self.add_token(TokenType::Boolean { value: false });
-            return true;
+            Some(self.add_token(TokenType::Boolean { value: false }))
+            
+        } else {
+            None
         }
-        false
     }
 
-    fn hempty(&'a mut self) -> bool {
+    fn hempty(&mut self) -> Option<Token<'a>> {
         while self.peek().is_alphabetic() {
             self.advance();
         }
         if self.get_text() == "hempty" {
-            self.add_token(TokenType::Hempty);
-            return true;
+            Some(self.add_token(TokenType::Hempty))
+        } else {
+            None
         }
-        false
+    
     }
 
     #[allow(clippy::too_many_lines)]
-    fn string(&'a mut self) {
+    fn string(&mut self) -> Token<'a> {
         while self.peek() != '`' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -259,10 +276,10 @@ impl <'a> Lexer<'a> {
         let string = self.get_text();
         self.start -= 1;
         self.current += 1;
-        self.add_token(TokenType::String { literal: string });
+        self.add_token(TokenType::String { literal: string })
     }
 
-    fn number(&'a mut self) {
+    fn number(&mut self) -> Token<'a> {
         while self.peek().is_ascii_hexdigit() {
             self.advance();
         }
@@ -277,10 +294,10 @@ impl <'a> Lexer<'a> {
             .expect("could not parse number");
         self.add_token(TokenType::Number {
             literal: number.convert::<f64>().inner(),
-        });
+        })
     }
 
-    fn identifier(&'a mut self) {
+    fn identifier(&mut self) -> Token<'a> {
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
@@ -295,7 +312,7 @@ impl <'a> Lexer<'a> {
                 self.advance();
                 self.add_unicode_token(TokenType::FunctionIdentifier {
                     name: self.get_text(),
-                });
+                })
             } else {
                 // error out
                 error::error(
@@ -308,11 +325,11 @@ impl <'a> Lexer<'a> {
                 TokenType::Identifier {
                     name: self.get_text(),
                 },
-            ));
+            ))
         }
     }
 
-    fn function_agument(&'a mut self) {
+    fn function_agument(&mut self) -> Token<'a> {
         self.start += 1; // advance start past the $ so that we can parse it into a number
         let hex_char = vec!['A', 'B', 'C', 'D', 'E', 'F'];
         while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
@@ -329,7 +346,7 @@ impl <'a> Lexer<'a> {
                 }
             }
         );
-        self.add_token(TokenType::Identifier { name: identifier });
+        self.add_token(TokenType::Identifier { name: identifier })
     }
 
     fn advance(&mut self) -> char {
@@ -338,7 +355,7 @@ impl <'a> Lexer<'a> {
         char_vec[self.current - 1]
     }
 
-    fn add_token(&'a mut self, token_type: TokenType) {
+    fn add_token(&mut self, token_type: TokenType) -> Token<'a> {
         let text: std::str::Chars<'_> = self.source.chars();
         let mut final_text: String = String::new();
         text.enumerate().for_each(|i| {
@@ -346,14 +363,14 @@ impl <'a> Lexer<'a> {
                 final_text.push(i.1);
             }
         });
-        self.token_list
-            .push(Token::new(token_type, final_text.as_str(), self.get_info()));
+    Token::new(token_type, final_text.as_str(), self.get_info())
     }
 
-    fn add_unicode_token(&'a mut self, token_type: TokenType) {
+    fn add_unicode_token(&mut self, token_type: TokenType) -> Token<'a> {
         let text: String = format!("{}", self.source.chars().nth(self.start).expect("Error"));
-        self.token_list
-            .push(Token::new(token_type, &text, self.get_info()));
+        // self.token_list
+        //     .push(Token::new(token_type, &text, self.get_info()));
+        Token::new(token_type, &text, self.get_info())
     }
 
     fn peek(&self) -> char {
