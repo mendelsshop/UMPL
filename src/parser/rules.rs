@@ -6,8 +6,8 @@ pub mod new_parser {
     use std::fmt::{self, Display};
 
     use crate::{
-        error::erToken::new(TokenType::Eof, Info::new(0, 0, 0, 0)),ror,
-        token::{Info, Token, TokenType},
+        error::error,
+        token::{Info, Token, TokenType}, parser::rules::Expression,
     };
 
     #[derive(Debug, Clone, PartialEq)]
@@ -244,42 +244,26 @@ pub mod new_parser {
             )
         }
     }
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum FnIdent<'a> {
-        User(&'a str),
-        Builtin(TokenType),
-    }
-
-    impl<'a> Display for FnIdent<'a> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                FnIdent::User(s) => write!(f, "{}", s),
-                FnIdent::Builtin(t) => write!(f, "{}", t),
-            }
-        }
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum PrintType {
+        Newline,
+        NoNewline,
+        None,
     }
 
     #[derive(Debug, Clone, PartialEq)]
     pub struct FnCall<'a> {
         pub info: Info<'a>,
-        pub fn_name: FnIdent<'a>,
         pub args: Vec<Expr<'a>>,
+        pub print_type: PrintType,
     }
 
     impl<'a> FnCall<'a> {
-        pub fn new_user(info: Info<'a>, fn_name: &'a str, args: Vec<Expr<'a>>) -> Self {
+        pub fn new(info: Info<'a>, args: Vec<Expr<'a>>, print_type: PrintType) -> Self {
             Self {
                 info,
-                fn_name: FnIdent::User(fn_name),
                 args,
-            }
-        }
-
-        pub fn new_builtin(info: Info<'a>, fn_name: TokenType, args: Vec<Expr<'a>>) -> Self {
-            Self {
-                info,
-                fn_name: FnIdent::Builtin(fn_name),
-                args,
+                print_type,
             }
         }
     }
@@ -288,8 +272,8 @@ pub mod new_parser {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 f,
-                "fn: {}({}) with {} args [{}]",
-                self.fn_name,
+                "fn: {}() with {} args [{}]",
+
                 self.args.iter().map(|e| e.to_string()).collect::<String>(),
                 self.args.len(),
                 self.info
@@ -449,10 +433,72 @@ pub mod new_parser {
         }
 
         fn parse_from_token(&mut self) -> Option<Expr<'a>> {
-            None
+            // advance in token stream - important especially for the first time each time we parse something
+            // becuase token is set to nothing so this initializes token
+            self.advance("parse_from_token - start");
+            // check if we ran out of tokens or are done parsing (if EOF is encountered)
+            if self.tokens.is_empty() {
+                error(0, "no self.tokens found");
+            }
+            if self.done {
+                return None;
+            }
+            match self.token.token_type.clone() {
+                // we have entered an expression
+                TokenType::LeftParen => self.parse_parenthissized(),
+                // we hit a keyword
+                keyword if crate::KEYWORDS.is_keyword(&keyword) => {
+                    todo!()
+                }
+                keyword => {
+                    todo!("keyword: {:?}", keyword)
+                }
+            }
+
         }
 
-        fn advance(&mut self) {
+        fn parse_parenthissized(&mut self) -> Option<Expr<'a>> {
+            println!("parse_parenthissized");
+            // save the line number because the next token can be on the next line
+            let start_line = self.token.info.line;
+            let mut args = Vec::new();
+            // self.advance("parse_parenthissized - start looking for args");
+            while self.token.token_type != TokenType::RightParen {
+                if let Some(token) = self.parse_from_token() {
+                    args.push(token);
+                }
+                self.advance("parse_parenthissized - looking for args");
+            }
+            // check printing indicator (<) no print (>) print (>>) print no newline
+            self.advance("parse_parenthissized - looking for printing indicator");
+            println!("printing indicator: {:?}", self.token);
+            match self.token.token_type {
+                TokenType::LessThanSymbol => {
+                    Some(Expr::new_call(
+                        Info::new(self.file_path, start_line, self.token.info.line),
+                        FnCall::new(
+                            Info::new(self.file_path, start_line, self.token.info.line),
+                            args,
+                            PrintType::None,
+                        ),
+                    ))
+
+
+                } 
+                TokenType::GreaterThanSymbol => {
+                    None
+                    // check if the next token is a greater than or not
+
+
+                }
+                _ => {
+                    // should never happen as this is caught in the advance method
+                    error(self.token.info.line, "Expected printing indicator");
+                }
+            }
+        }
+
+        fn advance(&mut self, caller: &str) {
             match self.tokens[self.current_position].token_type {
                 TokenType::Return { .. } => {
                     if self.in_function {
@@ -519,6 +565,7 @@ pub mod new_parser {
                     self.token = self.tokens[self.current_position].clone();
                 }
             };
+            println!("token: {:?} caller: {}", self.token, caller);
             self.current_position += 1;
         }
     }

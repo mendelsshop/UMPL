@@ -1,4 +1,4 @@
-pub(crate) mod rules;
+pub mod rules;
 use crate::{
     error::error,
     parser::rules::{IdentifierType, LiteralType},

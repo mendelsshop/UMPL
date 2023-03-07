@@ -512,6 +512,13 @@ impl<'a> Token<'a> {
             info,
         }
     }
+
+    pub fn is_literal(&self) -> bool {
+        match self.token_type {
+            TokenType::String { .. } | TokenType::Number { .. } | TokenType::Boolean {.. } | TokenType::Hempty => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Token<'_> {
