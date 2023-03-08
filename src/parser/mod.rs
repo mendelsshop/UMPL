@@ -216,6 +216,14 @@ impl<'a> Parser<'a> {
         self.advance("parse_function - start");
         match self.token.token_type.clone() {
             TokenType::FunctionIdentifier { name } => {
+                // this is not validated in the lexer because it is not possible to know if the function identifier is being used to define a function or to call a function
+                // because if is a a call it can have modules seperated by + (the module operator)
+                if name.chars().count() > 1 {
+                    error(
+                        self.token.info.line,
+                        format!("function name {name} can only be one character long"),
+                    );
+                }
                 let fn_def = self.parse_named_function(name);
                 Some(Expr::new_fn(
                     Info::new(self.file_path, start_line, self.token.info.line),
