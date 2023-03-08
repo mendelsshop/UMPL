@@ -39,6 +39,12 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn set_module(&mut self, module: String) {
+        if module.chars().count() > 1 {
+            error::error(
+                self.line,
+                format!("Module name must be a single character, got {}", module).as_str(),
+            );
+        }
         self.module = Some(module);
     }
 
@@ -121,7 +127,7 @@ impl<'a> Lexer<'a> {
                     let c = self
                         .module
                         .as_ref()
-                        .map_or_else(|| c.to_string(), |module| format!("{module}${c}"));
+                        .map_or_else(|| c.to_string(), |module| format!("{module}*{c}"));
                     Some(self.add_unicode_token(TokenType::FunctionIdentifier { name: c }))
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
@@ -300,10 +306,10 @@ impl<'a> Lexer<'a> {
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
-        if self.peek() == '$' {
+        if self.peek() == '*' {
             self.advance();
             // see if the next character is an emoji
-            while self.peek().is_lowercase() && self.peek_next() == '$' {
+            while self.peek().is_lowercase() && self.peek_next() == '*' {
                 self.advance();
                 self.advance();
             }
@@ -316,7 +322,7 @@ impl<'a> Lexer<'a> {
                 // error out
                 error::error(
                     self.line,
-                    format!("Unexpected character after . {}", self.peek()),
+                    format!("Unexpected character after * {}", self.peek()),
                 );
             }
         } else {
