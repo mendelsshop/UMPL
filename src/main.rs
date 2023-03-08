@@ -8,7 +8,7 @@ use std::{
 };
 use umpl::{cli, error, 
     // eval::Eval,
-     lexer::Lexer, parser::rules::new_parser::Parser};
+     lexer::Lexer, parser::Parser};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args

@@ -1,5 +1,6 @@
 use crate::{
-    error::{self, arg_error}, parser::rules::new_parser::Expr,
+    // error::{self, arg_error}, 
+    parser::rules::Expr,
     // eval::Eval,
     // lexer::Lexer,
     // parser::{
@@ -7,13 +8,13 @@ use crate::{
     //     Parser,
     // },
 };
-use hexponent::FloatLiteral;
+// use hexponent::FloatLiteral;
 use std::{
-    env::consts::OS,
+    // env::consts::OS,
     fmt::{self, Debug, Display},
-    fs::File,
-    io::{self, Read, Write},
-    process::{exit, Command},
+    // fs::File,
+    // io::{self, Read, Write},
+    // process::{exit, Command},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord)]

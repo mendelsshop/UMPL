@@ -30,6 +30,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn get_source(&self) -> &'a str {
+        self.source
+    }
+
     pub fn get_info(&self) -> Info<'a> {
         Info {
             line: self.line as u32,

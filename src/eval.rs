@@ -1,23 +1,23 @@
-use log::info;
+// use log::info;
 
-use std::{
-    cell::{RefCell, RefMut},
-    collections::HashMap,
-    fmt::{self, Display},
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
-    mem::swap,
-    rc::Rc,
-};
+// use std::{
+//     cell::{RefCell, RefMut},
+//     collections::HashMap,
+//     fmt::{self, Display},
+//     fs::{self, File, OpenOptions},
+//     io::{Read, Write},
+//     mem::swap,
+//     rc::Rc,
+// };
 
-use crate::{
-    error::{arg_error, error},
-    parser::{
-        // rules::{IdentifierType, LiteralType, OtherStuff, Stuff},
-        // Thing,
-    },
-    token::TokenType,
-};
+// use crate::{
+//     error::{arg_error, error},
+//     parser::{
+//         // rules::{IdentifierType, LiteralType, OtherStuff, Stuff},
+//         // Thing,
+//     },
+//     token::TokenType,
+// };
 
 // pub fn read_file(file_name: &str) -> Result<String, Box<dyn std::error::Error>> {
 //     let mut file = OpenOptions::new().read(true).open(file_name)?;
