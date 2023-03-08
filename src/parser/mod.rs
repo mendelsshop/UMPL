@@ -4,7 +4,7 @@ use crate::{
     token::{Info, Token, TokenType},
 };
 
-use self::rules::{Expr, FnDef, If, Lambda, Lit, Loop};
+use self::rules::{Expr, FnDef, If, Lambda, Lit, Loop, List, Var};
 pub(crate) mod rules;
 
 pub struct Parser<'a> {
@@ -112,6 +112,9 @@ impl<'a> Parser<'a> {
                 self.token.info,
                 self.parse_from_token_advance(),
             )),
+            TokenType::List => Some(
+                self.parse_list(),
+            ),
             // we hit a keyword
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 todo!("keyword: {:?}", keyword)
@@ -334,6 +337,95 @@ impl<'a> Parser<'a> {
             if_then_exprs,
             else_exprs,
         )
+    }
+
+    fn parse_list(&mut self) -> Expr<'a> {
+        let start_line = self.token.info.line;
+        self.advance("parse list");
+        match self.token.token_type.clone() {
+            TokenType::LeftBracket => {
+                Expr::new_list(
+                    Info::new(self.file_path, start_line, self.token.info.line),
+                    self.parse_list_inner(),
+                )
+            }
+            TokenType::Identifier { name } => {
+                self.advance("parse list");
+                if self.token.token_type !=  TokenType::With {
+                    error(
+                        self.token.info.line,
+                        format!(
+                            "expected with keyword after list identifier found {}",
+                            self.token.token_type
+                        ),
+                    );
+                }
+                self.advance("parse list");
+                if self.token.token_type!= TokenType::LeftBracket {
+                    error(
+                        self.token.info.line,
+                        format!(
+                            "expected [ after with keyword found {}",
+                            self.token.token_type
+                        ),
+                    );
+                }
+                Expr::new_var(
+                    Info::new(self.file_path, start_line, self.token.info.line),
+                    Var::new(
+                        Info::new(self.file_path, start_line, self.token.info.line),
+                        name,
+                        Expr::new_list(
+        
+                        Info::new(self.file_path, start_line, self.token.info.line),
+                        self.parse_list_inner(),
+                    )),
+                    
+                )
+        
+            }
+            _ => {
+                error(
+                    self.token.info.line,
+                    format!(
+                        "expected [ or identifier after list keyword found {}",
+                        self.token.token_type
+                    ),
+                );
+            }
+        }
+
+    }
+
+    fn parse_list_inner(&mut self) -> List<'a> {
+        let start_line = self.token.info.line;
+        self.advance("parse list inner");
+        let car = if let Some(expr) = self.parse_from_token() {
+            expr
+        } else {
+            error(self.token.info.line, "expected expression in list")
+        };
+        self.advance("parse list inner");
+        let cdr = if let Some(expr) = self.parse_from_token() {
+            expr
+        } else {
+            error(self.token.info.line, "expected expression in list")
+        };
+        self.advance("parse list inner");
+        if self.token.token_type!= TokenType::RightBracket {
+            error(
+                self.token.info.line,
+                format!(
+                    "expected ] after list item found {}",
+                    self.token.token_type
+                    ),
+            );
+        }
+        return List::new(
+            Info::new(self.file_path, start_line, self.token.info.line),
+            car,
+            cdr,
+        );
     }
 
     fn advance(&mut self, caller: &str) {

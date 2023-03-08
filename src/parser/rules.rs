@@ -401,12 +401,12 @@ impl<'a> Display for Loop<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Var<'a> {
     pub info: Info<'a>,
-    pub name: &'a str,
+    pub name: String,
     pub value: Expr<'a>,
 }
 
 impl<'a> Var<'a> {
-    pub const fn new(info: Info<'a>, name: &'a str, value: Expr<'a>) -> Self {
+    pub const fn new(info: Info<'a>, name: String, value: Expr<'a>) -> Self {
         Self { info, name, value }
     }
 }
