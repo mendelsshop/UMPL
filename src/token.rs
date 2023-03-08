@@ -16,7 +16,7 @@ use std::{
     process::{exit, Command},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord)]
 pub struct Info<'a> {
     pub file_name: &'a str,
     pub line: u32,
@@ -91,7 +91,7 @@ pub enum TokenType<'a> {
     If,
     Else,
     Hempty,
-    Boolean { value: bool },
+    Boolean { literal: bool },
     Input,
     New,
     Function,

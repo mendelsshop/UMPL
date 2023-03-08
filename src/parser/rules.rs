@@ -25,7 +25,10 @@ pub mod new_parser {
         If(Box<If<'a>>),
         Loop(Box<Loop<'a>>),
         Var(Box<Var<'a>>),
-        Lambda(Lambda<'a>)
+        Lambda(Lambda<'a>),
+        Return(Box<Expr<'a>>),
+        Break(Box<Expr<'a>>),
+        Continue,
     }
 
     impl<'a> Expr<'a> {
@@ -84,6 +87,28 @@ pub mod new_parser {
                 expr: ExprType::Lambda(value),
             }
         }
+
+        pub fn new_return(info: Info<'a>, value: Option<Expr<'a>>) -> Self {
+            Self {
+                info,
+                expr: ExprType::Return(Box::new(value.unwrap_or_else(|| Expr::new_literal(info, Lit::new_hempty(info))))),
+            }
+        }
+
+        pub fn new_break(info: Info<'a>, value: Option<Expr<'a>>) -> Self {
+            Self {
+                info,
+                expr: ExprType::Break(Box::new(value.unwrap_or_else(|| Expr::new_literal(info, Lit::new_hempty(info))))),
+            }
+        }
+
+        pub fn new_continue(info: Info<'a>) -> Self {
+            Self {
+                info,
+                expr: ExprType::Continue,
+            }
+        }
+
     }
 
     impl<'a> Display for Expr<'a> {
@@ -97,6 +122,9 @@ pub mod new_parser {
                 ExprType::Loop(loop_def) => write!(f, "loop [{}]", loop_def),
                 ExprType::Var(var) => write!(f, "var [{}]", var),
                 ExprType::Lambda(lambda) => write!(f, "lambda [{}]", lambda),
+                ExprType::Return(return_) => write!(f, "return [{}]", return_),
+                ExprType::Break(break_) => write!(f, "break [{}]", break_),
+                ExprType::Continue => write!(f, "continue"),
             }
         }
     }
@@ -104,7 +132,7 @@ pub mod new_parser {
     #[derive(Debug, Clone, PartialEq)]
     pub struct Lit<'a> {
         pub info: Info<'a>,
-        pub value: LitType<'a>,
+        pub value: LitType,
     }
 
     impl<'a> Lit<'a> {
@@ -115,7 +143,7 @@ pub mod new_parser {
             }
         }
 
-        pub fn new_string(info: Info<'a>, value: &'a str) -> Self {
+        pub fn new_string(info: Info<'a>, value: String) -> Self {
             Self {
                 info,
                 value: LitType::String(value),
@@ -129,14 +157,14 @@ pub mod new_parser {
             }
         }
 
-        pub fn new_hemty(info: Info<'a>) -> Self {
+        pub fn new_hempty(info: Info<'a>) -> Self {
             Self {
                 info,
-                value: LitType::Hemty,
+                value: LitType::Hempty,
             }
         }
 
-        pub fn new_file(info: Info<'a>, value: &'a str) -> Self {
+        pub fn new_file(info: Info<'a>, value: String) -> Self {
             Self {
                 info,
                 value: LitType::File(value),
@@ -151,22 +179,22 @@ pub mod new_parser {
     }
 
     #[derive(Debug, Clone, PartialEq)]
-    pub enum LitType<'a> {
-        String(&'a str),
+    pub enum LitType {
+        String(String),
         Number(f64),
         Boolean(bool),
-        File(&'a str),
-        Hemty,
+        File(String),
+        Hempty,
     }
 
-    impl fmt::Display for LitType<'_> {
+    impl fmt::Display for LitType {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 LitType::String(s) => write!(f, "string: {}", s),
                 LitType::Number(n) => write!(f, "number: {}", n),
                 LitType::Boolean(b) => write!(f, "boolean: {}", b),
                 LitType::File(s) => write!(f, "file: {}", s),
-                LitType::Hemty => write!(f, "hemty"),
+                LitType::Hempty => write!(f, "hemty"),
             }
         }
     }
@@ -203,36 +231,11 @@ pub mod new_parser {
     }
 
     #[derive(Debug, Clone, PartialEq)]
-    pub enum FnExpr<'a> {
-        Expr(Expr<'a>),
-        Return(Expr<'a>),
-    }
-
-    impl<'a> Display for FnExpr<'a> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                FnExpr::Expr(e) => write!(f, "{}", e),
-                FnExpr::Return(e) => write!(f, "return: {}", e),
-            }
-        }
-    }
-
-    impl<'a> FnExpr<'a> {
-        pub fn new_expr(info: Info<'a>, value: Expr<'a>) -> Self {
-            Self::Expr(value)
-        }
-
-        pub fn new_return(info: Info<'a>, value: Expr<'a>) -> Self {
-            Self::Return(value)
-        }
-    }
-
-    #[derive(Debug, Clone, PartialEq)]
     pub struct Lambda<'a> {
         pub info: Info<'a>,
         pub param_count: usize,
         pub extra_params: bool,
-        pub body: Vec<FnExpr<'a>>,
+        pub body: Vec<Expr<'a>>,
     }
 
     impl<'a> Lambda<'a> {
@@ -240,7 +243,7 @@ pub mod new_parser {
             info: Info<'a>,
             param_count: usize,
             extra_params: bool,
-            body: Vec<FnExpr<'a>>,
+            body: Vec<Expr<'a>>,
         ) -> Self {
             Self {
                 info,
@@ -379,31 +382,15 @@ pub mod new_parser {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum LoopExpr<'a> {
-        Break(Expr<'a>),
-        Continue,
-        Expr(Expr<'a>),
-    }
-
-    impl<'a> Display for LoopExpr<'a> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                LoopExpr::Break(e) => write!(f, "break: {}", e),
-                LoopExpr::Continue => write!(f, "continue"),
-                LoopExpr::Expr(e) => write!(f, "{}", e),
-            }
-        }
-    }
 
     #[derive(Debug, Clone, PartialEq)]
     pub struct Loop<'a> {
         pub info: Info<'a>,
-        pub body: Vec<LoopExpr<'a>>,
+        pub body: Vec<Expr<'a>>,
     }
 
     impl<'a> Loop<'a> {
-        pub fn new(info: Info<'a>, body: Vec<LoopExpr<'a>>) -> Self {
+        pub fn new(info: Info<'a>, body: Vec<Expr<'a>>) -> Self {
             Self { info, body }
         }
     }
@@ -478,7 +465,7 @@ pub mod new_parser {
         pub fn parse(&mut self) -> Module<'a> {
             let mut module = Vec::new();
             while !self.done {
-                if let Some(token) = self.parse_from_token() {
+                if let Some(token) = self.parse_from_token_advance() {
                     module.push(token);
                 }
             }
@@ -488,7 +475,7 @@ pub mod new_parser {
         fn parse_from_token(&mut self) -> Option<Expr<'a>> {
             // advance in token stream - important especially for the first time each time we parse something
             // becuase token is set to nothing so this initializes token
-            self.advance("parse_from_token - start");
+            
             // check if we ran out of tokens or are done parsing (if EOF is encountered)
             if self.tokens.is_empty() {
                 error(0, "no self.tokens found");
@@ -506,15 +493,49 @@ pub mod new_parser {
                     self.in_function = false;
                     None
                 }
+                TokenType::RightParen => {
+                    None
+                }
+                // parsing literals
+                TokenType::String { literal } => {
+                    Some(Expr::new_literal(self.token.info, Lit::new_string(self.token.info, literal)))
+                }
+                TokenType::Number { literal } => {
+                    Some(Expr::new_literal(self.token.info, Lit::new_number(self.token.info, literal)))
+                }
+                TokenType::Boolean { literal } => {
+                    Some(Expr::new_literal(self.token.info, Lit::new_boolean(self.token.info, literal)))
+                }
+                TokenType::Hempty => {
+                    Some(Expr::new_literal(self.token.info, Lit::new_hempty(self.token.info)))
+                }
+                TokenType::Loop => Some(Expr::new_loop(self.token.info, self.parse_loop())),
+                TokenType::If => Some(Expr::new_if(self.token.info, self.parse_if())),
+                TokenType::Break => if self.in_loop {
+                    Some(Expr::new_break(self.token.info, self.parse_from_token()))
+                } else {
+                    error(self.token.info.line, "break can only be used inside a loop");
+                },
+                TokenType::Continue => if self.in_loop {
+                    Some(Expr::new_continue(self.token.info))
+                } else {
+                    error(self.token.info.line, "continue can only be used inside a loop");
+                },
+                TokenType::Return {..} => Some(Expr::new_return(self.token.info, self.parse_from_token_advance())),
                 // we hit a keyword
                 keyword if crate::KEYWORDS.is_keyword(&keyword) => {
-                    todo!()
+                    todo!("keyword: {:?}", keyword)
                 }
                 keyword => {
                     todo!("keyword: {:?}", keyword)
                 }
             }
 
+        }
+
+        fn parse_from_token_advance(&mut self) -> Option<Expr<'a>> {
+            self.advance("parse_from_token - start");
+            self.parse_from_token()
         }
 
         fn parse_parenthissized(&mut self) -> Option<Expr<'a>> {
@@ -524,16 +545,17 @@ pub mod new_parser {
             let mut args = Vec::new();
             // self.advance("parse_parenthissized - start looking for args");
             while self.token.token_type != TokenType::RightParen {
-                if let Some(token) = self.parse_from_token() {
+                if let Some(token) = self.parse_from_token_advance() {
                     args.push(token);
                 }
-                self.advance("parse_parenthissized - looking for args");
+                // self.advance("parse_parenthissized - looking for args");
             }
             // check printing indicator (<) no print (>) print (>>) print no newline
             self.advance("parse_parenthissized - looking for printing indicator");
             println!("printing indicator: {:?}", self.token);
             match self.token.token_type {
                 TokenType::LessThanSymbol => {
+                    println!("call parsed");
                     Some(Expr::new_call(
                         Info::new(self.file_path, start_line, self.token.info.line),
                         FnCall::new(
@@ -546,9 +568,16 @@ pub mod new_parser {
 
                 } 
                 TokenType::GreaterThanSymbol => {
-                    None
-                    // check if the next token is a greater than or not
-
+                    // TODO: check if next token is a > if it is use PrintType::NoNewline
+                    println!("call parsed");
+                    Some(Expr::new_call(
+                        Info::new(self.file_path, start_line, self.token.info.line),
+                        FnCall::new(
+                            Info::new(self.file_path, start_line, self.token.info.line),
+                            args,
+                            PrintType::Newline,
+                        ),
+                    ))
 
                 }
                 _ => {
@@ -569,7 +598,7 @@ pub mod new_parser {
                         fn_def,
                     ))
                 },
-                TokenType::Number { literal } => {
+                TokenType::Number { .. } => {
                     let lambda = self.parse_function_body();
                     Some(Expr::new_lambda(
                         Info::new(self.file_path, start_line, self.token.info.line),
@@ -593,7 +622,7 @@ pub mod new_parser {
             let start_line = self.token.info.line;
             self.advance("parsed_named_function");
             let body = match self.token.token_type.clone() {
-                TokenType::Number { literal } => {
+                TokenType::Number { .. } => {
                     self.parse_function_body()
                 },
                 TokenType::Star | TokenType::CodeBlockBegin => {
@@ -603,6 +632,7 @@ pub mod new_parser {
                     error(self.token.info.line, format!("expected number, * or ⧼ found {tt} in function defintion"))
                 }
             };
+            println!("named function parsed");
             FnDef::new(
                 Info::new(self.file_path, start_line, self.token.info.line),
                 name,
@@ -644,11 +674,12 @@ pub mod new_parser {
             let mut body = Vec::new();
             while self.token.token_type != TokenType::CodeBlockEnd {
                 self.in_function = true;
-                if let Some(expr) = self.parse_function_expr() {
+                if let Some(expr) = self.parse_from_token_advance() {
                     body.push(expr);
                 }
             }
             self.in_function = false;
+            println!("lambda parsed");
             Lambda::new(
                 Info::new(self.file_path, self.token.info.line, self.token.info.line),
                 arg_count,
@@ -657,29 +688,17 @@ pub mod new_parser {
             )
         }
 
-        fn parse_function_expr(&mut self) -> Option<FnExpr<'a>> {
-            let start_line = self.token.info.line;
-            self.advance("parse_function_expr");
-            match self.token.token_type {
-                TokenType::Return { .. } => {
-                    let expr = self.parse_from_token();
-                    Some(FnExpr::new_return(
-                        Info::new(self.file_path, start_line, self.token.info.line),
-                        expr.unwrap_or(Expr::new_literal(
-                            Info::new(self.file_path, start_line, self.token.info.line),
-                            Lit::new_hemty(Info::new(self.file_path, start_line, self.token.info.line)),
-                        )),
-                    ))
-                }
-                _ => {
-                    let expr = self.parse_from_token()?;
-                    Some(FnExpr::new_expr(
-                        Info::new(self.file_path, start_line, self.token.info.line),
-                        expr,
-                    ))
-                }
-            }
+        fn parse_loop(&mut self) -> Loop<'a> {
+            todo!()
+
         }
+
+        fn parse_if(&mut self) -> If<'a> {
+            todo!()
+
+        }
+
+        
 
         fn advance(&mut self, caller: &str) {
             match self.tokens[self.current_position].token_type {

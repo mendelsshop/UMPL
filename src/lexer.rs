@@ -141,9 +141,9 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
         if self.get_text() == "true" {
-            Some(self.add_token(TokenType::Boolean { value: true }))
+            Some(self.add_token(TokenType::Boolean { literal: true }))
         } else if self.get_text() == "false" {
-            Some(self.add_token(TokenType::Boolean { value: false }))
+            Some(self.add_token(TokenType::Boolean { literal: false }))
         } else {
             None
         }
