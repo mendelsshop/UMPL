@@ -4,7 +4,7 @@ use crate::{
     token::{Info, Token, TokenType},
 };
 
-use self::rules::{Expr, FnDef, If, Lambda, Lit, Loop, List, Var};
+use self::rules::{Expr, FnDef, If, Lambda, List, Lit, Loop, Var};
 pub(crate) mod rules;
 
 pub struct Parser<'a> {
@@ -112,9 +112,34 @@ impl<'a> Parser<'a> {
                 self.token.info,
                 self.parse_from_token_advance(),
             )),
-            TokenType::List => Some(
-                self.parse_list(),
-            ),
+            TokenType::List => Some(self.parse_list()),
+            TokenType::Create => {
+                self.advance("parse_from_token - create");
+                let name = match self.token.token_type.clone() {
+                    TokenType::Identifier { name } => name,
+                    _ => error(self.token.info.line, "expected identifier after create"),
+                };
+                self.advance("parse_from_token - create");
+                if self.token.token_type.clone() != TokenType::With {
+                    error(self.token.info.line, "expected with after create");
+                }
+                Some(Expr::new_var(
+                    self.token.info,
+                    Var::new(
+                        self.token.info,
+                        name.clone(),
+                        if let Some(s) = self.parse_from_token_advance() {
+                            s
+                        } else {
+                            error(
+                                self.token.info.line,
+                                format!("expected expression after for variable {}", name),
+                            );
+                        },
+                    ),
+                ))
+            }
+            TokenType::Identifier { name } => Some(Expr::new_identifier(self.token.info, name)),
             // we hit a keyword
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 todo!("keyword: {:?}", keyword)
@@ -343,15 +368,13 @@ impl<'a> Parser<'a> {
         let start_line = self.token.info.line;
         self.advance("parse list");
         match self.token.token_type.clone() {
-            TokenType::LeftBracket => {
-                Expr::new_list(
-                    Info::new(self.file_path, start_line, self.token.info.line),
-                    self.parse_list_inner(),
-                )
-            }
+            TokenType::LeftBracket => Expr::new_list(
+                Info::new(self.file_path, start_line, self.token.info.line),
+                self.parse_list_inner(),
+            ),
             TokenType::Identifier { name } => {
                 self.advance("parse list");
-                if self.token.token_type !=  TokenType::With {
+                if self.token.token_type != TokenType::With {
                     error(
                         self.token.info.line,
                         format!(
@@ -361,7 +384,7 @@ impl<'a> Parser<'a> {
                     );
                 }
                 self.advance("parse list");
-                if self.token.token_type!= TokenType::LeftBracket {
+                if self.token.token_type != TokenType::LeftBracket {
                     error(
                         self.token.info.line,
                         format!(
@@ -376,13 +399,11 @@ impl<'a> Parser<'a> {
                         Info::new(self.file_path, start_line, self.token.info.line),
                         name,
                         Expr::new_list(
-        
-                        Info::new(self.file_path, start_line, self.token.info.line),
-                        self.parse_list_inner(),
-                    )),
-                    
+                            Info::new(self.file_path, start_line, self.token.info.line),
+                            self.parse_list_inner(),
+                        ),
+                    ),
                 )
-        
             }
             _ => {
                 error(
@@ -394,7 +415,6 @@ impl<'a> Parser<'a> {
                 );
             }
         }
-
     }
 
     fn parse_list_inner(&mut self) -> List<'a> {
@@ -412,13 +432,10 @@ impl<'a> Parser<'a> {
             error(self.token.info.line, "expected expression in list")
         };
         self.advance("parse list inner");
-        if self.token.token_type!= TokenType::RightBracket {
+        if self.token.token_type != TokenType::RightBracket {
             error(
                 self.token.info.line,
-                format!(
-                    "expected ] after list item found {}",
-                    self.token.token_type
-                    ),
+                format!("expected ] after list item found {}", self.token.token_type),
             );
         }
         return List::new(

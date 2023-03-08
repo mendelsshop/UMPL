@@ -19,6 +19,7 @@ pub enum ExprType<'a> {
     Lambda(Lambda<'a>),
     Return(Box<Expr<'a>>),
     Break(Box<Expr<'a>>),
+    Identifier(String),
     Continue,
 }
 
@@ -103,6 +104,13 @@ impl<'a> Expr<'a> {
             expr: ExprType::Continue,
         }
     }
+
+    pub const fn new_identifier(info: Info<'a>, value: String) -> Self {
+        Self {
+            info,
+            expr: ExprType::Identifier(value),
+        }
+    }
 }
 
 impl<'a> Display for Expr<'a> {
@@ -119,6 +127,7 @@ impl<'a> Display for Expr<'a> {
             ExprType::Return(return_) => write!(f, "return [{return_}]"),
             ExprType::Break(break_) => write!(f, "break [{break_}]"),
             ExprType::Continue => write!(f, "continue"),
+            ExprType::Identifier(ident) => write!(f, "ident [{ident}]"),
         }
     }
 }
