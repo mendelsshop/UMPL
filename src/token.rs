@@ -1,21 +1,6 @@
-use crate::{
-    // error::{self, arg_error}, 
-    parser::rules::Expr,
-    // eval::Eval,
-    // lexer::Lexer,
-    // parser::{
-    //     rules::{LiteralType, OtherStuff},
-    //     Parser,
-    // },
-};
+use crate::parser::rules::Expr;
 // use hexponent::FloatLiteral;
-use std::{
-    // env::consts::OS,
-    fmt::{self, Debug, Display},
-    // fs::File,
-    // io::{self, Read, Write},
-    // process::{exit, Command},
-};
+use std::fmt::{self, Debug, Display};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord)]
 pub struct Info<'a> {
@@ -514,11 +499,14 @@ impl<'a> Token<'a> {
         }
     }
 
-    pub fn is_literal(&self) -> bool {
-        match self.token_type {
-            TokenType::String { .. } | TokenType::Number { .. } | TokenType::Boolean {.. } | TokenType::Hempty => true,
-            _ => false,
-        }
+    pub const fn is_literal(&self) -> bool {
+        matches!(
+            self.token_type,
+            TokenType::String { .. }
+                | TokenType::Number { .. }
+                | TokenType::Boolean { .. }
+                | TokenType::Hempty
+        )
     }
 }
 

@@ -25,20 +25,20 @@ impl<'a> Lexer<'a> {
             current: 0, // actual number of bytes in source
             line: 1,
             module: None,
-            name: name,
+            name,
             text_buffer: source.to_string(),
         }
     }
 
-    pub fn get_source(&self) -> &'a str {
+    pub const fn get_source(&self) -> &'a str {
         self.source
     }
 
-    pub fn get_info(&self) -> Info<'a> {
+    pub const fn get_info(&self) -> Info<'a> {
         Info {
-            line: self.line as u32,
-            end_line: self.line as u32,
-            file_name: &self.name,
+            line: self.line,
+            end_line: self.line,
+            file_name: self.name,
         }
     }
 
@@ -46,7 +46,7 @@ impl<'a> Lexer<'a> {
         if module.chars().count() > 1 {
             error::error(
                 self.line,
-                format!("Module name must be a single character, got {}", module).as_str(),
+                format!("Module name must be a single character, got {module}").as_str(),
             );
         }
         self.module = Some(module);
@@ -105,17 +105,9 @@ impl<'a> Lexer<'a> {
             c => {
                 if c.is_lowercase() || c == '-' {
                     if c == 't' || c == 'f' {
-                        if let Some(t) = self.boolean() {
-                            Some(t)
-                        } else {
-                            Some(self.identifier())
-                        }
+                        self.boolean().map_or_else(|| Some(self.identifier()), Some)
                     } else if c == 'h' {
-                        if let Some(t) = self.hempty() {
-                            Some(t)
-                        } else {
-                            Some(self.identifier())
-                        }
+                        self.hempty().map_or_else(|| Some(self.identifier()), Some)
                     } else {
                         Some(self.identifier())
                     }
@@ -378,7 +370,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn add_unicode_token(&mut self, token_type: TokenType<'a>) -> Token<'a> {
-        let text: String = format!("{}", self.text_buffer.chars().nth(self.start).expect("Error"));
+        let text: String = format!(
+            "{}",
+            self.text_buffer.chars().nth(self.start).expect("Error")
+        );
         Token::new(token_type, &text, self.get_info())
     }
 
@@ -387,7 +382,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn peek_next(&self) -> char {
-        self.text_buffer.chars().nth(self.current + 1).unwrap_or('\0')
+        self.text_buffer
+            .chars()
+            .nth(self.current + 1)
+            .unwrap_or('\0')
     }
 
     fn get_text(&self) -> String {

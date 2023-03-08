@@ -1,7 +1,11 @@
-use crate::{token::{TokenType, Info, Token}, error::error, parser::rules::{FnCall, PrintType}};
+use crate::{
+    error::error,
+    parser::rules::{FnCall, PrintType},
+    token::{Info, Token, TokenType},
+};
 
-use self::rules::{Expr, Lit, FnDef, Lambda, Loop, If};
-pub (crate) mod rules;
+use self::rules::{Expr, FnDef, If, Lambda, Lit, Loop};
+pub(crate) mod rules;
 
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
@@ -49,7 +53,7 @@ impl<'a> Parser<'a> {
     fn parse_from_token(&mut self) -> Option<Expr<'a>> {
         // advance in token stream - important especially for the first time each time we parse something
         // becuase token is set to nothing so this initializes token
-        
+
         // check if we ran out of tokens or are done parsing (if EOF is encountered)
         if self.tokens.is_empty() {
             error(0, "no self.tokens found");
@@ -59,7 +63,7 @@ impl<'a> Parser<'a> {
         }
         match self.token.token_type.clone() {
             // we have entered an expression
-            TokenType::LeftParen => self.parse_parenthissized(),
+            TokenType::LeftParen => Some(self.parse_parenthissized()),
             // we have entered a function
             TokenType::Potato => self.parse_function(),
             // TokenType::CodeBlockBegin => self.parse_function_body(),
@@ -67,35 +71,47 @@ impl<'a> Parser<'a> {
                 self.in_function = false;
                 None
             }
-            TokenType::RightParen => {
-                None
-            }
+            TokenType::RightParen => None,
             // parsing literals
-            TokenType::String { literal } => {
-                Some(Expr::new_literal(self.token.info, Lit::new_string(self.token.info, literal)))
-            }
-            TokenType::Number { literal } => {
-                Some(Expr::new_literal(self.token.info, Lit::new_number(self.token.info, literal)))
-            }
-            TokenType::Boolean { literal } => {
-                Some(Expr::new_literal(self.token.info, Lit::new_boolean(self.token.info, literal)))
-            }
-            TokenType::Hempty => {
-                Some(Expr::new_literal(self.token.info, Lit::new_hempty(self.token.info)))
-            }
+            TokenType::String { literal } => Some(Expr::new_literal(
+                self.token.info,
+                Lit::new_string(self.token.info, literal),
+            )),
+            TokenType::Number { literal } => Some(Expr::new_literal(
+                self.token.info,
+                Lit::new_number(self.token.info, literal),
+            )),
+            TokenType::Boolean { literal } => Some(Expr::new_literal(
+                self.token.info,
+                Lit::new_boolean(self.token.info, literal),
+            )),
+            TokenType::Hempty => Some(Expr::new_literal(
+                self.token.info,
+                Lit::new_hempty(self.token.info),
+            )),
             TokenType::Loop => Some(Expr::new_loop(self.token.info, self.parse_loop())),
             TokenType::If => Some(Expr::new_if(self.token.info, self.parse_if())),
-            TokenType::Break => if self.in_loop {
-                Some(Expr::new_break(self.token.info, self.parse_from_token()))
-            } else {
-                error(self.token.info.line, "break can only be used inside a loop");
-            },
-            TokenType::Continue => if self.in_loop {
-                Some(Expr::new_continue(self.token.info))
-            } else {
-                error(self.token.info.line, "continue can only be used inside a loop");
-            },
-            TokenType::Return {..} => Some(Expr::new_return(self.token.info, self.parse_from_token_advance())),
+            TokenType::Break => {
+                if self.in_loop {
+                    Some(Expr::new_break(self.token.info, self.parse_from_token()))
+                } else {
+                    error(self.token.info.line, "break can only be used inside a loop");
+                }
+            }
+            TokenType::Continue => {
+                if self.in_loop {
+                    Some(Expr::new_continue(self.token.info))
+                } else {
+                    error(
+                        self.token.info.line,
+                        "continue can only be used inside a loop",
+                    );
+                }
+            }
+            TokenType::Return { .. } => Some(Expr::new_return(
+                self.token.info,
+                self.parse_from_token_advance(),
+            )),
             // we hit a keyword
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 todo!("keyword: {:?}", keyword)
@@ -104,7 +120,6 @@ impl<'a> Parser<'a> {
                 todo!("keyword: {:?}", keyword)
             }
         }
-
     }
 
     fn parse_from_token_advance(&mut self) -> Option<Expr<'a>> {
@@ -112,7 +127,7 @@ impl<'a> Parser<'a> {
         self.parse_from_token()
     }
 
-    fn parse_parenthissized(&mut self) -> Option<Expr<'a>> {
+    fn parse_parenthissized(&mut self) -> Expr<'a> {
         println!("parse_parenthissized");
         // save the line number because the next token can be on the next line
         let start_line = self.token.info.line;
@@ -130,29 +145,26 @@ impl<'a> Parser<'a> {
         match self.token.token_type {
             TokenType::LessThanSymbol => {
                 println!("call parsed");
-                Some(Expr::new_call(
+                Expr::new_call(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     FnCall::new(
                         Info::new(self.file_path, start_line, self.token.info.line),
                         args,
                         PrintType::None,
                     ),
-                ))
-
-
-            } 
+                )
+            }
             TokenType::GreaterThanSymbol => {
                 // TODO: check if next token is a > if it is use PrintType::NoNewline
                 println!("call parsed");
-                Some(Expr::new_call(
+                Expr::new_call(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     FnCall::new(
                         Info::new(self.file_path, start_line, self.token.info.line),
                         args,
                         PrintType::Newline,
                     ),
-                ))
-
+                )
             }
             _ => {
                 // should never happen as this is caught in the advance method
@@ -171,24 +183,18 @@ impl<'a> Parser<'a> {
                     Info::new(self.file_path, start_line, self.token.info.line),
                     fn_def,
                 ))
-            },
-            TokenType::Number { .. } => {
-                let lambda = self.parse_function_body();
-                Some(Expr::new_lambda(
-                    Info::new(self.file_path, start_line, self.token.info.line),
-                    lambda,
-                ))
-            },
-            TokenType::Star | TokenType::CodeBlockBegin => {
-                let lambda = self.parse_function_body();
-                Some(Expr::new_lambda(
-                    Info::new(self.file_path, start_line, self.token.info.line),
-                    lambda,
-                ))
-            },
-            tt => {
-                error(self.token.info.line, format!("expected function name, number, * or ⧼ found {tt} in function defintion"))
             }
+            TokenType::Star | TokenType::CodeBlockBegin | TokenType::Number { .. } => {
+                let lambda = self.parse_function_body();
+                Some(Expr::new_lambda(
+                    Info::new(self.file_path, start_line, self.token.info.line),
+                    lambda,
+                ))
+            }
+            tt => error(
+                self.token.info.line,
+                format!("expected function name, number, * or ⧼ found {tt} in function defintion"),
+            ),
         }
     }
 
@@ -196,15 +202,13 @@ impl<'a> Parser<'a> {
         let start_line = self.token.info.line;
         self.advance("parsed_named_function");
         let body = match self.token.token_type.clone() {
-            TokenType::Number { .. } => {
+            TokenType::Number { .. } | TokenType::Star | TokenType::CodeBlockBegin => {
                 self.parse_function_body()
-            },
-            TokenType::Star | TokenType::CodeBlockBegin => {
-                self.parse_function_body()
-            },
-            tt => {
-                error(self.token.info.line, format!("expected number, * or ⧼ found {tt} in function defintion"))
             }
+            tt => error(
+                self.token.info.line,
+                format!("expected number, * or ⧼ found {tt} in function defintion"),
+            ),
         };
         println!("named function parsed");
         FnDef::new(
@@ -223,7 +227,10 @@ impl<'a> Parser<'a> {
                 extra_args = true;
                 self.advance("parse_function_body");
                 if self.token.token_type != TokenType::CodeBlockBegin {
-                    error(self.token.info.line, "Expected ⧼ after * in function definition");
+                    error(
+                        self.token.info.line,
+                        "Expected ⧼ after * in function definition",
+                    );
                 }
             }
             TokenType::Number { literal } => {
@@ -237,12 +244,21 @@ impl<'a> Parser<'a> {
                     self.advance("parse_function_body");
                 }
                 if self.token.token_type != TokenType::CodeBlockBegin {
-                    error(self.token.info.line, format!("Expected ⧼ after {} in function definition", if extra_args { "*" } else { "number" }));
+                    error(
+                        self.token.info.line,
+                        format!(
+                            "Expected ⧼ after {} in function definition",
+                            if extra_args { "*" } else { "number" }
+                        ),
+                    );
                 }
             }
             TokenType::CodeBlockBegin => {}
             _ => {
-                error(self.token.info.line, "Expected number, * or ⧼ in function definition");
+                error(
+                    self.token.info.line,
+                    "Expected number, * or ⧼ in function definition",
+                );
             }
         };
         let mut body = Vec::new();
@@ -265,11 +281,17 @@ impl<'a> Parser<'a> {
     fn parse_loop(&mut self) -> Loop<'a> {
         let start_line = self.token.info.line;
         self.advance("parse_loop");
-        if self.token.token_type!= TokenType::CodeBlockBegin {
-            error(start_line, format!("expected ⧼ after loop keyword found {}", self.token.token_type));
+        if self.token.token_type != TokenType::CodeBlockBegin {
+            error(
+                start_line,
+                format!(
+                    "expected ⧼ after loop keyword found {}",
+                    self.token.token_type
+                ),
+            );
         }
         let mut loop_exprs = vec![];
-        while  self.token.token_type!= TokenType::CodeBlockEnd {
+        while self.token.token_type != TokenType::CodeBlockEnd {
             if let Some(loop_expr) = self.parse_from_token_advance() {
                 loop_exprs.push(loop_expr);
             }
@@ -283,31 +305,25 @@ impl<'a> Parser<'a> {
     fn parse_if(&mut self) -> If<'a> {
         let start_line = self.token.info.line;
         self.advance("parse if");
-        if self.token.token_type!= TokenType::LeftBrace {
-
-        }
+        if self.token.token_type != TokenType::LeftBrace {}
         let cond = if let Some(expr) = self.parse_from_token_advance() {
             expr
         } else {
             error(self.token.info.line, "expected expression in conditonal")
         };
         self.advance("parse if");
-        if self.token.token_type!= TokenType::RightBrace {
-
-        }
+        if self.token.token_type != TokenType::RightBrace {}
         self.advance("parse if");
-        if self.token.token_type!= TokenType::CodeBlockBegin {
-
-        }
+        if self.token.token_type != TokenType::CodeBlockBegin {}
         let mut if_then_exprs = vec![];
-        while  self.token.token_type!= TokenType::CodeBlockEnd {
+        while self.token.token_type != TokenType::CodeBlockEnd {
             if let Some(if_then_expr) = self.parse_from_token_advance() {
                 if_then_exprs.push(if_then_expr);
             }
         }
 
         let mut else_exprs = vec![];
-        while  self.token.token_type!= TokenType::CodeBlockEnd {
+        while self.token.token_type != TokenType::CodeBlockEnd {
             if let Some(else_expr) = self.parse_from_token_advance() {
                 else_exprs.push(else_expr);
             }
@@ -319,8 +335,6 @@ impl<'a> Parser<'a> {
             else_exprs,
         )
     }
-
-    
 
     fn advance(&mut self, caller: &str) {
         match self.tokens[self.current_position].token_type {
@@ -361,7 +375,7 @@ impl<'a> Parser<'a> {
                 }
                 self.paren_count -= 1;
                 if !(vec![TokenType::GreaterThanSymbol, TokenType::LessThanSymbol]
-                        .contains(&self.tokens[self.current_position + 1].token_type))
+                    .contains(&self.tokens[self.current_position + 1].token_type))
                 {
                     error(
                         self.tokens[self.current_position].info.line,
@@ -383,7 +397,8 @@ impl<'a> Parser<'a> {
                 self.token = self.tokens[self.current_position].clone();
             }
             TokenType::GreaterThanSymbol | TokenType::LessThanSymbol => {
-                    self.token = self.tokens[self.current_position].clone();
+                // TODO: check if the last token was a parentheisis or in the case of > a parenthesis of >
+                self.token = self.tokens[self.current_position].clone();
             }
             _ => {
                 self.token = self.tokens[self.current_position].clone();
@@ -393,5 +408,3 @@ impl<'a> Parser<'a> {
         self.current_position += 1;
     }
 }
-
-
