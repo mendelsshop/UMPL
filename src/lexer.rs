@@ -58,7 +58,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn is_at_end(&self) -> bool {
-        (self.current) >= (self.source.chars().count())
+        (self.current) >= (self.text_buffer.chars().count())
     }
 
     fn scan_token<'b>(&mut self) -> Option<Token<'b>>
@@ -352,12 +352,12 @@ impl<'a> Lexer<'a> {
 
     fn advance(&mut self) -> char {
         self.current += 1;
-        let char_vec: Vec<char> = self.source.chars().collect();
+        let char_vec: Vec<char> = self.text_buffer.chars().collect();
         char_vec[self.current - 1]
     }
 
-    fn add_token(&mut self, token_type: TokenType) -> Token<'a> {
-        let text: std::str::Chars<'_> = self.source.chars();
+    fn add_token(&mut self, token_type: TokenType<'a>) -> Token<'a> {
+        let text: std::str::Chars<'_> = self.text_buffer.chars();
         let mut final_text: String = String::new();
         text.enumerate().for_each(|i| {
             if i.0 >= self.start && i.0 < self.current {
@@ -367,23 +367,21 @@ impl<'a> Lexer<'a> {
         Token::new(token_type, final_text.as_str(), self.get_info())
     }
 
-    fn add_unicode_token(&mut self, token_type: TokenType) -> Token<'a> {
-        let text: String = format!("{}", self.source.chars().nth(self.start).expect("Error"));
-        // self.token_list
-        //     .push(Token::new(token_type, &text, self.get_info()));
+    fn add_unicode_token(&mut self, token_type: TokenType<'a>) -> Token<'a> {
+        let text: String = format!("{}", self.text_buffer.chars().nth(self.start).expect("Error"));
         Token::new(token_type, &text, self.get_info())
     }
 
     fn peek(&self) -> char {
-        self.source.chars().nth(self.current).unwrap_or('\0')
+        self.text_buffer.chars().nth(self.current).unwrap_or('\0')
     }
 
     fn peek_next(&self) -> char {
-        self.source.chars().nth(self.current + 1).unwrap_or('\0')
+        self.text_buffer.chars().nth(self.current + 1).unwrap_or('\0')
     }
 
     fn get_text(&self) -> String {
-        let text: std::str::Chars<'_> = self.source.chars();
+        let text: std::str::Chars<'_> = self.text_buffer.chars();
         let mut final_text: String = String::new();
         text.enumerate().for_each(|i| {
             if i.0 >= self.start && i.0 < self.current {

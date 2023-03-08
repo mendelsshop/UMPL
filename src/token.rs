@@ -1,5 +1,5 @@
 use crate::{
-    error::{self, arg_error},
+    error::{self, arg_error}, parser::rules::new_parser::Expr,
     // eval::Eval,
     // lexer::Lexer,
     // parser::{
@@ -41,7 +41,7 @@ impl Display for Info<'_> {
 
 #[derive(PartialEq, Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum TokenType {
+pub enum TokenType<'a> {
     RightParen,
     LeftParen,
     GreaterThanSymbol,
@@ -82,7 +82,7 @@ pub enum TokenType {
     List,
     Car,
     Cdr,
-    Return { value: Option<Box<()>> },
+    Return { value: Option<Box<Expr<'a>>> },
     Colon,
     Break,
     Continue,
@@ -118,7 +118,7 @@ pub enum TokenType {
     Module,
 }
 
-impl TokenType {
+impl TokenType<'_> {
     // #[allow(clippy::too_many_lines)]
     // pub fn r#do(&self, args: &[LiteralType], line: u32, scope: &mut Eval) -> LiteralType {
     //     if crate::KEYWORDS.is_keyword(self) {
@@ -491,7 +491,7 @@ impl TokenType {
     // }
 }
 
-impl Display for TokenType {
+impl Display for TokenType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "TokenType {self:?}",)
     }
@@ -499,13 +499,13 @@ impl Display for TokenType {
 
 #[derive(PartialEq, Clone)]
 pub struct Token<'a> {
-    pub token_type: TokenType,
+    pub token_type: TokenType<'a>,
     pub lexeme: String,
     pub info: Info<'a>,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(token_type: TokenType, lexeme: &str, info: Info<'a>) -> Self {
+    pub fn new(token_type: TokenType<'a>, lexeme: &str, info: Info<'a>) -> Self {
         Self {
             token_type,
             lexeme: lexeme.to_string(),

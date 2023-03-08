@@ -2,15 +2,15 @@ use std::collections::HashMap;
 
 use crate::token::TokenType;
 #[derive(PartialEq, Clone)]
-pub struct Keyword {
-    pub keywords: HashMap<String, TokenType>,
+pub struct Keyword<'a> {
+    pub keywords: HashMap<String, TokenType<'a>>,
 }
 
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
-impl Keyword {
+impl Keyword<'_> {
     pub fn new() -> Self {
         let num = unsafe { crate::cli::TOGGLE_CASE };
-        let mut keywords: HashMap<String, TokenType> = HashMap::new();
+        let mut keywords: HashMap<String, TokenType<'_>> = HashMap::new();
         keywords.insert("plus".to_string(), TokenType::Plus);
         keywords.insert("minus".to_string(), TokenType::Minus);
         keywords.insert("multiply".to_string(), TokenType::Multiply);
@@ -71,15 +71,15 @@ impl Keyword {
         Self { keywords }
     }
 
-    pub fn get(&self, name: &str) -> Option<TokenType> {
+    pub fn get(&self, name: &str) -> Option<TokenType<'_>> {
         self.keywords.get(name).cloned()
     }
 
-    pub fn is_keyword(&self, token_type: &TokenType) -> bool {
+    pub fn is_keyword(&self, token_type: &TokenType<'_>) -> bool {
         self.keywords.values().any(|val| val == token_type)
     }
 }
-impl Default for Keyword {
+impl Default for Keyword<'_> {
     fn default() -> Self {
         Self::new()
     }
