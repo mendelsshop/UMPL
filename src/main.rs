@@ -6,7 +6,9 @@ use std::{
     path::Path,
     process::exit,
 };
-use umpl::{cli, error, eval::Eval, lexer::Lexer, parser::rules::new_parser::Parser};
+use umpl::{cli, error, 
+    // eval::Eval,
+     lexer::Lexer, parser::rules::new_parser::Parser};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
