@@ -4,7 +4,7 @@ use crate::{
     token::{Info, Token, TokenType},
 };
 
-use self::rules::{Expr, FnDef, If, Lambda, List, Lit, Loop, Var};
+use self::rules::{Expr, FnDef, Ident, IdentType, If, Lambda, List, Lit, Loop, Var};
 pub(crate) mod rules;
 
 pub struct Parser<'a> {
@@ -67,11 +67,7 @@ impl<'a> Parser<'a> {
             // we have entered a function
             TokenType::Potato => self.parse_function(),
             // TokenType::CodeBlockBegin => self.parse_function_body(),
-            TokenType::CodeBlockEnd => {
-                self.in_function = false;
-                None
-            }
-            TokenType::RightParen => None,
+            TokenType::CodeBlockEnd | TokenType::RightParen => None,
             // parsing literals
             TokenType::String { literal } => Some(Expr::new_literal(
                 self.token.info,
@@ -133,17 +129,31 @@ impl<'a> Parser<'a> {
                         } else {
                             error(
                                 self.token.info.line,
-                                format!("expected expression after for variable {}", name),
+                                format!("expected expression after for variable {name}"),
                             );
                         },
                     ),
                 ))
             }
-            TokenType::Identifier { name } => Some(Expr::new_identifier(self.token.info, name)),
+            TokenType::Identifier { name } => Some(Expr::new_identifier(
+                self.token.info,
+                Ident::new(self.token.info, IdentType::Var(name)),
+            )),
+            // built in functions
+            TokenType::BuiltinFunction(name) => Some(Expr::new_identifier(
+                self.token.info,
+                Ident::new(self.token.info, IdentType::Builtin(name)),
+            )),
+            // fn identifiers
+            TokenType::FunctionIdentifier { name } => Some(Expr::new_identifier(
+                self.token.info,
+                Ident::new(self.token.info, IdentType::FnIdent(name)),
+            )),
             // we hit a keyword
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 todo!("keyword: {:?}", keyword)
             }
+            // we hit a function
             keyword => {
                 todo!("keyword: {:?}", keyword)
             }
@@ -156,7 +166,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_parenthissized(&mut self) -> Expr<'a> {
-        println!("parse_parenthissized");
+        // println!("parse_parenthissized");
         // save the line number because the next token can be on the next line
         let start_line = self.token.info.line;
         let mut args = Vec::new();
@@ -169,10 +179,10 @@ impl<'a> Parser<'a> {
         }
         // check printing indicator (<) no print (>) print (>>) print no newline
         self.advance("parse_parenthissized - looking for printing indicator");
-        println!("printing indicator: {:?}", self.token);
+        // println!("printing indicator: {:?}", self.token);
         match self.token.token_type {
             TokenType::LessThanSymbol => {
-                println!("call parsed");
+                // println!("call parsed");
                 Expr::new_call(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     FnCall::new(
@@ -184,7 +194,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::GreaterThanSymbol => {
                 // TODO: check if next token is a > if it is use PrintType::NoNewline
-                println!("call parsed");
+                // println!("call parsed");
                 Expr::new_call(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     FnCall::new(
@@ -238,7 +248,7 @@ impl<'a> Parser<'a> {
                 format!("expected number, * or ⧼ found {tt} in function defintion"),
             ),
         };
-        println!("named function parsed");
+        // println!("named function parsed");
         FnDef::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             name,
@@ -297,7 +307,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.in_function = false;
-        println!("lambda parsed");
+        // println!("lambda parsed");
         Lambda::new(
             Info::new(self.file_path, self.token.info.line, self.token.info.line),
             arg_count,
@@ -320,10 +330,12 @@ impl<'a> Parser<'a> {
         }
         let mut loop_exprs = vec![];
         while self.token.token_type != TokenType::CodeBlockEnd {
+            self.in_loop = true;
             if let Some(loop_expr) = self.parse_from_token_advance() {
                 loop_exprs.push(loop_expr);
             }
         }
+        self.in_loop = false;
         Loop::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             loop_exprs,
@@ -444,7 +456,7 @@ impl<'a> Parser<'a> {
             cdr,
         );
     }
-
+    #[allow(unused_variables)]
     fn advance(&mut self, caller: &str) {
         match self.tokens[self.current_position].token_type {
             TokenType::Return { .. } => {
@@ -513,7 +525,7 @@ impl<'a> Parser<'a> {
                 self.token = self.tokens[self.current_position].clone();
             }
         };
-        println!("token: {:?} caller: {}", self.token, caller);
+        // println!("token: {:?} caller: {}", self.token, caller);
         self.current_position += 1;
     }
 }

@@ -93,12 +93,12 @@ fn main() {
 fn run(line: &str, name: &str) {
     let lexer: Lexer = Lexer::new(line, name);
     let lexed = lexer.scan_tokens();
-    println!("{:#?}", lexed);
+    // println!("{:#?}", lexed);
     let mut parsed: Parser = Parser::new(lexed, name);
     let parsed = parsed.parse();
     // println!("{:#?}", parsed);
-    for expr in parsed {
-        println!("{}", expr);
+    for _expr in parsed {
+        // println!("{}", expr);
     }
     // Eval::new(parsed);
 }

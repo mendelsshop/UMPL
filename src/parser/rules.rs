@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Display};
 
-use crate::token::Info;
+use crate::token::{BuiltinFunction, Info};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr<'a> {
@@ -19,7 +19,7 @@ pub enum ExprType<'a> {
     Lambda(Lambda<'a>),
     Return(Box<Expr<'a>>),
     Break(Box<Expr<'a>>),
-    Identifier(String),
+    Identifier(Ident<'a>),
     Continue,
 }
 
@@ -105,7 +105,7 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub const fn new_identifier(info: Info<'a>, value: String) -> Self {
+    pub const fn new_identifier(info: Info<'a>, value: Ident<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Identifier(value),
@@ -423,5 +423,40 @@ impl<'a> Var<'a> {
 impl<'a> Display for Var<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "var {} = {} [{}]", self.name, self.value, self.info)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdentType {
+    Var(String),
+    FnIdent(String),
+    Builtin(BuiltinFunction),
+}
+
+impl Display for IdentType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Var(name) => write!(f, "var {name}"),
+            Self::FnIdent(name) => write!(f, "defined function {name}"),
+            Self::Builtin(builtin) => write!(f, "builtin function {builtin}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ident<'a> {
+    pub info: Info<'a>,
+    pub ident_type: IdentType,
+}
+
+impl<'a> Ident<'a> {
+    pub const fn new(info: Info<'a>, ident_type: IdentType) -> Self {
+        Self { info, ident_type }
+    }
+}
+
+impl<'a> Display for Ident<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} [{}]", self.ident_type, self.info)
     }
 }

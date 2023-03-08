@@ -4,7 +4,7 @@ loop ⧼ ! create a loop with the loop keyword followed by ⧼ ⧽ which is were
     potato 🍕 1* ⧼
         ($1)>
     ⧽
-    ((new 🍕 t 0 5 6))<
-    ((addwith t 1))<
+    (new 🍕 t 0 5 6)<
+    (addwith t 1)<
     break
 ⧽

@@ -322,13 +322,14 @@ impl<'a> Lexer<'a> {
                 );
             }
         } else {
-            self.add_token(
-                crate::KEYWORDS
-                    .get(&self.get_text())
-                    .unwrap_or(TokenType::Identifier {
-                        name: self.get_text(),
-                    }),
-            )
+            let text = self.get_text();
+            if let Some(token) = crate::KEYWORDS.string_is_builtin_function(&text) {
+                self.add_token(TokenType::BuiltinFunction(token))
+            } else if let Some(token) = crate::KEYWORDS.string_is_keyword(&text) {
+                self.add_token(token)
+            } else {
+                self.add_token(TokenType::Identifier { name: text })
+            }
         }
     }
 

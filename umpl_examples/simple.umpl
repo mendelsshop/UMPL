@@ -34,13 +34,13 @@ if {true} ⧼ ! if true create a code block (⧼) ends with (⧽)
 ⧽ else ⧼
     (`Hello World`)> ! else print the string Hello World (`Hello World`)>
 ⧽
-create file with ((open `test.txt`))>
+create file with (open `test.txt`)>
 (`asddff\n`)>
-list z with [((read file))> true]
+list z with [(read file)> true]
 ! currently two things cannot have acces to the a variable that holds a file so when we read the file that takes ownership of the file, and can't be accessed anymore,
 ! so the following line will throw an error that it could not find the variable file
-create a with ((readline file 2))>
+create a with (readline file 2)>
 (z.car)>
 (a)>
 (a)>
-((writeline file `ssdffd\n` 1  `a`))>
+(writeline file `ssdffd\n` 1  `a`)>

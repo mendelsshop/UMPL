@@ -41,30 +41,12 @@ pub enum TokenType<'a> {
     LeftBrace,
     CodeBlockBegin,
     CodeBlockEnd,
-    Plus,
-    Minus,
-    Divide,
-    Multiply,
-    Equal,
-    NotEqual,
-    GreaterEqual,
-    LessEqual,
-    GreaterThan,
-    LessThan,
-    And,
-    Or,
-    Not,
     Identifier { name: String },
     FunctionIdentifier { name: String },
     String { literal: String },
     Number { literal: f64 },
     Create,
     With,
-    Set,
-    AddWith,
-    SubtractWith,
-    DivideWith,
-    MultiplyWith,
     List,
     Car,
     Cdr,
@@ -78,10 +60,16 @@ pub enum TokenType<'a> {
     Else,
     Hempty,
     Boolean { literal: bool },
-    Input,
-    New,
     Function,
     FunctionArgument { name: String },
+    EOF,
+    Program,
+    BuiltinFunction(BuiltinFunction),
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+
+pub enum BuiltinFunction {
     StrToNum,
     StrToBool,
     StrToHempty,
@@ -93,8 +81,6 @@ pub enum TokenType<'a> {
     ReadLine,
     Exit,
     Error,
-    EOF,
-    Program,
     Delete,
     SplitOn,
     WriteLine,
@@ -102,6 +88,26 @@ pub enum TokenType<'a> {
     DeleteFile,
     Type,
     Module,
+    Input,
+    Plus,
+    Minus,
+    Divide,
+    Multiply,
+    Equal,
+    NotEqual,
+    GreaterEqual,
+    LessEqual,
+    GreaterThan,
+    LessThan,
+    And,
+    Or,
+    Not,
+    New,
+    Set,
+    AddWith,
+    SubtractWith,
+    DivideWith,
+    MultiplyWith,
 }
 
 impl TokenType<'_> {
@@ -479,7 +485,16 @@ impl TokenType<'_> {
 
 impl Display for TokenType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TokenType {self:?}",)
+        match self {
+            TokenType::BuiltinFunction(builtinfn) => write!(f, "{builtinfn}"),
+            _ => write!(f, "{self:?}"),
+        }
+    }
+}
+
+impl Display for BuiltinFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BuiltinFunction {self:?}",)
     }
 }
 

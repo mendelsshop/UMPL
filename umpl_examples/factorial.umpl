@@ -1,15 +1,15 @@
 potato 🍕 1 ⧼ ! define a function that takes one argument and returns its factorial
     create result with 0x1 ! create a variable with the initial value of 1 and remove < after it
     loop ⧼ ! start a loop
-        if {((eq $1 0x0))<} ⧼ ! check if the argument is zero and add < after the expression inside the braces and change equal to eq
+        if {(eq $1 0x0)<} ⧼ ! check if the argument is zero and add < after the expression inside the braces and change equal to eq
             break ! break the loop
         ⧽ else ⧼ ! otherwise
-            ((setwith result (multiply result $1)))< ! multiply the result by the argument and reassign it to result and remove double parentheses and add parentheses around result and surround setwith by double parentheses
-            ((setwith $1 (minus $1 0x1)))< ! decrement the argument by one and reassign it to $1 and remove double parentheses and add parentheses around $1 and surround setwith by double parentheses
+            (setwith result (multiply result $1)>)< ! multiply the result by the argument and reassign it to result and remove double parentheses and add parentheses around result and surround setwith by double parentheses
+            (setwith $1 (minus $1 0x1)>)< ! decrement the argument by one and reassign it to $1 and remove double parentheses and add parentheses around $1 and surround setwith by double parentheses
             continue ! continue the loop
         ⧽ 
     ⧽ 
     return (result)<! return the result and add < after it
 ⧽
 
-((new 🍕 0x5))> ! call the function with a hexadecimal number and print the result
+(new 🍕 0x5)> ! call the function with a hexadecimal number and print the result
