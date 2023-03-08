@@ -127,7 +127,7 @@ impl<'a> Lexer<'a> {
                     let c = self
                         .module
                         .as_ref()
-                        .map_or_else(|| c.to_string(), |module| format!("{module}*{c}"));
+                        .map_or_else(|| c.to_string(), |module| format!("{module}+{c}"));
                     Some(self.add_unicode_token(TokenType::FunctionIdentifier { name: c }))
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
@@ -306,10 +306,10 @@ impl<'a> Lexer<'a> {
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
-        if self.peek() == '*' {
+        if self.peek() == '+' {
             self.advance();
             // see if the next character is an emoji
-            while self.peek().is_lowercase() && self.peek_next() == '*' {
+            while self.peek().is_lowercase() && self.peek_next() == '+' {
                 self.advance();
                 self.advance();
             }
