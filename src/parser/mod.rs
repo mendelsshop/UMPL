@@ -17,12 +17,31 @@ pub struct Parser<'a> {
     paren_count: usize,
     weird_bracket_count: usize,
     file_path: &'a str,
+    in_stopper: bool,
 }
 static START_TOKEN: Token<'static> = Token {
     token_type: TokenType::EOF,
     info: Info::new("", 0, 0),
     lexeme: String::new(),
 };
+
+macro_rules! parse_break_return {
+    ($self:ident, $ok:expr, $new_method:ident, $err1:expr, $err2:expr) => {
+        if $ok {
+            $self.in_stopper = true;
+            let expr = Some(Expr::$new_method(
+                $self.token.info,
+                $self
+                    .parse_from_token_advance()
+                    .unwrap_or_else(|| error($self.token.info.line, $err1)),
+            ));
+            $self.in_stopper = false;
+            expr
+        } else {
+            error($self.token.info.line, $err2);
+        }
+    };
+}
 
 type Module<'a> = Vec<Expr<'a>>;
 impl<'a> Parser<'a> {
@@ -37,6 +56,7 @@ impl<'a> Parser<'a> {
             paren_count: 0,
             weird_bracket_count: 0,
             file_path,
+            in_stopper: false,
         }
     }
 
@@ -88,11 +108,13 @@ impl<'a> Parser<'a> {
             TokenType::Loop => Some(Expr::new_loop(self.token.info, self.parse_loop())),
             TokenType::If => Some(Expr::new_if(self.token.info, self.parse_if())),
             TokenType::Break => {
-                if self.in_loop {
-                    Some(Expr::new_break(self.token.info, self.parse_from_token()))
-                } else {
-                    error(self.token.info.line, "break can only be used inside a loop");
-                }
+                parse_break_return!(
+                    self,
+                    self.in_loop,
+                    new_break,
+                    "expected expression after break keyword",
+                    "break can only be used inside a loop"
+                )
             }
             TokenType::Continue => {
                 if self.in_loop {
@@ -104,37 +126,17 @@ impl<'a> Parser<'a> {
                     );
                 }
             }
-            TokenType::Return { .. } => Some(Expr::new_return(
-                self.token.info,
-                self.parse_from_token_advance(),
-            )),
-            TokenType::List => Some(self.parse_list()),
-            TokenType::Create => {
-                self.advance("parse_from_token - create");
-                let name = match self.token.token_type.clone() {
-                    TokenType::Identifier { name } => name,
-                    _ => error(self.token.info.line, "expected identifier after create"),
-                };
-                self.advance("parse_from_token - create");
-                if self.token.token_type.clone() != TokenType::With {
-                    error(self.token.info.line, "expected with after create");
-                }
-                Some(Expr::new_var(
-                    self.token.info,
-                    Var::new(
-                        self.token.info,
-                        name.clone(),
-                        if let Some(s) = self.parse_from_token_advance() {
-                            s
-                        } else {
-                            error(
-                                self.token.info.line,
-                                format!("expected expression after for variable {name}"),
-                            );
-                        },
-                    ),
-                ))
+            TokenType::Return { .. } => {
+                parse_break_return!(
+                    self,
+                    self.in_function,
+                    new_return,
+                    "expected expression after return keyword",
+                    "return can only be used inside a function"
+                )
             }
+            TokenType::List => Some(self.parse_list()),
+            TokenType::Create => Some(self.parse_var()),
             TokenType::Identifier { name } => Some(Expr::new_identifier(
                 self.token.info,
                 Ident::new(self.token.info, IdentType::Var(name)),
@@ -149,6 +151,11 @@ impl<'a> Parser<'a> {
                 self.token.info,
                 Ident::new(self.token.info, IdentType::FnIdent(name)),
             )),
+            // return/break without expression
+            TokenType::QuestionMark if self.in_stopper => Some(Expr::new_literal(
+                self.token.info,
+                Lit::new_hempty(self.token.info),
+            )),
             // we hit a keyword
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 todo!("keyword: {:?}", keyword)
@@ -160,41 +167,61 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_var(&mut self) -> Expr<'a> {
+        self.advance("parse_from_token - create");
+        let name = match self.token.token_type.clone() {
+            TokenType::Identifier { name } => name,
+            _ => error(self.token.info.line, "expected identifier after create"),
+        };
+        self.check_next(
+            "expected with after create",
+            &TokenType::With,
+            "parse_from_token - create",
+        );
+        Expr::new_var(
+            self.token.info,
+            Var::new(
+                self.token.info,
+                name.clone(),
+                if let Some(s) = self.parse_from_token_advance() {
+                    s
+                } else {
+                    error(
+                        self.token.info.line,
+                        format!("expected expression after for variable {name}"),
+                    );
+                },
+            ),
+        )
+    }
+
     fn parse_from_token_advance(&mut self) -> Option<Expr<'a>> {
         self.advance("parse_from_token - start");
         self.parse_from_token()
     }
 
     fn parse_parenthissized(&mut self) -> Expr<'a> {
-        // println!("parse_parenthissized");
         // save the line number because the next token can be on the next line
         let start_line = self.token.info.line;
         let mut args = Vec::new();
-        // self.advance("parse_parenthissized - start looking for args");
         while self.token.token_type != TokenType::RightParen {
             if let Some(token) = self.parse_from_token_advance() {
                 args.push(token);
             }
-            // self.advance("parse_parenthissized - looking for args");
         }
         // check printing indicator (<) no print (>) print (>>) print no newline
         self.advance("parse_parenthissized - looking for printing indicator");
-        // println!("printing indicator: {:?}", self.token);
         match self.token.token_type {
-            TokenType::LessThanSymbol => {
-                // println!("call parsed");
-                Expr::new_call(
+            TokenType::LessThanSymbol => Expr::new_call(
+                Info::new(self.file_path, start_line, self.token.info.line),
+                FnCall::new(
                     Info::new(self.file_path, start_line, self.token.info.line),
-                    FnCall::new(
-                        Info::new(self.file_path, start_line, self.token.info.line),
-                        args,
-                        PrintType::None,
-                    ),
-                )
-            }
+                    args,
+                    PrintType::None,
+                ),
+            ),
             TokenType::GreaterThanSymbol => {
                 // TODO: check if next token is a > if it is use PrintType::NoNewline
-                // println!("call parsed");
                 Expr::new_call(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     FnCall::new(
@@ -256,7 +283,6 @@ impl<'a> Parser<'a> {
                 format!("expected number, * or ⧼ found {tt} in function defintion"),
             ),
         };
-        // println!("named function parsed");
         FnDef::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             name,
@@ -271,33 +297,29 @@ impl<'a> Parser<'a> {
         match self.token.token_type {
             TokenType::Star => {
                 extra_args = true;
-                self.advance("parse_function_body");
-                if self.token.token_type != TokenType::CodeBlockBegin {
-                    error(
-                        self.token.info.line,
-                        "Expected ⧼ after * in function definition",
-                    );
-                }
+                self.check_next(
+                    "Expected ⧼ after * in function definition",
+                    &TokenType::CodeBlockBegin,
+                    "parse_function_body",
+                );
             }
             TokenType::Number { literal } => {
                 if literal.round() != literal {
                     error(self.token.info.line, "Expected integer number of arguments");
                 }
                 arg_count = literal as usize;
-                self.advance("parse_function_body");
-                if self.token.token_type == TokenType::Star {
+                if self.peek().token_type == TokenType::Star {
                     extra_args = true;
                     self.advance("parse_function_body");
                 }
-                if self.token.token_type != TokenType::CodeBlockBegin {
-                    error(
-                        self.token.info.line,
-                        format!(
-                            "Expected ⧼ after {} in function definition",
-                            if extra_args { "*" } else { "number" }
-                        ),
-                    );
-                }
+                self.check_next(
+                    &format!(
+                        "Expected ⧼ after {} in function definition",
+                        if extra_args { "*" } else { "number" }
+                    ),
+                    &TokenType::CodeBlockBegin,
+                    "parse_function_body",
+                );
             }
             TokenType::CodeBlockBegin => {}
             _ => {
@@ -307,15 +329,9 @@ impl<'a> Parser<'a> {
                 );
             }
         };
-        let mut body = Vec::new();
-        while self.token.token_type != TokenType::CodeBlockEnd {
-            self.in_function = true;
-            if let Some(expr) = self.parse_from_token_advance() {
-                body.push(expr);
-            }
-        }
+        self.in_function = true;
+        let body = self.parse_list_exprs();
         self.in_function = false;
-        // println!("lambda parsed");
         Lambda::new(
             Info::new(self.file_path, self.token.info.line, self.token.info.line),
             arg_count,
@@ -326,24 +342,15 @@ impl<'a> Parser<'a> {
 
     fn parse_loop(&mut self) -> Loop<'a> {
         let start_line = self.token.info.line;
-        self.advance("parse_loop");
-        if self.token.token_type != TokenType::CodeBlockBegin {
-            error(
-                start_line,
-                format!(
-                    "expected ⧼ after loop keyword found {}",
-                    self.token.token_type
-                ),
-            );
-        }
-        let mut loop_exprs = vec![];
-        while self.token.token_type != TokenType::CodeBlockEnd {
-            self.in_loop = true;
-            if let Some(loop_expr) = self.parse_from_token_advance() {
-                loop_exprs.push(loop_expr);
-            }
-        }
+        self.check_next(
+            "expected ⧼ after loop keyword found",
+            &TokenType::CodeBlockBegin,
+            "parse_loop",
+        );
+        self.in_loop = true;
+        let loop_exprs = self.parse_list_exprs();
         self.in_loop = false;
+        println!("loop parsed");
         Loop::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             loop_exprs,
@@ -352,36 +359,55 @@ impl<'a> Parser<'a> {
 
     fn parse_if(&mut self) -> If<'a> {
         let start_line = self.token.info.line;
-        self.advance("parse if");
-        if self.token.token_type != TokenType::LeftBrace {}
+        self.check_next(
+            "expected {{ after if keyword",
+            &TokenType::LeftBrace,
+            "parse if",
+        );
         let cond = if let Some(expr) = self.parse_from_token_advance() {
             expr
         } else {
             error(self.token.info.line, "expected expression in conditonal")
         };
-        self.advance("parse if");
-        if self.token.token_type != TokenType::RightBrace {}
-        self.advance("parse if");
-        if self.token.token_type != TokenType::CodeBlockBegin {}
-        let mut if_then_exprs = vec![];
-        while self.token.token_type != TokenType::CodeBlockEnd {
-            if let Some(if_then_expr) = self.parse_from_token_advance() {
-                if_then_exprs.push(if_then_expr);
-            }
-        }
-
-        let mut else_exprs = vec![];
-        while self.token.token_type != TokenType::CodeBlockEnd {
-            if let Some(else_expr) = self.parse_from_token_advance() {
-                else_exprs.push(else_expr);
-            }
-        }
+        self.check_next(
+            "expected }} after conditional expression",
+            &TokenType::RightBrace,
+            "parse if",
+        );
+        self.check_next(
+            "expected ⧼ after conditional expression",
+            &TokenType::CodeBlockBegin,
+            "parse if",
+        );
+        let if_then_exprs = self.parse_list_exprs();
+        // check if there is an else block
+        self.check_next(
+            "expected ⧼ after conditional expression",
+            &TokenType::Else,
+            "parse if - else",
+        );
+        self.check_next(
+            "expected ⧼ after conditional expression",
+            &TokenType::CodeBlockBegin,
+            "parse if - else",
+        );
+        let else_exprs = self.parse_list_exprs();
         If::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             cond,
             if_then_exprs,
             else_exprs,
         )
+    }
+
+    fn check_next(&mut self, message: &str, token_type: &TokenType<'_>, advancer: &str) {
+        self.advance(advancer);
+        if &self.token.token_type != token_type {
+            error(
+                self.token.info.line,
+                format!("{} found {}", message, self.token.token_type),
+            );
+        }
     }
 
     fn parse_list(&mut self) -> Expr<'a> {
@@ -393,26 +419,16 @@ impl<'a> Parser<'a> {
                 self.parse_list_inner(),
             ),
             TokenType::Identifier { name } => {
-                self.advance("parse list");
-                if self.token.token_type != TokenType::With {
-                    error(
-                        self.token.info.line,
-                        format!(
-                            "expected with keyword after list identifier found {}",
-                            self.token.token_type
-                        ),
-                    );
-                }
-                self.advance("parse list");
-                if self.token.token_type != TokenType::LeftBracket {
-                    error(
-                        self.token.info.line,
-                        format!(
-                            "expected [ after with keyword found {}",
-                            self.token.token_type
-                        ),
-                    );
-                }
+                self.check_next(
+                    "expected with keyword after list identifier",
+                    &TokenType::With,
+                    "parse list",
+                );
+                self.check_next(
+                    "expected [ after with keyword",
+                    &TokenType::LeftBracket,
+                    "parse list",
+                );
                 Expr::new_var(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     Var::new(
@@ -451,19 +467,33 @@ impl<'a> Parser<'a> {
         } else {
             error(self.token.info.line, "expected expression in list")
         };
-        self.advance("parse list inner");
-        if self.token.token_type != TokenType::RightBracket {
-            error(
-                self.token.info.line,
-                format!("expected ] after list item found {}", self.token.token_type),
-            );
-        }
+        self.check_next(
+            "expected ] after list item",
+            &TokenType::RightBracket,
+            "parse list inner",
+        );
         return List::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             car,
             cdr,
         );
     }
+
+    fn parse_list_exprs(&mut self) -> Vec<Expr<'a>> {
+        let mut exprs = vec![];
+        let in_loop = self.in_loop;
+        let in_function = self.in_function;
+        while self.peek().token_type != TokenType::CodeBlockEnd {
+            self.in_loop = in_loop;
+            self.in_function = in_function;
+            if let Some(expr) = self.parse_from_token_advance() {
+                exprs.push(expr);
+            }
+        }
+        self.advance("parse list exprs");
+        exprs
+    }
+
     #[allow(unused_variables)]
     fn advance(&mut self, caller: &str) {
         match self.tokens[self.current_position].token_type {
@@ -503,8 +533,9 @@ impl<'a> Parser<'a> {
                     );
                 }
                 self.paren_count -= 1;
-                if !(vec![TokenType::GreaterThanSymbol, TokenType::LessThanSymbol]
-                    .contains(&self.tokens[self.current_position + 1].token_type))
+
+                if ![TokenType::GreaterThanSymbol, TokenType::LessThanSymbol]
+                    .contains(&self.tokens[self.current_position + 1].token_type)
                 {
                     error(
                         self.tokens[self.current_position].info.line,
@@ -533,7 +564,11 @@ impl<'a> Parser<'a> {
                 self.token = self.tokens[self.current_position].clone();
             }
         };
-        // println!("token: {:?} caller: {}", self.token, caller);
+        println!("token: {:?} caller: {}", self.token, caller);
         self.current_position += 1;
+    }
+
+    fn peek(&self) -> &Token<'a> {
+        &self.tokens[self.current_position]
     }
 }

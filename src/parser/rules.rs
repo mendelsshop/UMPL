@@ -80,21 +80,17 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn new_return(info: Info<'a>, value: Option<Expr<'a>>) -> Self {
+    pub fn new_return(info: Info<'a>, value: Expr<'a>) -> Self {
         Self {
             info,
-            expr: ExprType::Return(Box::new(
-                value.unwrap_or_else(|| Expr::new_literal(info, Lit::new_hempty(info))),
-            )),
+            expr: ExprType::Return(Box::new(value)),
         }
     }
 
-    pub fn new_break(info: Info<'a>, value: Option<Expr<'a>>) -> Self {
+    pub fn new_break(info: Info<'a>, value: Expr<'a>) -> Self {
         Self {
             info,
-            expr: ExprType::Break(Box::new(
-                value.unwrap_or_else(|| Expr::new_literal(info, Lit::new_hempty(info))),
-            )),
+            expr: ExprType::Break(Box::new(value)),
         }
     }
 

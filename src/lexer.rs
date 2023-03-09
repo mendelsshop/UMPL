@@ -102,6 +102,7 @@ impl<'a> Lexer<'a> {
             '`' => Some(self.string()),
             '$' => Some(self.function_agument()),
             '*' => Some(self.add_token(TokenType::Star)),
+            '?' => Some(self.add_token(TokenType::QuestionMark)),
             c => {
                 if c.is_lowercase() || c == '-' {
                     if c == 't' || c == 'f' {

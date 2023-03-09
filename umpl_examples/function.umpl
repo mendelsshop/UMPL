@@ -2,7 +2,7 @@ potato 😀 2 ⧼ ! to create a custom function first we use the potato keyword 
 ! then we add the name of the function and the number of arguments that the function will take.
     (`HELLO`)> ! prints HELLO
     ($1)> ! to acces function args we use $1 for the first args and so on
-    create z with (plus 0xA9 $1 $2)< ! new variable z with the value of the sum of the first two arguments and 169 (0xA9 in hex)
+    create z with ((plus 0xA9 $1 $2)>)< ! new variable z with the value of the sum of the first two arguments and 169 (0xA9 in hex)
     (z)> ! prints z
     return z ! at the end we return z notice there is no colon b/c were returning something
 ⧽

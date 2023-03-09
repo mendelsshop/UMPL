@@ -64,6 +64,7 @@ pub enum TokenType<'a> {
     FunctionArgument { name: String },
     EOF,
     Program,
+    QuestionMark,
     BuiltinFunction(BuiltinFunction),
 }
 
