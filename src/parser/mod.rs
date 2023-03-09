@@ -89,15 +89,15 @@ impl<'a> Parser<'a> {
             // TokenType::CodeBlockBegin => self.parse_function_body(),
             TokenType::CodeBlockEnd | TokenType::RightParen => None,
             // parsing literals
-            TokenType::String { literal } => Some(Expr::new_literal(
+            TokenType::String (literal) => Some(Expr::new_literal(
                 self.token.info,
                 Lit::new_string(self.token.info, literal),
             )),
-            TokenType::Number { literal } => Some(Expr::new_literal(
+            TokenType::Number (literal) => Some(Expr::new_literal(
                 self.token.info,
                 Lit::new_number(self.token.info, literal),
             )),
-            TokenType::Boolean { literal } => Some(Expr::new_literal(
+            TokenType::Boolean (literal) => Some(Expr::new_literal(
                 self.token.info,
                 Lit::new_boolean(self.token.info, literal),
             )),
@@ -137,20 +137,71 @@ impl<'a> Parser<'a> {
             }
             TokenType::List => Some(self.parse_list()),
             TokenType::Create => Some(self.parse_var()),
-            TokenType::Identifier { name } => Some(Expr::new_identifier(
+            TokenType::Identifier (mut name ) => {
+            // TODO: check for car and cdr
+            while self.peek().token_type == TokenType::Dot {
+                self.advance("parse_from_token - dot");
+                self.advance("parse_from_token - dot looking for car or cdr");
+                match self.token.token_type.clone() {
+                    TokenType::Car => {
+                        name.push_str(".car");
+                    }
+                    TokenType::Cdr => {
+                        name.push_str(".cdr");
+
+                    }
+                    tt => {
+                        error(
+                            self.token.info.line,
+                            &format!("expected car or cdr after dot, found {}", tt)
+                        );
+                    }
+                }
+            }
+            Some(Expr::new_identifier(
                 self.token.info,
                 Ident::new(self.token.info, IdentType::Var(name)),
-            )),
+            ))},
             // built in functions
             TokenType::BuiltinFunction(name) => Some(Expr::new_identifier(
                 self.token.info,
                 Ident::new(self.token.info, IdentType::Builtin(name)),
             )),
             // fn identifiers
-            TokenType::FunctionIdentifier { name } => Some(Expr::new_identifier(
+            TokenType::FunctionIdentifier (name) => Some(Expr::new_identifier(
                 self.token.info,
                 Ident::new(self.token.info, IdentType::FnIdent(name)),
             )),
+            TokenType::ModuleIdentifier(m) => {
+                // advance tokens until function identifier is reached
+                // each module identifier is followed by a plus sign
+                let mut module_name = String::new();
+                self.check_next("expected plus symbol after module identifier", &TokenType::PlusSymbol, "parse_from_token - module identifier");
+                self.advance("parse_from_token - module identifier");
+                module_name.push_str(&format!("{m}+"));
+                while!self.tokens.is_empty() && self.peek().token_type == TokenType::PlusSymbol {
+                    self.advance("parse_from_token - module identifier");
+                    match self.token.token_type.clone() {
+                        TokenType::ModuleIdentifier(name) => {
+                            module_name.push(name);
+                            module_name.push('+');
+                        }
+                        _ => error(self.token.info.line, "expected module identifier"),
+                    }
+                    self.advance("parse_from_token - module identifier");   
+                }
+                // check if we have a function identifier
+                match self.token.token_type.clone() {
+                    TokenType::FunctionIdentifier(name) => {
+                        module_name.push_str(&name);
+                        Some(Expr::new_identifier(
+                            self.token.info,
+                            Ident::new(self.token.info, IdentType::FnIdent(module_name)),
+                        ))
+                    }
+                    _ => error(self.token.info.line, "expected function identifier"),
+                }
+            }
             // return/break without expression
             TokenType::QuestionMark if self.in_stopper => Some(Expr::new_literal(
                 self.token.info,
@@ -170,7 +221,7 @@ impl<'a> Parser<'a> {
     fn parse_var(&mut self) -> Expr<'a> {
         self.advance("parse_from_token - create");
         let name = match self.token.token_type.clone() {
-            TokenType::Identifier { name } => name,
+            TokenType::Identifier (name) => name,
             _ => error(self.token.info.line, "expected identifier after create"),
         };
         self.check_next(
@@ -242,7 +293,7 @@ impl<'a> Parser<'a> {
         let start_line = self.token.info.line;
         self.advance("parse_function - start");
         match self.token.token_type.clone() {
-            TokenType::FunctionIdentifier { name } => {
+            TokenType::FunctionIdentifier (name ) => {
                 // this is not validated in the lexer because it is not possible to know if the function identifier is being used to define a function or to call a function
                 // because if is a a call it can have modules seperated by + (the module operator)
                 if name.chars().count() > 1 {
@@ -303,7 +354,7 @@ impl<'a> Parser<'a> {
                     "parse_function_body",
                 );
             }
-            TokenType::Number { literal } => {
+            TokenType::Number (literal) => {
                 if literal.round() != literal {
                     error(self.token.info.line, "Expected integer number of arguments");
                 }
@@ -382,7 +433,7 @@ impl<'a> Parser<'a> {
         let if_then_exprs = self.parse_list_exprs();
         // check if there is an else block
         self.check_next(
-            "expected ⧼ after conditional expression",
+            "expected `else` after if expressions", 
             &TokenType::Else,
             "parse if - else",
         );
@@ -418,7 +469,7 @@ impl<'a> Parser<'a> {
                 Info::new(self.file_path, start_line, self.token.info.line),
                 self.parse_list_inner(),
             ),
-            TokenType::Identifier { name } => {
+            TokenType::Identifier (name) => {
                 self.check_next(
                     "expected with keyword after list identifier",
                     &TokenType::With,

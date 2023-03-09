@@ -41,16 +41,17 @@ pub enum TokenType<'a> {
     LeftBrace,
     CodeBlockBegin,
     CodeBlockEnd,
-    Identifier { name: String },
-    FunctionIdentifier { name: String },
-    String { literal: String },
-    Number { literal: f64 },
+    Identifier(String),
+    FunctionIdentifier(String),
+    ModuleIdentifier(char),
+    String(String),
+    Number(f64),
     Create,
     With,
     List,
     Car,
     Cdr,
-    Return { value: Option<Box<Expr<'a>>> },
+    Return(Option<Box<Expr<'a>>>),
     Colon,
     Break,
     Continue,
@@ -59,13 +60,14 @@ pub enum TokenType<'a> {
     If,
     Else,
     Hempty,
-    Boolean { literal: bool },
+    Boolean(bool),
     Function,
-    FunctionArgument { name: String },
+    FunctionArgument(String),
     EOF,
     Program,
     QuestionMark,
     BuiltinFunction(BuiltinFunction),
+    PlusSymbol,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -529,11 +531,14 @@ impl<'a> Token<'a> {
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.token_type {
-            TokenType::String { literal } => {
+            TokenType::String(literal) => {
                 write!(f, "String: [lexeme {:?}, value {literal:?}]", self.lexeme)
             }
-            TokenType::Number { literal } => {
+            TokenType::Number(literal) => {
                 write!(f, "Number: [lexeme {:?}, value {literal:?}]", self.lexeme)
+            }
+            TokenType::Boolean(literal) => {
+                write!(f, "Boolean: [lexeme {:?}, value {literal:?}]", self.lexeme)
             }
             _ => write!(f, "{:?}: [lexeme {:?}]", self.token_type, self.lexeme),
         }

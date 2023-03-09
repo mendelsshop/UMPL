@@ -34,7 +34,7 @@ impl Keyword<'_> {
         keywords.insert("list".to_string(), TokenType::List);
         keywords.insert("car".to_string(), TokenType::Car);
         keywords.insert("cdr".to_string(), TokenType::Cdr);
-        keywords.insert("return".to_string(), TokenType::Return { value: None });
+        keywords.insert("return".to_string(), TokenType::Return(None));
         keywords.insert("break".to_string(), TokenType::Break);
         keywords.insert("continue".to_string(), TokenType::Continue);
         keywords.insert("loop".to_string(), TokenType::Loop);

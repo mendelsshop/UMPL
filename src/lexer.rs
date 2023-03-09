@@ -106,11 +106,11 @@ impl<'a> Lexer<'a> {
             c => {
                 if c.is_lowercase() || c == '-' {
                     if c == 't' || c == 'f' {
-                        self.boolean().map_or_else(|| Some(self.identifier()), Some)
+                        self.boolean().map_or_else(|| self.identifier(), Some)
                     } else if c == 'h' {
-                        self.hempty().map_or_else(|| Some(self.identifier()), Some)
+                        self.hempty().map_or_else(|| self.identifier(), Some)
                     } else {
-                        Some(self.identifier())
+                        self.identifier()
                     }
                 } else if c.is_ascii_whitespace() {
                     None
@@ -125,7 +125,7 @@ impl<'a> Lexer<'a> {
                         .module
                         .as_ref()
                         .map_or_else(|| c.to_string(), |module| format!("{module}+{c}"));
-                    Some(self.add_unicode_token(TokenType::FunctionIdentifier { name: c }))
+                    Some(self.add_unicode_token(TokenType::FunctionIdentifier ( c )))
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
                 }
@@ -138,9 +138,9 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
         if self.get_text() == "true" {
-            Some(self.add_token(TokenType::Boolean { literal: true }))
+            Some(self.add_token(TokenType::Boolean ( true )))
         } else if self.get_text() == "false" {
-            Some(self.add_token(TokenType::Boolean { literal: false }))
+            Some(self.add_token(TokenType::Boolean ( false )))
         } else {
             None
         }
@@ -278,7 +278,7 @@ impl<'a> Lexer<'a> {
         let string = self.get_text();
         self.start -= 1;
         self.current += 1;
-        self.add_token(TokenType::String { literal: string })
+        self.add_token(TokenType::String (string ))
     }
 
     fn number(&mut self) -> Token<'a> {
@@ -294,12 +294,20 @@ impl<'a> Lexer<'a> {
         let number: FloatLiteral = format!("0x{}", self.get_text())
             .parse()
             .expect("could not parse number");
-        self.add_token(TokenType::Number {
-            literal: number.convert::<f64>().inner(),
-        })
+        self.add_token(TokenType::Number (
+            number.convert::<f64>().inner(),
+        ))
     }
 
-    fn identifier(&mut self) -> Token<'a> {
+    fn identifier(&mut self) -> Option<Token<'a>> {
+        if !self.get_text().chars().any(|c| c.is_ascii_alphanumeric() || c == '-') {
+            if !self.get_text().contains('+') {
+                error::error(
+                    self.line,
+                    format!("invalid identifier {}", self.get_text()),
+                );
+            }
+        } 
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
         }
@@ -312,24 +320,42 @@ impl<'a> Lexer<'a> {
             }
             if emoji::is_emoji(self.peek()) {
                 self.advance();
-                self.add_unicode_token(TokenType::FunctionIdentifier {
-                    name: self.get_text(),
-                })
+                let name = self.get_text();
+                
+                let parts = name.chars().map(|char_part|
+
+                    match char_part {
+                        '+' => self.add_token(TokenType::PlusSymbol),
+                        module if module.is_ascii_lowercase() => {
+                            self.add_token(TokenType::ModuleIdentifier(char_part))
+                        }
+                        function if emoji::is_emoji(function) => {
+                            self.add_unicode_token(TokenType::FunctionIdentifier(function.to_string()))
+                        }
+                        char => {
+                            error::error(
+                                self.line,
+                                format!("{char} not allowed")
+                            )
+                        }
+                    }).collect::<Vec<_>>();
+                    parts.into_iter().for_each(|p| self.token_list.push(p));
+                None
             } else {
                 // error out
                 error::error(
                     self.line,
-                    format!("Unexpected character after * {}", self.peek()),
+                    format!("Unexpected character after + {}", self.peek()),
                 );
             }
         } else {
             let text = self.get_text();
             if let Some(token) = crate::KEYWORDS.string_is_builtin_function(&text) {
-                self.add_token(TokenType::BuiltinFunction(token))
+                Some(self.add_token(TokenType::BuiltinFunction(token)))
             } else if let Some(token) = crate::KEYWORDS.string_is_keyword(&text) {
-                self.add_token(token)
+                Some(self.add_token(token))
             } else {
-                self.add_token(TokenType::Identifier { name: text })
+                Some(self.add_token(TokenType::Identifier( text )))
             }
         }
     }
@@ -351,7 +377,7 @@ impl<'a> Lexer<'a> {
                 }
             }
         );
-        self.add_token(TokenType::Identifier { name: identifier })
+        self.add_token(TokenType::Identifier (identifier ))
     }
 
     fn advance(&mut self) -> char {
