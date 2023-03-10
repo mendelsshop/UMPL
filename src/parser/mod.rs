@@ -4,7 +4,9 @@ use crate::{
     token::{Info, Token, TokenType},
 };
 
-use self::rules::{Expr, FnDef, Ident, IdentType, If, Lambda, List, Lit, Loop, Var};
+use self::rules::{
+    Accesor, Expr, FnDef, Ident, IdentType, If, Interlaced, Lambda, List, Lit, Loop, Var,
+};
 pub(crate) mod rules;
 
 pub struct Parser<'a> {
@@ -137,17 +139,19 @@ impl<'a> Parser<'a> {
             }
             TokenType::List => Some(self.parse_list()),
             TokenType::Create => Some(self.parse_var()),
-            TokenType::Identifier(mut name) => {
+            TokenType::Identifier(name) => {
                 // TODO: check for car and cdr
+                // TODO: make general function that parses interlaced token ie tt::n tt::sep tt::n
+                let mut cars_and_cdrs = vec![];
                 while self.peek().token_type == TokenType::Dot {
                     self.advance("parse_from_token - dot");
                     self.advance("parse_from_token - dot looking for car or cdr");
                     match self.token.token_type.clone() {
                         TokenType::Car => {
-                            name.push_str(".car");
+                            cars_and_cdrs.push(Accesor::Car);
                         }
                         TokenType::Cdr => {
-                            name.push_str(".cdr");
+                            cars_and_cdrs.push(Accesor::Cdr);
                         }
                         tt => {
                             error(
@@ -159,7 +163,10 @@ impl<'a> Parser<'a> {
                 }
                 Some(Expr::new_identifier(
                     self.token.info,
-                    Ident::new(self.token.info, IdentType::Var(name)),
+                    Ident::new(
+                        self.token.info,
+                        IdentType::Var(Interlaced::new(name, cars_and_cdrs)),
+                    ),
                 ))
             }
             // built in functions
@@ -170,41 +177,44 @@ impl<'a> Parser<'a> {
             // fn identifiers
             TokenType::FunctionIdentifier(name) => Some(Expr::new_identifier(
                 self.token.info,
-                Ident::new(self.token.info, IdentType::FnIdent(name)),
+                Ident::new(
+                    self.token.info,
+                    IdentType::FnIdent(Interlaced::new(name, vec![])),
+                ),
             )),
-            TokenType::ModuleIdentifier(m) => {
+            TokenType::ModuleIdentifier(_) => {
                 // advance tokens until function identifier is reached
                 // each module identifier is followed by a plus sign
-                let mut module_name = String::new();
-                self.check_next(
-                    "expected plus symbol after module identifier",
-                    &TokenType::PlusSymbol,
-                    "parse_from_token - module identifier",
-                );
-                self.advance("parse_from_token - module identifier");
-                module_name.push_str(&format!("{m}+"));
-                while !self.tokens.is_empty() && self.peek().token_type == TokenType::PlusSymbol {
-                    self.advance("parse_from_token - module identifier");
+                let mut modules = vec![];
+                while self.peek().token_type == TokenType::PlusSymbol
+                    || matches!(self.token.token_type, TokenType::FunctionIdentifier(_))
+                {
                     match self.token.token_type.clone() {
                         TokenType::ModuleIdentifier(name) => {
-                            module_name.push(name);
-                            module_name.push('+');
+                            modules.push(name);
                         }
-                        _ => error(self.token.info.line, "expected module identifier"),
+                        TokenType::FunctionIdentifier(name) => {
+                            return Some(Expr::new_identifier(
+                                self.token.info,
+                                Ident::new(
+                                    self.token.info,
+                                    IdentType::FnIdent(Interlaced::new(name, modules)),
+                                ),
+                            ));
+                        }
+                        tt => error(
+                            self.token.info.line,
+                            format!(
+                                "expected module identifier or function identifier, found {tt}"
+                            ),
+                        ),
                     }
-                    self.advance("parse_from_token - module identifier");
+                    // advance twice because we have a checked two tokens the module identifier and the plus sign
+                    self.advance("parse_from_token - module identifier loop");
+                    self.advance("parse_from_token - module identifier loop");
                 }
                 // check if we have a function identifier
-                match self.token.token_type.clone() {
-                    TokenType::FunctionIdentifier(name) => {
-                        module_name.push_str(&name);
-                        Some(Expr::new_identifier(
-                            self.token.info,
-                            Ident::new(self.token.info, IdentType::FnIdent(module_name)),
-                        ))
-                    }
-                    _ => error(self.token.info.line, "expected function identifier"),
-                }
+                error(self.token.info.line, "expected function identifier")
             }
             // return/break without expression
             TokenType::QuestionMark if self.in_stopper => Some(Expr::new_literal(
@@ -300,13 +310,7 @@ impl<'a> Parser<'a> {
             TokenType::FunctionIdentifier(name) => {
                 // this is not validated in the lexer because it is not possible to know if the function identifier is being used to define a function or to call a function
                 // because if is a a call it can have modules seperated by + (the module operator)
-                if name.chars().count() > 1 {
-                    error(
-                        self.token.info.line,
-                        format!("function name {name} can only be one character long"),
-                    );
-                }
-                let fn_def = self.parse_named_function(name);
+                let fn_def = self.parse_named_function(name, vec![]);
                 Some(Expr::new_fn(
                     Info::new(self.file_path, start_line, self.token.info.line),
                     fn_def,
@@ -326,7 +330,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_named_function(&mut self, name: String) -> FnDef<'a> {
+    fn parse_named_function(&mut self, name: char, modules: Vec<char>) -> FnDef<'a> {
         let start_line = self.token.info.line;
         self.advance("parsed_named_function");
         let body = match self.token.token_type.clone() {
@@ -341,6 +345,7 @@ impl<'a> Parser<'a> {
         FnDef::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             name,
+            modules,
             body,
         )
     }

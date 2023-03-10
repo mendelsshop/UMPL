@@ -273,13 +273,19 @@ impl<'a> Display for Lambda<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef<'a> {
     pub info: Info<'a>,
-    pub name: String,
+    pub name: char,
+    pub modules: Vec<char>,
     inner: Lambda<'a>,
 }
 
 impl<'a> FnDef<'a> {
-    pub const fn new(info: Info<'a>, name: String, inner: Lambda<'a>) -> Self {
-        Self { info, name, inner }
+    pub const fn new(info: Info<'a>, name: char, modules: Vec<char>, inner: Lambda<'a>) -> Self {
+        Self {
+            info,
+            name,
+            modules,
+            inner,
+        }
     }
 }
 
@@ -421,19 +427,68 @@ impl<'a> Display for Var<'a> {
         write!(f, "var {} = {} [{}]", self.name, self.value, self.info)
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Interlaced<A: Debug + Display + Clone, B: Debug + Clone + Display> {
+    pub main: A,
+    pub interlaced: Vec<B>,
+}
+
+impl<A: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<A, B> {
+    pub fn new(main: A, interlaced: Vec<B>) -> Self {
+        Self { main, interlaced }
+    }
+
+    pub fn interlaced_to_string(&self, sep: &str) -> String {
+        self.interlaced
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join(sep)
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Accesor {
+    Car,
+    Cdr,
+}
+
+impl Display for Accesor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Car => write!(f, "car"),
+            Self::Cdr => write!(f, "cdr"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdentType {
-    Var(String),
-    FnIdent(String),
+    Var(Interlaced<String, Accesor>),
+    FnIdent(Interlaced<char, char>),
     Builtin(BuiltinFunction),
 }
 
 impl Display for IdentType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Var(name) => write!(f, "var {name}"),
-            Self::FnIdent(name) => write!(f, "defined function {name}"),
+            Self::Var(name) => write!(
+                f,
+                "var {}{}",
+                name.main,
+                match name.interlaced_to_string(".") {
+                    s if s.is_empty() => String::new(),
+                    s => format!(".{s}"),
+                }
+            ),
+            Self::FnIdent(ident) => write!(
+                f,
+                "defined function {}{}",
+                ident.main,
+                match ident.interlaced_to_string("+") {
+                    s if s.is_empty() => String::new(),
+                    s => format!(" in module {s}"),
+                }
+            ),
             Self::Builtin(builtin) => write!(f, "builtin function {builtin}"),
         }
     }

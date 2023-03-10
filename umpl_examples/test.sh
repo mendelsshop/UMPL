@@ -24,8 +24,7 @@ do
     echo "Running $example"
     cargo run --release -- $example > /dev/null
     if [ $? -ne 0 ]; then
-        length=`cargo run --release -- $example show_length`
-        cargo run --release -- $example $length
+        cargo run --release -- $example
         echo "Error running $example"
         # exit 1
     fi

@@ -1,2 +1,3 @@
 (module `m` `umpl_examples/factorial.umpl`)<
-(new m+🍕 4)>
+(new x+n+🍕 4)>
+(pizza.car.cdr 5)<

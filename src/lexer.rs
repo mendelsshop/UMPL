@@ -11,7 +11,7 @@ pub struct Lexer<'a> {
     start: usize,
     current: usize,
     line: u32,
-    module: Option<String>,
+    module: Vec<char>,
     name: &'a str,
     text_buffer: String,
 }
@@ -24,7 +24,7 @@ impl<'a> Lexer<'a> {
             start: 0,   // bytes
             current: 0, // actual number of bytes in source
             line: 1,
-            module: None,
+            module: Vec::new(),
             name,
             text_buffer: source.to_string(),
         }
@@ -42,14 +42,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn set_module(&mut self, module: String) {
-        if module.chars().count() > 1 {
-            error::error(
-                self.line,
-                format!("Module name must be a single character, got {module}").as_str(),
-            );
-        }
-        self.module = Some(module);
+    pub fn set_module(&mut self, module: Vec<char>) {
+        self.module = module;
     }
 
     pub fn scan_tokens(mut self) -> Vec<Token<'a>> {
@@ -121,10 +115,9 @@ impl<'a> Lexer<'a> {
                     }
                     Some(self.number())
                 } else if emoji::is_emoji(c) {
-                    let c = self
-                        .module
-                        .as_ref()
-                        .map_or_else(|| c.to_string(), |module| format!("{module}+{c}"));
+                    for module in self.module.clone() {
+                        self.add_token(TokenType::ModuleIdentifier(module));
+                    }
                     Some(self.add_unicode_token(TokenType::FunctionIdentifier(c)))
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
@@ -301,7 +294,9 @@ impl<'a> Lexer<'a> {
         if !self
             .get_text()
             .chars()
-            .any(|c| c.is_ascii_alphanumeric() || c == '-') && !self.get_text().contains('+') {
+            .any(|c| c.is_ascii_alphanumeric() || c == '-')
+            && !self.get_text().contains('+')
+        {
             error::error(self.line, format!("invalid identifier {}", self.get_text()));
         }
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
@@ -325,9 +320,13 @@ impl<'a> Lexer<'a> {
                         module if module.is_ascii_lowercase() => {
                             self.add_token(TokenType::ModuleIdentifier(char_part))
                         }
-                        function if emoji::is_emoji(function) => self
-                            .add_unicode_token(TokenType::FunctionIdentifier(function.to_string())),
-                        char => error::error(self.line, format!("{char} not allowed")),
+                        function if emoji::is_emoji(function) => {
+                            self.add_unicode_token(TokenType::FunctionIdentifier(function))
+                        }
+                        char => error::error(
+                            self.line,
+                            format!("{char} not allowed in function or module name"),
+                        ),
                     })
                     // need to collect becuase both iterators use self
                     .collect::<Vec<_>>();

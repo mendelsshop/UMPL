@@ -42,7 +42,7 @@ pub enum TokenType<'a> {
     CodeBlockBegin,
     CodeBlockEnd,
     Identifier(String),
-    FunctionIdentifier(String),
+    FunctionIdentifier(char),
     ModuleIdentifier(char),
     String(String),
     Number(f64),
