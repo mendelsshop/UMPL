@@ -1,4 +1,3 @@
-use crate::parser::rules::Expr;
 // use hexponent::FloatLiteral;
 use std::fmt::{self, Debug, Display};
 
@@ -27,9 +26,9 @@ impl Display for Info<'_> {
 
 #[derive(PartialEq, Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum TokenType<'a> {
-    RightParen,
-    LeftParen,
+pub enum TokenType {
+    CallEnd,
+    CallBegin,
     GreaterThanSymbol,
     LessThanSymbol,
     Dot,
@@ -51,8 +50,7 @@ pub enum TokenType<'a> {
     List,
     Car,
     Cdr,
-    Return(Option<Box<Expr<'a>>>),
-    Colon,
+    Return,
     Break,
     Continue,
     Loop,
@@ -65,7 +63,6 @@ pub enum TokenType<'a> {
     FunctionArgument(String),
     EOF,
     Program,
-    QuestionMark,
     BuiltinFunction(BuiltinFunction),
     PlusSymbol,
 }
@@ -113,7 +110,7 @@ pub enum BuiltinFunction {
     MultiplyWith,
 }
 
-impl TokenType<'_> {
+impl TokenType {
     // #[allow(clippy::too_many_lines)]
     // pub fn r#do(&self, args: &[LiteralType], line: u32, scope: &mut Eval) -> LiteralType {
     //     if crate::KEYWORDS.is_keyword(self) {
@@ -486,10 +483,14 @@ impl TokenType<'_> {
     // }
 }
 
-impl Display for TokenType<'_> {
+impl Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::BuiltinFunction(builtinfn) => write!(f, "{builtinfn}"),
+            Self::BuiltinFunction(builtinfn) => write!(f, "builtin {builtinfn}"),
+            Self::Boolean(bool) => write!(f, "bool {bool}"),
+            Self::Number(number) => write!(f, "number {number}"),
+            Self::String(string) => write!(f, "string {string}"),
+            Self::Hempty => write!(f, "hempty"),
             _ => write!(f, "{self:?}"),
         }
     }
@@ -503,13 +504,13 @@ impl Display for BuiltinFunction {
 
 #[derive(PartialEq, Clone)]
 pub struct Token<'a> {
-    pub token_type: TokenType<'a>,
+    pub token_type: TokenType,
     pub lexeme: String,
     pub info: Info<'a>,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(token_type: TokenType<'a>, lexeme: &str, info: Info<'a>) -> Self {
+    pub fn new(token_type: TokenType, lexeme: &str, info: Info<'a>) -> Self {
         Self {
             token_type,
             lexeme: lexeme.to_string(),

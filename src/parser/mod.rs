@@ -19,7 +19,6 @@ pub struct Parser<'a> {
     paren_count: usize,
     weird_bracket_count: usize,
     file_path: &'a str,
-    in_stopper: bool,
 }
 static START_TOKEN: Token<'static> = Token {
     token_type: TokenType::EOF,
@@ -30,14 +29,12 @@ static START_TOKEN: Token<'static> = Token {
 macro_rules! parse_break_return {
     ($self:ident, $ok:expr, $new_method:ident, $err1:expr, $err2:expr) => {
         if $ok {
-            $self.in_stopper = true;
             let expr = Some(Expr::$new_method(
                 $self.token.info,
                 $self
                     .parse_from_token_advance()
                     .unwrap_or_else(|| error($self.token.info.line, $err1)),
             ));
-            $self.in_stopper = false;
             expr
         } else {
             error($self.token.info.line, $err2);
@@ -58,7 +55,6 @@ impl<'a> Parser<'a> {
             paren_count: 0,
             weird_bracket_count: 0,
             file_path,
-            in_stopper: false,
         }
     }
 
@@ -85,11 +81,11 @@ impl<'a> Parser<'a> {
         }
         match self.token.token_type.clone() {
             // we have entered an expression
-            TokenType::LeftParen => Some(self.parse_parenthissized()),
+            TokenType::CallBegin => Some(self.parse_parenthissized()),
             // we have entered a function
             TokenType::Potato => self.parse_function(),
             // TokenType::CodeBlockBegin => self.parse_function_body(),
-            TokenType::CodeBlockEnd | TokenType::RightParen => None,
+            TokenType::CodeBlockEnd | TokenType::CallEnd => None,
             // parsing literals
             TokenType::String(literal) => Some(Expr::new_literal(
                 self.token.info,
@@ -216,11 +212,6 @@ impl<'a> Parser<'a> {
                 // check if we have a function identifier
                 error(self.token.info.line, "expected function identifier")
             }
-            // return/break without expression
-            TokenType::QuestionMark if self.in_stopper => Some(Expr::new_literal(
-                self.token.info,
-                Lit::new_hempty(self.token.info),
-            )),
             // we hit a keyword
             keyword if crate::KEYWORDS.is_keyword(&keyword) => {
                 todo!("keyword: {:?}", keyword)
@@ -269,7 +260,7 @@ impl<'a> Parser<'a> {
         // save the line number because the next token can be on the next line
         let start_line = self.token.info.line;
         let mut args = Vec::new();
-        while self.token.token_type != TokenType::RightParen {
+        while self.token.token_type != TokenType::CallEnd {
             if let Some(token) = self.parse_from_token_advance() {
                 args.push(token);
             }
@@ -460,7 +451,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn check_next(&mut self, message: &str, token_type: &TokenType<'_>, advancer: &str) {
+    fn check_next(&mut self, message: &str, token_type: &TokenType, advancer: &str) {
         self.advance(advancer);
         if &self.token.token_type != token_type {
             error(
@@ -581,11 +572,11 @@ impl<'a> Parser<'a> {
                 self.done = true;
                 self.token = self.tokens[self.current_position].clone();
             }
-            TokenType::LeftParen => {
+            TokenType::CallBegin => {
                 self.paren_count += 1;
                 self.token = self.tokens[self.current_position].clone();
             }
-            TokenType::RightParen => {
+            TokenType::CallEnd => {
                 if self.paren_count == 0 {
                     error(
                         self.tokens[self.current_position].info.line,

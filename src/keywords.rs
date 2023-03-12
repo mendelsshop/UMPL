@@ -2,16 +2,16 @@ use std::collections::HashMap;
 
 use crate::token::{BuiltinFunction, TokenType};
 #[derive(PartialEq, Clone)]
-pub struct Keyword<'a> {
-    pub keywords: HashMap<String, TokenType<'a>>,
+pub struct Keyword {
+    pub keywords: HashMap<String, TokenType>,
     pub builtin_functions: HashMap<String, BuiltinFunction>,
 }
 
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
-impl Keyword<'_> {
+impl Keyword {
     pub fn new() -> Self {
         let num = unsafe { crate::cli::TOGGLE_CASE };
-        let mut keywords: HashMap<String, TokenType<'_>> = HashMap::new();
+        let mut keywords: HashMap<String, TokenType> = HashMap::new();
         let mut builtin_functions: HashMap<String, BuiltinFunction> = HashMap::new();
         builtin_functions.insert("plus".to_string(), BuiltinFunction::Plus);
         builtin_functions.insert("minus".to_string(), BuiltinFunction::Minus);
@@ -34,7 +34,7 @@ impl Keyword<'_> {
         keywords.insert("list".to_string(), TokenType::List);
         keywords.insert("car".to_string(), TokenType::Car);
         keywords.insert("cdr".to_string(), TokenType::Cdr);
-        keywords.insert("return".to_string(), TokenType::Return(None));
+        keywords.insert("return".to_string(), TokenType::Return);
         keywords.insert("break".to_string(), TokenType::Break);
         keywords.insert("continue".to_string(), TokenType::Continue);
         keywords.insert("loop".to_string(), TokenType::Loop);
@@ -75,15 +75,15 @@ impl Keyword<'_> {
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<TokenType<'_>> {
+    pub fn get(&self, name: &str) -> Option<TokenType> {
         self.keywords.get(name).cloned()
     }
 
-    pub fn is_keyword(&self, token_type: &TokenType<'_>) -> bool {
+    pub fn is_keyword(&self, token_type: &TokenType) -> bool {
         self.keywords.values().any(|val| val == token_type)
     }
 
-    pub fn is_builtin_function(&self, token_type: &TokenType<'_>) -> bool {
+    pub fn is_builtin_function(&self, token_type: &TokenType) -> bool {
         self.builtin_functions.values().any(|val| {
             if let TokenType::BuiltinFunction(builtin) = token_type {
                 val == builtin
@@ -93,7 +93,7 @@ impl Keyword<'_> {
         })
     }
 
-    pub fn string_is_keyword(&self, string: &str) -> Option<TokenType<'_>> {
+    pub fn string_is_keyword(&self, string: &str) -> Option<TokenType> {
         self.keywords.get(string).cloned()
     }
 
@@ -101,7 +101,7 @@ impl Keyword<'_> {
         self.builtin_functions.get(string).cloned()
     }
 }
-impl Default for Keyword<'_> {
+impl Default for Keyword {
     fn default() -> Self {
         Self::new()
     }

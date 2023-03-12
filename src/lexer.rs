@@ -4,6 +4,7 @@ use crate::{
 };
 use hexponent::FloatLiteral;
 
+
 use unic_emoji_char as emoji;
 pub struct Lexer<'a> {
     token_list: Vec<Token<'a>>,
@@ -71,24 +72,46 @@ impl<'a> Lexer<'a> {
     {
         let c: char = self.advance();
         match c {
-            '(' => Some(self.add_token(TokenType::LeftParen)),
             '{' => Some(self.add_token(TokenType::LeftBrace)),
             '[' => Some(self.add_token(TokenType::LeftBracket)),
+            '<' => Some(self.add_token(TokenType::LessThanSymbol)),
+            '>' => Some(self.add_token(TokenType::GreaterThanSymbol)),
             '}' => Some(self.add_token(TokenType::RightBrace)),
-            ')' => Some(self.add_token(TokenType::RightParen)),
             ']' => Some(self.add_token(TokenType::RightBracket)),
             '⧼' => Some(self.add_token(TokenType::CodeBlockBegin)),
             '⧽' => Some(self.add_token(TokenType::CodeBlockEnd)),
+            // any of the opening brackets from https://unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt
+            '\u{0028}' | '\u{0F3A}' | '\u{0F3C}' | '\u{169B}' | '\u{2045}' | '\u{207D}'
+            | '\u{208D}' | '\u{2308}' | '\u{230A}' | '\u{2329}' | '\u{2768}' | '\u{276A}'
+            | '\u{276C}' | '\u{276E}' | '\u{2770}' | '\u{2772}' | '\u{2774}' | '\u{27C5}'
+            | '\u{27E6}' | '\u{27E8}' | '\u{27EA}' | '\u{27EC}' | '\u{27EE}' | '\u{2983}'
+            | '\u{2985}' | '\u{2987}' | '\u{2989}' | '\u{298B}' | '\u{298D}' | '\u{298F}'
+            | '\u{2991}' | '\u{2993}' | '\u{2995}' | '\u{2997}' | '\u{29D8}' | '\u{29DA}'
+            | '\u{2E22}' | '\u{2E24}' | '\u{2E26}' | '\u{2E28}' | '\u{2E55}' | '\u{2E57}'
+            | '\u{2E59}' | '\u{2E5B}' | '\u{3008}' | '\u{300A}' | '\u{300C}' | '\u{300E}'
+            | '\u{3010}' | '\u{3014}' | '\u{3016}' | '\u{3018}' | '\u{301A}' | '\u{FE59}'
+            | '\u{FE5B}' | '\u{FE5D}' | '\u{FF08}' | '\u{FF3B}' | '\u{FF5B}' | '\u{FF5F}'
+            | '\u{FF62}' => Some(self.add_token(TokenType::CallBegin)),
+            // any of the closing brackets from https://unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt
+            '\u{0029}' | '\u{0F3B}' | '\u{0F3D}' | '\u{169C}' | '\u{2046}' | '\u{207E}'
+            | '\u{208E}' | '\u{2309}' | '\u{230B}' | '\u{232A}' | '\u{2769}' | '\u{276B}'
+            | '\u{276D}' | '\u{276F}' | '\u{2771}' | '\u{2773}' | '\u{2775}' | '\u{27C6}'
+            | '\u{27E7}' | '\u{27E9}' | '\u{27EB}' | '\u{27ED}' | '\u{27EF}' | '\u{2984}'
+            | '\u{2986}' | '\u{2988}' | '\u{298A}' | '\u{298C}' | '\u{298E}' | '\u{2990}'
+            | '\u{2992}' | '\u{2994}' | '\u{2996}' | '\u{2998}' | '\u{29D9}' | '\u{29DB}'
+            | '\u{2E23}' | '\u{2E25}' | '\u{2E27}' | '\u{2E29}' | '\u{2E56}' | '\u{2E58}'
+            | '\u{2E5A}' | '\u{2E5C}' | '\u{3009}' | '\u{300B}' | '\u{300D}' | '\u{300F}'
+            | '\u{3011}' | '\u{3015}' | '\u{3017}' | '\u{3019}' | '\u{301B}' | '\u{FE5A}'
+            | '\u{FE5C}' | '\u{FE5E}' | '\u{FF09}' | '\u{FF3D}' | '\u{FF5D}' | '\u{FF60}'
+            | '\u{FF63}' => Some(self.add_token(TokenType::CallEnd)),
             '!' => {
                 while self.peek() != '\n' && !self.is_at_end() {
                     self.advance();
                 }
                 None
             }
-            ':' => Some(self.add_token(TokenType::Colon)),
             '.' => Some(self.add_token(TokenType::Dot)),
-            '<' => Some(self.add_token(TokenType::LessThanSymbol)),
-            '>' => Some(self.add_token(TokenType::GreaterThanSymbol)),
+
             '\n' => {
                 self.line += 1;
                 None
@@ -96,7 +119,6 @@ impl<'a> Lexer<'a> {
             '`' => Some(self.string()),
             '$' => Some(self.function_agument()),
             '*' => Some(self.add_token(TokenType::Star)),
-            '?' => Some(self.add_token(TokenType::QuestionMark)),
             c => {
                 if c.is_lowercase() || c == '-' {
                     if c == 't' || c == 'f' {
@@ -377,7 +399,7 @@ impl<'a> Lexer<'a> {
         char_vec[self.current - 1]
     }
 
-    fn add_token(&mut self, token_type: TokenType<'a>) -> Token<'a> {
+    fn add_token(&mut self, token_type: TokenType) -> Token<'a> {
         let text: std::str::Chars<'_> = self.text_buffer.chars();
         let mut final_text: String = String::new();
         text.enumerate().for_each(|i| {
@@ -388,7 +410,7 @@ impl<'a> Lexer<'a> {
         Token::new(token_type, final_text.as_str(), self.get_info())
     }
 
-    fn add_unicode_token(&mut self, token_type: TokenType<'a>) -> Token<'a> {
+    fn add_unicode_token(&mut self, token_type: TokenType) -> Token<'a> {
         let text: String = format!(
             "{}",
             self.text_buffer.chars().nth(self.start).expect("Error")

@@ -24,5 +24,5 @@ use lazy_static::lazy_static;
 
 use crate::keywords::Keyword;
 lazy_static! {
-    pub static ref KEYWORDS: Keyword<'static> = Keyword::new();
+    pub static ref KEYWORDS: Keyword = Keyword::new();
 }
