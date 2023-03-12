@@ -4,18 +4,20 @@ use std::{fmt::Display, process::exit};
 pub fn error<T: Display>(line: u32, message: T) -> ! {
     let where_ = "";
     let message = message.to_string();
-    let mut message = message.as_str();
     unsafe {
-        if EASY_MODE {
+        if EASY_MODE && !message.is_empty() {
         } else {
-            message = "Segmentation fault (core dumped)";
+            eprint!("[line: {line}], Error{where_}");
+            stackoverflow();
         }
-    }
-    if message.is_empty() {
-        message = "Segmentation fault (core dumped)";
     }
     eprintln!("[line: {line}], Error{where_}: {message}");
     exit(1);
+}
+
+#[allow(unconditional_recursion)]
+fn stackoverflow() {
+    stackoverflow();
 }
 
 #[allow(clippy::module_name_repetitions)]

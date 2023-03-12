@@ -4,7 +4,6 @@ use crate::{
 };
 use hexponent::FloatLiteral;
 
-
 use unic_emoji_char as emoji;
 pub struct Lexer<'a> {
     token_list: Vec<Token<'a>>,
