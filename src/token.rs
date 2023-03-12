@@ -18,6 +18,17 @@ impl<'a> Info<'a> {
     }
 }
 
+impl<'a> Default for Info<'static> {
+    fn default() -> Self {
+        println!("default");
+        Self {
+            file_name: "",
+            line: 0,
+            end_line: 0,
+        }
+    }
+}
+
 impl Display for Info<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}..{}", self.file_name, self.line, self.end_line)

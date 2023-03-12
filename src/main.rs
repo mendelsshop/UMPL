@@ -97,8 +97,9 @@ fn run(line: &str, name: &str) {
     let mut parsed: Parser = Parser::new(lexed, name);
     let parsed = parsed.parse();
     // println!("{:#?}", parsed);
-    for expr in parsed {
+    for expr in &parsed {
         println!("{}", expr);
     }
+    println!("{:#?}", parsed);
     // Eval::new(parsed);
 }

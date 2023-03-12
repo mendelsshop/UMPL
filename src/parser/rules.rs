@@ -10,7 +10,7 @@ pub struct Expr<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprType<'a> {
     Literal(Lit<'a>),
-    List(Box<List<'a>>),
+    List(List<'a>),
     Fn(Box<FnDef<'a>>),
     Call(Box<FnCall<'a>>),
     If(Box<If<'a>>),
@@ -31,10 +31,10 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn new_list(info: Info<'a>, value: List<'a>) -> Self {
+    pub const fn new_list(info: Info<'a>, value: List<'a>) -> Self {
         Self {
             info,
-            expr: ExprType::List(Box::new(value)),
+            expr: ExprType::List(value),
         }
     }
 
@@ -201,13 +201,17 @@ impl fmt::Display for LitType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct List<'a> {
     pub info: Info<'a>,
-    pub car: Expr<'a>,
-    pub cdr: Expr<'a>,
+    pub car: Box<Expr<'a>>,
+    pub cdr: Box<Expr<'a>>,
 }
 
 impl<'a> List<'a> {
-    pub const fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
-        Self { info, car, cdr }
+    pub fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
+        Self {
+            info,
+            car: Box::new(car),
+            cdr: Box::new(cdr),
+        }
     }
 
     pub const fn car(&self) -> &Expr<'a> {
@@ -216,6 +220,90 @@ impl<'a> List<'a> {
 
     pub const fn cdr(&self) -> &Expr<'a> {
         &self.cdr
+    }
+
+    pub const fn len(&self) -> usize {
+        let mut len = 0;
+        let mut list = self;
+        while let ExprType::List(list_) = &list.cdr.expr {
+            len += 1;
+            list = list_;
+        }
+        len
+    }
+
+    pub fn from_vec(info: Info<'a>, mut exprs: Vec<Expr<'a>>) -> Option<List<'a>> {
+        // should be a recursive function
+        // to create the list
+        // if the exprs is empty, set the cdr to be a hempty
+        // otherwise, set the cdr to be a list
+        if exprs.is_empty() {
+            None
+        } else {
+            let first = exprs.first().unwrap().clone();
+            let cdr = if exprs.len() == 1 {
+                Expr::new_literal(first.info, Lit::new_hempty(first.info))
+            } else {
+                
+                exprs.remove(0);
+                Expr::new_list(
+                    first.info,
+                    Self::from_vec(first.info, exprs).expect("failed to create list from vec"),
+                )
+                // Self::from_vec(first.info, rest).expect("failed to create list from vec")
+            };
+            Some(Self::new(info, first.clone(), cdr))
+        }
+    }
+}
+
+impl Default for List<'_> {
+    fn default() -> Self {
+        let info = Info::default();
+        Self::new(
+            info,
+            Expr::new_literal(info, Lit::new_hempty(info)),
+            Expr::new_literal(info, Lit::new_hempty(info)),
+        )
+    }
+}
+
+impl<'a> TryFrom<Vec<Expr<'a>>> for List<'a> {
+    type Error = String;
+
+    fn try_from(exprs: Vec<Expr<'a>>) -> Result<Self, Self::Error> {
+        // this will have be a recursive function
+        // to create the list
+        if exprs.is_empty() {
+            println!("creating default list");
+            Ok(Self::default())
+        } else {
+            let first = exprs.first().unwrap();
+            Self::from_vec(first.info, exprs).ok_or_else(||"failed to create list from vec".to_string())
+        }
+    }
+
+
+}
+
+// impl <'a>From<Vec<Expr<'a>>> for Expr<'a> {
+//     fn from(exprs: Vec<Expr<'a>>) -> Self {
+//         E
+//     }
+// }
+
+impl<'a> Iterator for List<'a> {
+    type Item = Expr<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let ExprType::List(list) = &self.cdr.expr {
+            let car = self.car.clone();
+            self.car = list.car.clone();
+            self.cdr = list.cdr.clone();
+            Some(*car)
+        } else {
+            None
+        }
     }
 }
 
@@ -234,16 +322,11 @@ pub struct Lambda<'a> {
     pub info: Info<'a>,
     pub param_count: usize,
     pub extra_params: bool,
-    pub body: Vec<Expr<'a>>,
+    pub body: List<'a>,
 }
 
 impl<'a> Lambda<'a> {
-    pub fn new(
-        info: Info<'a>,
-        param_count: usize,
-        extra_params: bool,
-        body: Vec<Expr<'a>>,
-    ) -> Self {
+    pub const fn new(info: Info<'a>, param_count: usize, extra_params: bool, body: List<'a>) -> Self {
         Self {
             info,
             param_count,
@@ -261,8 +344,8 @@ impl<'a> Display for Lambda<'a> {
             if self.extra_params { "at least" } else { "" },
             self.param_count,
             self.body
-                .iter()
-                .map(std::string::ToString::to_string)
+                .clone()
+                .map(|e| format!("{}", e))
                 .collect::<Vec<String>>()
                 .join(" "),
             self.info
@@ -341,17 +424,12 @@ impl<'a> Display for FnCall<'a> {
 pub struct If<'a> {
     pub info: Info<'a>,
     pub condition: Expr<'a>,
-    pub then: Vec<Expr<'a>>,
-    pub otherwise: Vec<Expr<'a>>,
+    pub then: List<'a>,
+    pub otherwise: List<'a>,
 }
 
 impl<'a> If<'a> {
-    pub fn new(
-        info: Info<'a>,
-        condition: Expr<'a>,
-        then: Vec<Expr<'a>>,
-        otherwise: Vec<Expr<'a>>,
-    ) -> Self {
+    pub const fn new(info: Info<'a>, condition: Expr<'a>, then: List<'a>, otherwise: List<'a>) -> Self {
         Self {
             info,
             condition,
@@ -368,13 +446,13 @@ impl<'a> Display for If<'a> {
             "if {} then {} else {} [{}]",
             self.condition,
             self.then
-                .iter()
-                .map(std::string::ToString::to_string)
+                .clone()
+                .map(|e| format!("{}", e))
                 .collect::<Vec<String>>()
                 .join(" "),
             self.otherwise
-                .iter()
-                .map(std::string::ToString::to_string)
+                .clone()
+                .map(|e| format!("{}", e))
                 .collect::<Vec<String>>()
                 .join(" "),
             self.info
@@ -385,11 +463,11 @@ impl<'a> Display for If<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loop<'a> {
     pub info: Info<'a>,
-    pub body: Vec<Expr<'a>>,
+    pub body: List<'a>,
 }
 
 impl<'a> Loop<'a> {
-    pub fn new(info: Info<'a>, body: Vec<Expr<'a>>) -> Self {
+    pub const fn new(info: Info<'a>, body: List<'a>) -> Self {
         Self { info, body }
     }
 }
@@ -400,8 +478,8 @@ impl<'a> Display for Loop<'a> {
             f,
             "loop {} [{}]",
             self.body
-                .iter()
-                .map(std::string::ToString::to_string)
+                .clone()
+                .map(|e| e.to_string())
                 .collect::<Vec<String>>()
                 .join(" "),
             self.info

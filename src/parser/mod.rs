@@ -401,7 +401,7 @@ impl<'a> Parser<'a> {
         self.in_loop = true;
         let loop_exprs = self.parse_list_exprs();
         self.in_loop = false;
-        println!("loop parsed");
+        // println!("loop parsed");
         Loop::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             loop_exprs,
@@ -530,7 +530,7 @@ impl<'a> Parser<'a> {
         );
     }
 
-    fn parse_list_exprs(&mut self) -> Vec<Expr<'a>> {
+    fn parse_list_exprs(&mut self) -> List<'a> {
         let mut exprs = vec![];
         let in_loop = self.in_loop;
         let in_function = self.in_function;
@@ -542,7 +542,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.advance("parse list exprs");
-        exprs
+        exprs.try_into().expect("failed to convert vec to list")
     }
 
     #[allow(unused_variables)]
@@ -615,7 +615,7 @@ impl<'a> Parser<'a> {
                 self.token = self.tokens[self.current_position].clone();
             }
         };
-        println!("token: {:?} caller: {}", self.token, caller);
+        // println!("token: {:?} caller: {}", self.token, caller);
         self.current_position += 1;
     }
 
