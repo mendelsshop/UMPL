@@ -135,9 +135,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::List => Some(self.parse_list()),
             TokenType::Create => Some(self.parse_var()),
-            TokenType::Identifier(name) => {
-                Some(self.parse_var_ident(name))
-            }
+            TokenType::Identifier(name) => Some(self.parse_var_ident(name)),
             // built in functions
             TokenType::BuiltinFunction(name) => Some(Expr::new_identifier(
                 self.token.info,
@@ -151,9 +149,7 @@ impl<'a> Parser<'a> {
                     IdentType::FnIdent(Interlaced::new(name, vec![])),
                 ),
             )),
-            TokenType::ModuleIdentifier(_) => {
-                Some(self.parse_function_path())
-            }
+            TokenType::ModuleIdentifier(_) => Some(self.parse_function_path()),
 
             // if we hit any other token type we have an error
             keyword => {
@@ -215,9 +211,7 @@ impl<'a> Parser<'a> {
                 }
                 tt => error(
                     self.token.info.line,
-                    format!(
-                        "expected module identifier or function identifier, found {tt}"
-                    ),
+                    format!("expected module identifier or function identifier, found {tt}"),
                 ),
             }
             // advance twice because we have a checked two tokens the module identifier and the plus sign

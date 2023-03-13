@@ -10,65 +10,58 @@ pub struct Keyword {
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
 impl Keyword {
     pub fn new() -> Self {
-        let num = unsafe { crate::cli::TOGGLE_CASE };
         let mut keywords: HashMap<String, TokenType> = HashMap::new();
         let mut builtin_functions: HashMap<String, BuiltinFunction> = HashMap::new();
-        builtin_functions.insert("plus".to_string(), BuiltinFunction::Plus);
-        builtin_functions.insert("minus".to_string(), BuiltinFunction::Minus);
-        builtin_functions.insert("multiply".to_string(), BuiltinFunction::Multiply);
-        builtin_functions.insert("divide".to_string(), BuiltinFunction::Divide);
-        builtin_functions.insert("not".to_string(), BuiltinFunction::Not);
-        builtin_functions.insert("or".to_string(), BuiltinFunction::Or);
-        builtin_functions.insert("and".to_string(), BuiltinFunction::And);
-        builtin_functions.insert("eq".to_string(), BuiltinFunction::Equal);
-        builtin_functions.insert("ne".to_string(), BuiltinFunction::NotEqual);
-        builtin_functions.insert("gt".to_string(), BuiltinFunction::GreaterThan);
-        builtin_functions.insert("lt".to_string(), BuiltinFunction::LessThan);
-        builtin_functions.insert("le".to_string(), BuiltinFunction::LessEqual);
-        builtin_functions.insert("ge".to_string(), BuiltinFunction::GreaterEqual);
-        keywords.insert("create".to_string(), TokenType::Create);
-        builtin_functions.insert("addwith".to_string(), BuiltinFunction::AddWith);
-        builtin_functions.insert("dividewith".to_string(), BuiltinFunction::DivideWith);
-        builtin_functions.insert("subtractwith".to_string(), BuiltinFunction::SubtractWith);
-        builtin_functions.insert("multiplywith".to_string(), BuiltinFunction::MultiplyWith);
-        keywords.insert("list".to_string(), TokenType::List);
-        keywords.insert("car".to_string(), TokenType::Car);
-        keywords.insert("cdr".to_string(), TokenType::Cdr);
-        keywords.insert("return".to_string(), TokenType::Return);
-        keywords.insert("break".to_string(), TokenType::Break);
-        keywords.insert("continue".to_string(), TokenType::Continue);
-        keywords.insert("loop".to_string(), TokenType::Loop);
-        keywords.insert("potato".to_string(), TokenType::Potato);
-        keywords.insert("if".to_string(), TokenType::If);
-        keywords.insert("else".to_string(), TokenType::Else);
-        builtin_functions.insert("input".to_string(), BuiltinFunction::Input);
-        builtin_functions.insert("new".to_string(), BuiltinFunction::New);
-        builtin_functions.insert("setwith".to_string(), BuiltinFunction::Set);
-        builtin_functions.insert("exit".to_string(), BuiltinFunction::Exit);
-        builtin_functions.insert("error".to_string(), BuiltinFunction::Error);
-        keywords.insert("with".to_string(), TokenType::With);
-        builtin_functions.insert("strtonum".to_string(), BuiltinFunction::StrToNum);
-        builtin_functions.insert("strtobool".to_string(), BuiltinFunction::StrToBool);
-        builtin_functions.insert("strtohempty".to_string(), BuiltinFunction::StrToHempty);
-        builtin_functions.insert("runcommand".to_string(), BuiltinFunction::RunCommand);
-        builtin_functions.insert("open".to_string(), BuiltinFunction::Open);
-        builtin_functions.insert("close".to_string(), BuiltinFunction::Close);
-        builtin_functions.insert("write".to_string(), BuiltinFunction::Write);
-        builtin_functions.insert("read".to_string(), BuiltinFunction::Read);
-        builtin_functions.insert("readline".to_string(), BuiltinFunction::ReadLine);
-        builtin_functions.insert("delete".to_string(), BuiltinFunction::Delete);
-        builtin_functions.insert("spliton".to_string(), BuiltinFunction::SplitOn);
-        builtin_functions.insert("writeline".to_string(), BuiltinFunction::WriteLine);
-        builtin_functions.insert("createfile".to_string(), BuiltinFunction::CreateFile);
-        builtin_functions.insert("deletefile".to_string(), BuiltinFunction::DeleteFile);
-        builtin_functions.insert("type".to_string(), BuiltinFunction::Type);
-        builtin_functions.insert("module".to_string(), BuiltinFunction::Module);
-        if num != 0 {
-            for (key, value) in &keywords.clone() {
-                keywords.remove(key);
-                keywords.insert(toggle_case(key, num), value.clone());
-            }
-        }
+        builtin_functions.insert(toggle_case("plus"), BuiltinFunction::Plus);
+        builtin_functions.insert(toggle_case("minus"), BuiltinFunction::Minus);
+        builtin_functions.insert(toggle_case("multiply"), BuiltinFunction::Multiply);
+        builtin_functions.insert(toggle_case("divide"), BuiltinFunction::Divide);
+        builtin_functions.insert(toggle_case("not"), BuiltinFunction::Not);
+        builtin_functions.insert(toggle_case("or"), BuiltinFunction::Or);
+        builtin_functions.insert(toggle_case("and"), BuiltinFunction::And);
+        builtin_functions.insert(toggle_case("eq"), BuiltinFunction::Equal);
+        builtin_functions.insert(toggle_case("ne"), BuiltinFunction::NotEqual);
+        builtin_functions.insert(toggle_case("gt"), BuiltinFunction::GreaterThan);
+        builtin_functions.insert(toggle_case("lt"), BuiltinFunction::LessThan);
+        builtin_functions.insert(toggle_case("le"), BuiltinFunction::LessEqual);
+        builtin_functions.insert(toggle_case("ge"), BuiltinFunction::GreaterEqual);
+        keywords.insert(toggle_case("create"), TokenType::Create);
+        builtin_functions.insert(toggle_case("addwith"), BuiltinFunction::AddWith);
+        builtin_functions.insert(toggle_case("dividewith"), BuiltinFunction::DivideWith);
+        builtin_functions.insert(toggle_case("subtractwith"), BuiltinFunction::SubtractWith);
+        builtin_functions.insert(toggle_case("multiplywith"), BuiltinFunction::MultiplyWith);
+        keywords.insert(toggle_case("list"), TokenType::List);
+        keywords.insert(toggle_case("car"), TokenType::Car);
+        keywords.insert(toggle_case("cdr"), TokenType::Cdr);
+        keywords.insert(toggle_case("return"), TokenType::Return);
+        keywords.insert(toggle_case("break"), TokenType::Break);
+        keywords.insert(toggle_case("continue"), TokenType::Continue);
+        keywords.insert(toggle_case("loop"), TokenType::Loop);
+        keywords.insert(toggle_case("potato"), TokenType::Potato);
+        keywords.insert(toggle_case("if"), TokenType::If);
+        keywords.insert(toggle_case("else"), TokenType::Else);
+        builtin_functions.insert(toggle_case("input"), BuiltinFunction::Input);
+        builtin_functions.insert(toggle_case("new"), BuiltinFunction::New);
+        builtin_functions.insert(toggle_case("setwith"), BuiltinFunction::Set);
+        builtin_functions.insert(toggle_case("exit"), BuiltinFunction::Exit);
+        builtin_functions.insert(toggle_case("error"), BuiltinFunction::Error);
+        keywords.insert(toggle_case("with"), TokenType::With);
+        builtin_functions.insert(toggle_case("strtonum"), BuiltinFunction::StrToNum);
+        builtin_functions.insert(toggle_case("strtobool"), BuiltinFunction::StrToBool);
+        builtin_functions.insert(toggle_case("strtohempty"), BuiltinFunction::StrToHempty);
+        builtin_functions.insert(toggle_case("runcommand"), BuiltinFunction::RunCommand);
+        builtin_functions.insert(toggle_case("open"), BuiltinFunction::Open);
+        builtin_functions.insert(toggle_case("close"), BuiltinFunction::Close);
+        builtin_functions.insert(toggle_case("write"), BuiltinFunction::Write);
+        builtin_functions.insert(toggle_case("read"), BuiltinFunction::Read);
+        builtin_functions.insert(toggle_case("readline"), BuiltinFunction::ReadLine);
+        builtin_functions.insert(toggle_case("delete"), BuiltinFunction::Delete);
+        builtin_functions.insert(toggle_case("spliton"), BuiltinFunction::SplitOn);
+        builtin_functions.insert(toggle_case("writeline"), BuiltinFunction::WriteLine);
+        builtin_functions.insert(toggle_case("createfile"), BuiltinFunction::CreateFile);
+        builtin_functions.insert(toggle_case("deletefile"), BuiltinFunction::DeleteFile);
+        builtin_functions.insert(toggle_case("type"), BuiltinFunction::Type);
+        builtin_functions.insert(toggle_case("module"), BuiltinFunction::Module);
         Self {
             keywords,
             builtin_functions,
@@ -83,14 +76,8 @@ impl Keyword {
         self.keywords.values().any(|val| val == token_type)
     }
 
-    pub fn is_builtin_function(&self, token_type: &TokenType) -> bool {
-        self.builtin_functions.values().any(|val| {
-            if let TokenType::BuiltinFunction(builtin) = token_type {
-                val == builtin
-            } else {
-                false
-            }
-        })
+    pub const fn is_builtin_function(&self, token_type: &TokenType) -> bool {
+        matches!(token_type, TokenType::BuiltinFunction(_))
     }
 
     pub fn string_is_keyword(&self, string: &str) -> Option<TokenType> {
@@ -108,19 +95,23 @@ impl Default for Keyword {
 }
 
 #[allow(clippy::cast_possible_wrap)]
-fn toggle_case(string: &str, num: i32) -> String {
-    println!("{}", string.len() + num as usize % 10);
-    let num: usize = match string.len() as i32 - num {
-        nums if nums <= 0 => num as usize % 50,
-        nums => nums as usize % 50,
-    };
-    let mut new_string = String::new();
-    for (count, c) in string.chars().enumerate() {
-        if count % num == 0 {
-            new_string.push(c.to_uppercase().next().unwrap());
-        } else {
-            new_string.push(c);
+fn toggle_case(string: &str) -> String {
+    let num = unsafe { crate::cli::TOGGLE_CASE };
+    if num == 0 {
+        string.to_string()
+    } else {
+        let num: usize = match string.len() as i32 - num {
+            nums if nums <= 0 => num as usize % 50,
+            nums => nums as usize % 50,
+        };
+        let mut new_string = String::new();
+        for (count, c) in string.chars().enumerate() {
+            if count % num == 0 {
+                new_string.push(c.to_uppercase().next().unwrap());
+            } else {
+                new_string.push(c);
+            }
         }
+        new_string
     }
-    new_string
 }

@@ -348,7 +348,7 @@ impl<'a> Display for Lambda<'a> {
             self.param_count,
             self.body
                 .clone()
-                .map(|e| format!("{}", e))
+                .map(|e| format!("{e}"))
                 .collect::<Vec<String>>()
                 .join(" "),
             self.info
@@ -455,12 +455,12 @@ impl<'a> Display for If<'a> {
             self.condition,
             self.then
                 .clone()
-                .map(|e| format!("{}", e))
+                .map(|e| format!("{e}"))
                 .collect::<Vec<String>>()
                 .join(" "),
             self.otherwise
                 .clone()
-                .map(|e| format!("{}", e))
+                .map(|e| format!("{e}"))
                 .collect::<Vec<String>>()
                 .join(" "),
             self.info
