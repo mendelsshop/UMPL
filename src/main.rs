@@ -77,13 +77,16 @@ fn main() {
     } else {
         // if we are not in repl mode ie we are reading a file
         let mut file: File = File::open(&parsed_args.file).unwrap_or_else(|_| {
-            error::error(0, "Error encountered while opening file!");
+            error::error(
+                parsed_args.get_info(),
+                "Error encountered while opening file!",
+            );
         }); // open the file
         let mut contents: String = String::new(); // create a string to hold the contents of the file
         match file.read_to_string(&mut contents) {
             Ok(contents) => contents,
             Err(_) => {
-                error::error(0, "could not read file");
+                error::error(parsed_args.get_info(), "could not read file");
             }
         }; // read the file into the string
         run(&contents, &parsed_args.file); // run the file

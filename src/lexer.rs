@@ -1,5 +1,5 @@
 use crate::{
-    error,
+    error::error,
     token::{Info, Token, TokenType},
 };
 use hexponent::FloatLiteral;
@@ -141,7 +141,7 @@ impl<'a> Lexer<'a> {
                     }
                     Some(self.add_unicode_token(TokenType::FunctionIdentifier(c)))
                 } else {
-                    error::error(self.line, format!("uknown character {c}"));
+                    error(self.get_info(), format!("uknown character {c}"));
                 }
             }
         }
@@ -227,7 +227,7 @@ impl<'a> Lexer<'a> {
                                     self.current,
                                     u8::from_str_radix(format!("{x}{y}").as_str(), 16)
                                         .unwrap_or_else(|_| {
-                                            error::error(self.line, "invalid hex escape sequence");
+                                            error(self.get_info(), "invalid hex escape sequence");
                                         }) as char,
                                 );
                                 self.advance();
@@ -237,7 +237,7 @@ impl<'a> Lexer<'a> {
                                     self.current,
                                     u8::from_str_radix(format!("{x}").as_str(), 16).unwrap_or_else(
                                         |_| {
-                                            error::error(self.line, "invalid hex escape sequence");
+                                            error(self.get_info(), "invalid hex escape sequence");
                                         },
                                     ) as char,
                                 );
@@ -265,17 +265,17 @@ impl<'a> Lexer<'a> {
                         self.current,
                         char::from_u32(
                             u32::from_str_radix(hex_string.as_str(), 16).unwrap_or_else(|_| {
-                                error::error(self.line, "invalid unicode escape sequence");
+                                error(self.get_info(), "invalid unicode escape sequence");
                             }),
                         )
                         .unwrap_or_else(|| {
-                            error::error(self.line, "invalid unicode escape sequence");
+                            error(self.get_info(), "invalid unicode escape sequence");
                         }),
                     );
                     self.current += 1;
                 } else {
-                    error::error(
-                        self.line,
+                    error(
+                        self.get_info(),
                         format!("unknown escape sequence {}", self.peek()),
                     );
                 }
@@ -284,7 +284,7 @@ impl<'a> Lexer<'a> {
             }
         }
         if self.is_at_end() {
-            error::error(self.line, "unterminated string");
+            error(self.get_info(), "unterminated string");
         }
         self.advance();
         self.start += 1;
@@ -318,7 +318,10 @@ impl<'a> Lexer<'a> {
             .any(|c| c.is_ascii_alphanumeric() || c == '-')
             && !self.get_text().contains('+')
         {
-            error::error(self.line, format!("invalid identifier {}", self.get_text()));
+            error(
+                self.get_info(),
+                format!("invalid identifier {}", self.get_text()),
+            );
         }
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
             self.advance();
@@ -344,8 +347,8 @@ impl<'a> Lexer<'a> {
                         function if emoji::is_emoji(function) => {
                             self.add_unicode_token(TokenType::FunctionIdentifier(function))
                         }
-                        char => error::error(
-                            self.line,
+                        char => error(
+                            self.get_info(),
                             format!("{char} not allowed in function or module name"),
                         ),
                     })
@@ -355,8 +358,8 @@ impl<'a> Lexer<'a> {
                 None
             } else {
                 // error out
-                error::error(
-                    self.line,
+                error(
+                    self.get_info(),
                     format!("Unexpected character after + {}", self.peek()),
                 );
             }
@@ -384,8 +387,8 @@ impl<'a> Lexer<'a> {
                 Ok(contents) => {
                     contents.convert::<f64>().inner()
                 }
-                Err(error) => {
-                    error::error(self.line, error.to_string().as_str());
+                Err(errors) => {
+                    error(self.get_info(), errors);
                 }
             }
         );

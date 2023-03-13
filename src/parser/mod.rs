@@ -33,11 +33,11 @@ macro_rules! parse_break_return {
                 $self.token.info,
                 $self
                     .parse_from_token_advance()
-                    .unwrap_or_else(|| error($self.token.info.line, $err1)),
+                    .unwrap_or_else(|| error($self.token.info, $err1)),
             ));
             expr
         } else {
-            error($self.token.info.line, $err2);
+            error($self.token.info, $err2);
         }
     };
 }
@@ -74,7 +74,7 @@ impl<'a> Parser<'a> {
 
         // check if we ran out of tokens or are done parsing (if EOF is encountered)
         if self.tokens.is_empty() {
-            error(0, "no self.tokens found");
+            error(Info::new(self.file_path, 0, 0), "no self.tokens found");
         }
         if self.done {
             return None;
@@ -118,10 +118,7 @@ impl<'a> Parser<'a> {
                 if self.in_loop {
                     Some(Expr::new_continue(self.token.info))
                 } else {
-                    error(
-                        self.token.info.line,
-                        "continue can only be used inside a loop",
-                    );
+                    error(self.token.info, "continue can only be used inside a loop");
                 }
             }
             TokenType::Return { .. } => {
@@ -153,7 +150,7 @@ impl<'a> Parser<'a> {
 
             // if we hit any other token type we have an error
             keyword => {
-                error(self.token.info.line, format!("unexpected token {keyword}"));
+                error(self.token.info, format!("unexpected token {keyword}"));
             }
         }
     }
@@ -174,7 +171,7 @@ impl<'a> Parser<'a> {
                 }
                 tt => {
                     error(
-                        self.token.info.line,
+                        self.token.info,
                         format!("expected car or cdr after dot, found {tt}"),
                     );
                 }
@@ -210,7 +207,7 @@ impl<'a> Parser<'a> {
                     );
                 }
                 tt => error(
-                    self.token.info.line,
+                    self.token.info,
                     format!("expected module identifier or function identifier, found {tt}"),
                 ),
             }
@@ -219,14 +216,14 @@ impl<'a> Parser<'a> {
             self.advance("parse_from_token - module identifier loop");
         }
         // check if we have a function identifier
-        error(self.token.info.line, "expected function identifier")
+        error(self.token.info, "expected function identifier")
     }
 
     fn parse_var(&mut self) -> Expr<'a> {
         self.advance("parse_from_token - create");
         let name = match self.token.token_type.clone() {
             TokenType::Identifier(name) => name,
-            _ => error(self.token.info.line, "expected identifier after create"),
+            _ => error(self.token.info, "expected identifier after create"),
         };
         self.check_next(
             "expected with after create",
@@ -242,7 +239,7 @@ impl<'a> Parser<'a> {
                     s
                 } else {
                     error(
-                        self.token.info.line,
+                        self.token.info,
                         format!("expected expression after for variable {name}"),
                     );
                 },
@@ -288,7 +285,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 // should never happen as this is caught in the advance method
-                error(self.token.info.line, "Expected printing indicator");
+                error(self.token.info, "Expected printing indicator");
             }
         }
     }
@@ -314,7 +311,7 @@ impl<'a> Parser<'a> {
                 ))
             }
             tt => error(
-                self.token.info.line,
+                self.token.info,
                 format!("expected function name, number, * or ⧼ found {tt} in function defintion"),
             ),
         }
@@ -328,7 +325,7 @@ impl<'a> Parser<'a> {
                 self.parse_function_body()
             }
             tt => error(
-                self.token.info.line,
+                self.token.info,
                 format!("expected number, * or ⧼ found {tt} in function defintion"),
             ),
         };
@@ -355,7 +352,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::Number(literal) => {
                 if literal.round() != literal {
-                    error(self.token.info.line, "Expected integer number of arguments");
+                    error(self.token.info, "Expected integer number of arguments");
                 }
                 arg_count = literal as usize;
                 if self.peek().token_type == TokenType::Star {
@@ -374,7 +371,7 @@ impl<'a> Parser<'a> {
             TokenType::CodeBlockBegin => {}
             _ => {
                 error(
-                    self.token.info.line,
+                    self.token.info,
                     "Expected number, * or ⧼ in function definition",
                 );
             }
@@ -417,7 +414,7 @@ impl<'a> Parser<'a> {
         let cond = if let Some(expr) = self.parse_from_token_advance() {
             expr
         } else {
-            error(self.token.info.line, "expected expression in conditonal")
+            error(self.token.info, "expected expression in conditonal")
         };
         self.check_next(
             "expected }} after conditional expression",
@@ -454,7 +451,7 @@ impl<'a> Parser<'a> {
         self.advance(advancer);
         if &self.token.token_type != token_type {
             error(
-                self.token.info.line,
+                self.token.info,
                 format!("{} found {}", message, self.token.token_type),
             );
         }
@@ -493,7 +490,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 error(
-                    self.token.info.line,
+                    self.token.info,
                     format!(
                         "expected [ or identifier after list keyword found {}",
                         self.token.token_type
@@ -509,13 +506,13 @@ impl<'a> Parser<'a> {
         let car = if let Some(expr) = self.parse_from_token() {
             expr
         } else {
-            error(self.token.info.line, "expected expression in list")
+            error(self.token.info, "expected expression in list")
         };
         self.advance("parse list inner");
         let cdr = if let Some(expr) = self.parse_from_token() {
             expr
         } else {
-            error(self.token.info.line, "expected expression in list")
+            error(self.token.info, "expected expression in list")
         };
         self.check_next(
             "expected ] after list item",
@@ -530,7 +527,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_list_exprs(&mut self) -> List<'a> {
-        let mut exprs = vec![];
+        let mut exprs = List::new_cdr_empty(
+            self.token.info,
+            Expr::new_literal(self.token.info, Lit::new_hempty(self.token.info)),
+        );
         let in_loop = self.in_loop;
         let in_function = self.in_function;
         while self.peek().token_type != TokenType::CodeBlockEnd {
@@ -541,7 +541,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.advance("parse list exprs");
-        exprs.try_into().expect("failed to convert vec to list")
+        exprs
     }
 
     #[allow(unused_variables)]
@@ -552,7 +552,7 @@ impl<'a> Parser<'a> {
                     self.token = self.tokens[self.current_position].clone();
                 } else {
                     error(
-                        self.tokens[self.current_position].info.line,
+                        self.tokens[self.current_position].info,
                         "Return statement outside of function",
                     );
                 }
@@ -562,7 +562,7 @@ impl<'a> Parser<'a> {
                     self.token = self.tokens[self.current_position].clone();
                 } else {
                     error(
-                        self.tokens[self.current_position].info.line,
+                        self.tokens[self.current_position].info,
                         "Break or continue statement outside of loop",
                     );
                 }
@@ -578,7 +578,7 @@ impl<'a> Parser<'a> {
             TokenType::CallEnd => {
                 if self.paren_count == 0 {
                     error(
-                        self.tokens[self.current_position].info.line,
+                        self.tokens[self.current_position].info,
                         "unmatched right parenthesis",
                     );
                 }
@@ -588,7 +588,7 @@ impl<'a> Parser<'a> {
                     .contains(&self.tokens[self.current_position + 1].token_type)
                 {
                     error(
-                        self.tokens[self.current_position].info.line,
+                        self.tokens[self.current_position].info,
                         format!(
                             "greater than symbol (>) or less than symbol (<) expected found {}",
                             self.tokens[self.current_position + 1].token_type
@@ -619,7 +619,7 @@ impl<'a> Parser<'a> {
                         self.token = self.tokens[self.current_position].clone();
                     }
                     _ => error(
-                        self.tokens[self.current_position].info.line,
+                        self.tokens[self.current_position].info,
                         "expected call before print indicators: < or >",
                     ),
                 }

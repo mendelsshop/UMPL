@@ -1,6 +1,6 @@
 use std::process::exit;
 
-use crate::error;
+use crate::{error, token::Info};
 pub static mut EASY_MODE: bool = false;
 pub static mut TOGGLE_CASE: i32 = 0;
 #[derive(PartialEq, Eq, Debug)]
@@ -19,6 +19,17 @@ impl ParsedArgs {
             force: false,
             log: false,
         }
+    }
+
+    pub fn get_info(&'_ self) -> Info<'_> {
+        Info::new(
+            match &self.file {
+                f if f.is_empty() => "<uwkown>",
+                f => f,
+            },
+            0,
+            0,
+        )
     }
 }
 
@@ -81,10 +92,10 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
                     unsafe { TOGGLE_CASE = num as i32 };
                 } else if char_part_arg == 't' {
                     let number: i32 = arg.split_once('=').map_or_else(
-                        || error::error(0, "option t requires an =number"),
+                        || error::error(args_struct.get_info(), "option t requires an =number"),
                         |n| match n.1.parse() {
                             Ok(value) => value,
-                            Err(error) => error::error(0, error),
+                            Err(error) => error::error(args_struct.get_info(), error),
                         },
                     );
                     unsafe {

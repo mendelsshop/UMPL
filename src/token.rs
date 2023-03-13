@@ -1,7 +1,7 @@
 // use hexponent::FloatLiteral;
 use std::fmt::{self, Debug, Display};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord, Default)]
 pub struct Info<'a> {
     pub file_name: &'a str,
     pub line: u32,
@@ -18,20 +18,18 @@ impl<'a> Info<'a> {
     }
 }
 
-impl Default for Info<'_> {
-    fn default() -> Self {
-        println!("default");
-        Self {
-            file_name: "",
-            line: 0,
-            end_line: 0,
-        }
-    }
-}
-
 impl Display for Info<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}..{}", self.file_name, self.line, self.end_line)
+        write!(
+            f,
+            "File [{}]: {}",
+            self.file_name,
+            if self.line == self.end_line {
+                format!("line [{}]", self.line)
+            } else {
+                format!("lines [{}..{}]", self.line, self.end_line)
+            }
+        )
     }
 }
 

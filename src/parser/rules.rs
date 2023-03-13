@@ -232,6 +232,21 @@ impl<'a> List<'a> {
         len
     }
 
+    pub fn new_cdr_empty(info: Info<'a>, car: Expr<'a>) -> Self {
+        Self {
+            info,
+            car: Box::new(car),
+            cdr: Box::new(Expr::new_literal(info, Lit::new_hempty(info))),
+        }
+    }
+
+    pub fn push(&mut self, car: Expr<'a>) {
+        self.cdr = Box::new(Expr::new_list(
+            car.info,
+            Self::new_cdr_empty(self.info, car),
+        ));
+    }
+
     pub fn from_vec(info: Info<'a>, mut exprs: Vec<Expr<'a>>) -> Option<List<'a>> {
         // should be a recursive function
         // to create the list
@@ -249,7 +264,6 @@ impl<'a> List<'a> {
                     first.info,
                     Self::from_vec(first.info, exprs).expect("failed to create list from vec"),
                 )
-                // Self::from_vec(first.info, rest).expect("failed to create list from vec")
             };
             Some(Self::new(info, first.clone(), cdr))
         }
@@ -274,7 +288,6 @@ impl<'a> TryFrom<Vec<Expr<'a>>> for List<'a> {
         // this will have be a recursive function
         // to create the list
         if exprs.is_empty() {
-            println!("creating default list");
             Ok(Self::default())
         } else {
             let first = exprs.first().unwrap();
@@ -283,12 +296,6 @@ impl<'a> TryFrom<Vec<Expr<'a>>> for List<'a> {
         }
     }
 }
-
-// impl <'a>From<Vec<Expr<'a>>> for Expr<'a> {
-//     fn from(exprs: Vec<Expr<'a>>) -> Self {
-//         E
-//     }
-// }
 
 impl<'a> Iterator for List<'a> {
     type Item = Expr<'a>;
