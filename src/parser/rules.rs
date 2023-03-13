@@ -11,10 +11,10 @@ pub struct Expr<'a> {
 pub enum ExprType<'a> {
     Literal(Lit<'a>),
     List(List<'a>),
-    Fn(Box<FnDef<'a>>),
+    Fn(FnDef<'a>),
     Call(Box<FnCall<'a>>),
     If(Box<If<'a>>),
-    Loop(Box<Loop<'a>>),
+    Loop(Loop<'a>),
     Var(Box<Var<'a>>),
     Lambda(Lambda<'a>),
     Return(Box<Expr<'a>>),
@@ -38,10 +38,10 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn new_fn(info: Info<'a>, value: FnDef<'a>) -> Self {
+    pub const fn new_fn(info: Info<'a>, value: FnDef<'a>) -> Self {
         Self {
             info,
-            expr: ExprType::Fn(Box::new(value)),
+            expr: ExprType::Fn(value),
         }
     }
 
@@ -59,10 +59,10 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn new_loop(info: Info<'a>, value: Loop<'a>) -> Self {
+    pub const fn new_loop(info: Info<'a>, value: Loop<'a>) -> Self {
         Self {
             info,
-            expr: ExprType::Loop(Box::new(value)),
+            expr: ExprType::Loop(value),
         }
     }
 
@@ -244,7 +244,6 @@ impl<'a> List<'a> {
             let cdr = if exprs.len() == 1 {
                 Expr::new_literal(first.info, Lit::new_hempty(first.info))
             } else {
-                
                 exprs.remove(0);
                 Expr::new_list(
                     first.info,
@@ -279,11 +278,10 @@ impl<'a> TryFrom<Vec<Expr<'a>>> for List<'a> {
             Ok(Self::default())
         } else {
             let first = exprs.first().unwrap();
-            Self::from_vec(first.info, exprs).ok_or_else(||"failed to create list from vec".to_string())
+            Self::from_vec(first.info, exprs)
+                .ok_or_else(|| "failed to create list from vec".to_string())
         }
     }
-
-
 }
 
 // impl <'a>From<Vec<Expr<'a>>> for Expr<'a> {
@@ -326,7 +324,12 @@ pub struct Lambda<'a> {
 }
 
 impl<'a> Lambda<'a> {
-    pub const fn new(info: Info<'a>, param_count: usize, extra_params: bool, body: List<'a>) -> Self {
+    pub const fn new(
+        info: Info<'a>,
+        param_count: usize,
+        extra_params: bool,
+        body: List<'a>,
+    ) -> Self {
         Self {
             info,
             param_count,
@@ -429,7 +432,12 @@ pub struct If<'a> {
 }
 
 impl<'a> If<'a> {
-    pub const fn new(info: Info<'a>, condition: Expr<'a>, then: List<'a>, otherwise: List<'a>) -> Self {
+    pub const fn new(
+        info: Info<'a>,
+        condition: Expr<'a>,
+        then: List<'a>,
+        otherwise: List<'a>,
+    ) -> Self {
         Self {
             info,
             condition,

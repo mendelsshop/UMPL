@@ -136,34 +136,7 @@ impl<'a> Parser<'a> {
             TokenType::List => Some(self.parse_list()),
             TokenType::Create => Some(self.parse_var()),
             TokenType::Identifier(name) => {
-                // TODO: check for car and cdr
-                // TODO: make general function that parses interlaced token ie tt::n tt::sep tt::n
-                let mut cars_and_cdrs = vec![];
-                while self.peek().token_type == TokenType::Dot {
-                    self.advance("parse_from_token - dot");
-                    self.advance("parse_from_token - dot looking for car or cdr");
-                    match self.token.token_type.clone() {
-                        TokenType::Car => {
-                            cars_and_cdrs.push(Accesor::Car);
-                        }
-                        TokenType::Cdr => {
-                            cars_and_cdrs.push(Accesor::Cdr);
-                        }
-                        tt => {
-                            error(
-                                self.token.info.line,
-                                format!("expected car or cdr after dot, found {tt}"),
-                            );
-                        }
-                    }
-                }
-                Some(Expr::new_identifier(
-                    self.token.info,
-                    Ident::new(
-                        self.token.info,
-                        IdentType::Var(Interlaced::new(name, cars_and_cdrs)),
-                    ),
-                ))
+                Some(self.parse_var_ident(name))
             }
             // built in functions
             TokenType::BuiltinFunction(name) => Some(Expr::new_identifier(
@@ -179,48 +152,80 @@ impl<'a> Parser<'a> {
                 ),
             )),
             TokenType::ModuleIdentifier(_) => {
-                // advance tokens until function identifier is reached
-                // each module identifier is followed by a plus sign
-                let mut modules = vec![];
-                while self.peek().token_type == TokenType::PlusSymbol
-                    || matches!(self.token.token_type, TokenType::FunctionIdentifier(_))
-                {
-                    match self.token.token_type.clone() {
-                        TokenType::ModuleIdentifier(name) => {
-                            modules.push(name);
-                        }
-                        TokenType::FunctionIdentifier(name) => {
-                            return Some(Expr::new_identifier(
-                                self.token.info,
-                                Ident::new(
-                                    self.token.info,
-                                    IdentType::FnIdent(Interlaced::new(name, modules)),
-                                ),
-                            ));
-                        }
-                        tt => error(
-                            self.token.info.line,
-                            format!(
-                                "expected module identifier or function identifier, found {tt}"
-                            ),
-                        ),
-                    }
-                    // advance twice because we have a checked two tokens the module identifier and the plus sign
-                    self.advance("parse_from_token - module identifier loop");
-                    self.advance("parse_from_token - module identifier loop");
-                }
-                // check if we have a function identifier
-                error(self.token.info.line, "expected function identifier")
+                Some(self.parse_function_path())
             }
-            // we hit a keyword
-            keyword if crate::KEYWORDS.is_keyword(&keyword) => {
-                todo!("keyword: {:?}", keyword)
-            }
-            // we hit a function
+
+            // if we hit any other token type we have an error
             keyword => {
-                todo!("keyword: {:?}", keyword)
+                error(self.token.info.line, format!("unexpected token {keyword}"));
             }
         }
+    }
+
+    fn parse_var_ident(&mut self, name: String) -> Expr<'a> {
+        // TODO: check for car and cdr
+        // TODO: make general function that parses interlaced token ie tt::n tt::sep tt::n
+        let mut cars_and_cdrs = vec![];
+        while self.peek().token_type == TokenType::Dot {
+            self.advance("parse_from_token - dot");
+            self.advance("parse_from_token - dot looking for car or cdr");
+            match self.token.token_type.clone() {
+                TokenType::Car => {
+                    cars_and_cdrs.push(Accesor::Car);
+                }
+                TokenType::Cdr => {
+                    cars_and_cdrs.push(Accesor::Cdr);
+                }
+                tt => {
+                    error(
+                        self.token.info.line,
+                        format!("expected car or cdr after dot, found {tt}"),
+                    );
+                }
+            }
+        }
+        Expr::new_identifier(
+            self.token.info,
+            Ident::new(
+                self.token.info,
+                IdentType::Var(Interlaced::new(name, cars_and_cdrs)),
+            ),
+        )
+    }
+
+    fn parse_function_path(&mut self) -> Expr<'a> {
+        // advance tokens until function identifier is reached
+        // each module identifier is followed by a plus sign
+        let mut modules = vec![];
+        while self.peek().token_type == TokenType::PlusSymbol
+            || matches!(self.token.token_type, TokenType::FunctionIdentifier(_))
+        {
+            match self.token.token_type.clone() {
+                TokenType::ModuleIdentifier(name) => {
+                    modules.push(name);
+                }
+                TokenType::FunctionIdentifier(name) => {
+                    return Expr::new_identifier(
+                        self.token.info,
+                        Ident::new(
+                            self.token.info,
+                            IdentType::FnIdent(Interlaced::new(name, modules)),
+                        ),
+                    );
+                }
+                tt => error(
+                    self.token.info.line,
+                    format!(
+                        "expected module identifier or function identifier, found {tt}"
+                    ),
+                ),
+            }
+            // advance twice because we have a checked two tokens the module identifier and the plus sign
+            self.advance("parse_from_token - module identifier loop");
+            self.advance("parse_from_token - module identifier loop");
+        }
+        // check if we have a function identifier
+        error(self.token.info.line, "expected function identifier")
     }
 
     fn parse_var(&mut self) -> Expr<'a> {
@@ -608,8 +613,22 @@ impl<'a> Parser<'a> {
                 self.token = self.tokens[self.current_position].clone();
             }
             TokenType::GreaterThanSymbol | TokenType::LessThanSymbol => {
-                // TODO: check if the last token was a parentheisis or in the case of > a parenthesis of >
-                self.token = self.tokens[self.current_position].clone();
+                match (
+                    self.token.token_type.clone(),
+                    self.peek().token_type.clone(),
+                ) {
+                    (TokenType::CallEnd, TokenType::LessThanSymbol)
+                    | (
+                        TokenType::CallEnd | TokenType::GreaterThanSymbol,
+                        TokenType::GreaterThanSymbol,
+                    ) => {
+                        self.token = self.tokens[self.current_position].clone();
+                    }
+                    _ => error(
+                        self.tokens[self.current_position].info.line,
+                        "expected call before print indicators: < or >",
+                    ),
+                }
             }
             _ => {
                 self.token = self.tokens[self.current_position].clone();

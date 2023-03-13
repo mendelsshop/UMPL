@@ -18,7 +18,7 @@ impl<'a> Info<'a> {
     }
 }
 
-impl<'a> Default for Info<'static> {
+impl Default for Info<'_> {
     fn default() -> Self {
         println!("default");
         Self {
