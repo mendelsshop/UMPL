@@ -3,6 +3,6 @@ loop ⧼ ! create a loop with the loop keyword followed by ⧼ ⧽ which is were
   if {(eq input-s `y`)<} ⧼ ! if the input is `y` then do the following
     continue ! continue the loop
   ⧽ else ⧼
-    break ! if input is not `y` then break the loop
+    break hempty ! if input is not `y` then break the loop
   ⧽
 ⧽
