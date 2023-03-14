@@ -5,7 +5,7 @@ use crate::{
 };
 
 use self::rules::{
-    Accesor, Expr, ExprType, FnDef, Ident, IdentType, If, Interlaced, Lambda, List, Lit, Loop, Var,
+    Accesor, Cons, Expr, ExprType, FnDef, Ident, IdentType, If, Interlaced, Lambda, Lit, Loop, Var,
 };
 pub(crate) mod rules;
 
@@ -461,7 +461,7 @@ impl<'a> Parser<'a> {
         let start_line = self.token.info.line;
         self.advance("parse list");
         match self.token.token_type.clone() {
-            TokenType::LeftBracket => Expr::new_list(
+            TokenType::LeftBracket => Expr::new_cons(
                 Info::new(self.file_path, start_line, self.token.info.line),
                 self.parse_list_inner(),
             ),
@@ -481,7 +481,7 @@ impl<'a> Parser<'a> {
                     Var::new(
                         Info::new(self.file_path, start_line, self.token.info.line),
                         name,
-                        Expr::new_list(
+                        Expr::new_cons(
                             Info::new(self.file_path, start_line, self.token.info.line),
                             self.parse_list_inner(),
                         ),
@@ -500,7 +500,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list_inner(&mut self) -> List<'a> {
+    fn parse_list_inner(&mut self) -> Cons<'a, Expr<'a>> {
         let start_line = self.token.info.line;
         self.advance("parse list inner");
         let car = if let Some(expr) = self.parse_from_token() {
@@ -519,15 +519,15 @@ impl<'a> Parser<'a> {
             &TokenType::RightBracket,
             "parse list inner",
         );
-        return List::new(
+        return Cons::new(
             Info::new(self.file_path, start_line, self.token.info.line),
             car,
-            cdr,
+            Some(cdr),
         );
     }
 
-    fn parse_list_exprs(&mut self) -> List<'a> {
-        let mut exprs = List::new_cdr_empty(
+    fn parse_list_exprs(&mut self) -> Cons<'a, Expr<'a>> {
+        let mut exprs = Cons::new_cdr_empty(
             self.token.info,
             Expr::new_literal(self.token.info, Lit::new_hempty(self.token.info)),
         );
@@ -537,13 +537,20 @@ impl<'a> Parser<'a> {
             self.in_loop = in_loop;
             self.in_function = in_function;
             if let Some(expr) = self.parse_from_token_advance() {
-                exprs.push(expr);
+                exprs.set_cdr(expr);
             }
         }
-        // check if the head cdr is a list or anything but hempty
-        if let ExprType::List(list) = exprs.cdr.expr {
-            exprs = list;
-        }
+
+        // remove hempty at the beginning if there is something after it
+        let exprs = if let Some(expr) = &exprs.cdr {
+            if let ExprType::Cons(cons) = &expr.expr {
+                cons.clone()
+            } else {
+                exprs
+            }
+        } else {
+            exprs
+        };
 
         self.advance("parse list exprs");
         exprs
