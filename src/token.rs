@@ -22,12 +22,12 @@ impl Display for Info<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "File [{}]: {}",
+            "File [{}:{}]",
             self.file_name,
             if self.line == self.end_line {
-                format!("line [{}]", self.line)
+                format!("{}", self.line)
             } else {
-                format!("lines [{}..{}]", self.line, self.end_line)
+                format!("{}..{}", self.line, self.end_line)
             }
         )
     }

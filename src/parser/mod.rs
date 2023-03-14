@@ -5,7 +5,7 @@ use crate::{
 };
 
 use self::rules::{
-    Accesor, Expr, FnDef, Ident, IdentType, If, Interlaced, Lambda, List, Lit, Loop, Var,
+    Accesor, Expr, ExprType, FnDef, Ident, IdentType, If, Interlaced, Lambda, List, Lit, Loop, Var,
 };
 pub(crate) mod rules;
 
@@ -540,6 +540,11 @@ impl<'a> Parser<'a> {
                 exprs.push(expr);
             }
         }
+        // check if the head cdr is a list or anything but hempty
+        if let ExprType::List(list) = exprs.cdr.expr {
+            exprs = list;
+        }
+
         self.advance("parse list exprs");
         exprs
     }
