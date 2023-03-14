@@ -17,7 +17,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(source: &'a str, name: &'a str) -> Self {
+    pub const fn new(source: &'a str, name: &'a str) -> Self {
         Self {
             token_list: Vec::new(),
             source,
@@ -48,7 +48,6 @@ impl<'a> Lexer<'a> {
 
     pub fn scan_tokens(mut self) -> Vec<Token<'a>> {
         let mut at_end = self.is_at_end();
-        println!("at_end: {}", at_end);
         while !at_end {
             self.start = self.current;
             if let Some(t) = self.scan_token() {
@@ -71,7 +70,6 @@ impl<'a> Lexer<'a> {
         'a: 'b,
     {
         let c: char = self.advance();
-        println!("c: {}", c);
         match c {
             '{' => Some(self.add_token(TokenType::LeftBrace)),
             '[' => Some(self.add_token(TokenType::LeftBracket)),
@@ -120,37 +118,42 @@ impl<'a> Lexer<'a> {
             '`' => Some(self.string()),
             '$' => Some(self.function_agument()),
             '*' => Some(self.add_token(TokenType::Star)),
-            c => {
-                if c.is_lowercase() || c == '-' {
-                    if c == 't' || c == 'f' {
-                        self.boolean().map_or_else(|| self.identifier(), Some)
-                    } else if c == 'h' {
-                        self.hempty().map_or_else(|| self.identifier(), Some)
-                    } else {
-                        self.insert_text(c);
-                        self.identifier()
-                    }
-                } else if c.is_ascii_whitespace() {
-                    None
-                } else if c == '0' && self.peek() == 'x' {
+            c if c.is_ascii_whitespace() => None,
+            c if c.is_ascii_digit() => {
+                if self.peek() == 'x' {
                     self.advance();
-                    println!("hex");      
-                    Some(self.number())
-                } else if emoji::is_emoji(c) {
-                    for module in self.module.clone() {
-                        self.add_token(TokenType::ModuleIdentifier(module));
-                    }
-                    Some(self.add_unicode_token(TokenType::FunctionIdentifier(c)))
                 } else {
-                    error(self.get_info(), format!("uknown character {c}"));
+                    self.insert_text(c);
                 }
+                Some(self.number())
+            }
+            c if emoji::is_emoji(c) => {
+                for module in self.module.clone() {
+                    self.add_token(TokenType::ModuleIdentifier(module));
+                }
+                Some(self.add_unicode_token(TokenType::FunctionIdentifier(c)))
+            }
+            c if c == 't' || c == 'f' => {
+                self.insert_text(c);
+                self.boolean().map_or_else(|| self.identifier(), Some)
+            }
+            c if c == 'h' => {
+                self.insert_text(c);
+                self.hempty().map_or_else(|| self.identifier(), Some)
+            }
+            c if c.is_lowercase() => {
+                self.insert_text(c);
+                self.identifier()
+            }
+            c => {
+                error(self.get_info(), format!("uknown character {c}"));
             }
         }
     }
 
     fn boolean(&mut self) -> Option<Token<'a>> {
         while self.peek().is_alphabetic() {
-            self.advance();
+            self.advance_insert();
         }
         if self.get_text() == "true" {
             Some(self.add_token(TokenType::Boolean(true)))
@@ -163,7 +166,7 @@ impl<'a> Lexer<'a> {
 
     fn hempty(&mut self) -> Option<Token<'a>> {
         while self.peek().is_alphabetic() {
-            self.advance();
+            self.advance_insert();
         }
         if self.get_text() == "hempty" {
             Some(self.add_token(TokenType::Hempty))
@@ -181,54 +184,41 @@ impl<'a> Lexer<'a> {
             // check for escape sequence \` \n \\ \t \r \a \b \f \v \e \Xhh \0ooo \Uhhhhhhhh
             if self.peek() == '\\' {
                 self.advance();
-                // self.remove_text(self.current);
-                println!("{} is the current char", self.peek());
                 if self.peek() == '`' {
                     self.insert_text('`');
                     self.advance();
                 } else if self.peek() == 'n' {
-                    // self.remove_text(self.current);
                     self.insert_text('\n');
                     self.advance();
                 } else if self.peek() == '\\' {
-                    // self.remove_text(self.current);
                     self.insert_text('\\');
                     self.advance();
                 } else if self.peek() == 't' {
-                    // self.remove_text(self.current);
                     self.insert_text('\t');
                     self.advance();
                 } else if self.peek() == 'r' {
-                    // self.remove_text(self.current);
                     self.insert_text('\r');
                     self.advance();
                 } else if self.peek() == 'a' {
-                    // self.remove_text(self.current);
                     self.insert_text('\x07');
                     self.advance();
                 } else if self.peek() == 'b' {
-                    // self.remove_text(self.current);
                     self.insert_text('\x08');
                     self.advance();
                 } else if self.peek() == 'f' {
-                    // self.remove_text(self.current);
                     self.insert_text('\x0C');
                     self.advance();
                 } else if self.peek() == 'v' {
-                    // self.remove_text(self.current);
                     self.insert_text('\x0b');
                     self.advance();
                 } else if self.peek() == 'e' {
-                    // self.remove_text(self.current);
                     self.insert_text('\x1b');
                     self.advance();
                 } else if self.peek() == 'x' {
-                    // self.remove_text(self.current);
                     match self.peek() {
                         x if x.is_ascii_hexdigit() => match self.peek() {
                             y if y.is_ascii_hexdigit() => {
                                 self.insert_text(
-                                    // self.current,
                                     u8::from_str_radix(format!("{x}{y}").as_str(), 16)
                                         .unwrap_or_else(|_| {
                                             error(self.get_info(), "invalid hex escape sequence");
@@ -238,7 +228,6 @@ impl<'a> Lexer<'a> {
                             }
                             y => {
                                 self.insert_text(
-                                    // self.current,
                                     u8::from_str_radix(format!("{x}").as_str(), 16).unwrap_or_else(
                                         |_| {
                                             error(self.get_info(), "invalid hex escape sequence");
@@ -255,31 +244,32 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 } else if self.peek() == 'u' {
-                    // self.remove_text(self.current);
                     // can be from 0 to 6 hex digits
                     // loop until either 6 digits or we find a digit a non-hex digit
                     // while looping remove the character and append to a string
                     let mut hex_string = String::new();
                     let mut i = 0;
-                    println!("found=u {}", self.peek());
                     self.advance();
                     while i < 6 && self.peek().is_ascii_hexdigit() {
-                        println!("found=f {}", self.peek());
                         hex_string.push(self.advance());
                         i += 1;
                     }
                     self.insert_text(
-                        // self.current,
                         char::from_u32(
                             u32::from_str_radix(hex_string.as_str(), 16).unwrap_or_else(|_| {
-                                error(self.get_info(), format!("invalid unicode escape sequence '{}'", hex_string));
+                                error(
+                                    self.get_info(),
+                                    format!("invalid unicode escape sequence '{}'", hex_string),
+                                );
                             }),
                         )
                         .unwrap_or_else(|| {
-                            error(self.get_info(), format!("invalid unicode escape sequence '{}'", hex_string));
+                            error(
+                                self.get_info(),
+                                format!("invalid unicode escape sequence '{}'", hex_string),
+                            );
                         }),
                     );
-                    // self.current += 1;
                 } else {
                     error(
                         self.get_info(),
@@ -287,27 +277,28 @@ impl<'a> Lexer<'a> {
                     );
                 }
             } else {
-                println!("found '{:?}' non ecape", self.peek());
-                self.advance();
+                self.advance_insert();
             }
         }
         if self.is_at_end() {
-            error(self.get_info(), format!("unterminated string: '{}'", self.get_text()));
+            error(
+                self.get_info(),
+                format!("unterminated string: '{}'", self.get_text()),
+            );
         }
         self.advance();
-        self.start += 1;
-        self.current -= 1;
+        // self.start += 1;
+        // self.current -= 1;
         let string = self.get_text();
-        self.start -= 1;
-        self.current += 1;
-        println!("string: '{}'", string);
+        // self.start -= 1;
+        // self.current += 1;
         self.add_token(TokenType::String(string))
     }
 
     fn number(&mut self) -> Token<'a> {
         while self.peek().is_ascii_hexdigit() {
             self.insert_text(self.peek());
-            println!("number part {:?}", self.advance());
+            self.advance();
         }
         if self.peek() == '.' && self.peek_next().is_ascii_hexdigit() {
             self.advance();
@@ -315,10 +306,14 @@ impl<'a> Lexer<'a> {
                 self.advance();
             }
         }
-        println!("number: {}", self.get_text());
         let number: FloatLiteral = format!("0x{}", self.get_text())
             .parse()
-            .unwrap_or_else(|_| error(self.get_info(), format!("invalid number: '{}'", self.get_text())));
+            .unwrap_or_else(|_| {
+                error(
+                    self.get_info(),
+                    format!("invalid number: '{}'", self.get_text()),
+                )
+            });
         self.add_token(TokenType::Number(number.convert::<f64>().inner()))
     }
 
@@ -334,20 +329,19 @@ impl<'a> Lexer<'a> {
                 format!("invalid identifier '{}'", self.get_text()),
             );
         }
-        println!("identifier: {}", self.peek());
+
         while self.peek().is_lowercase() || self.peek() == '-' || self.peek().is_numeric() {
-            self.insert_text(self.peek());
-            self.advance();
+            self.advance_insert();
         }
         if self.peek() == '+' {
-            self.advance();
+            self.advance_insert();
             // see if the next character is an emoji
             while self.peek().is_lowercase() && self.peek_next() == '+' {
-                self.advance();
-                self.advance();
+                self.advance_insert();
+                self.advance_insert();
             }
             if emoji::is_emoji(self.peek()) {
-                self.advance();
+                self.advance_insert();
                 let name = self.get_text();
                 #[allow(clippy::needless_collect)]
                 let parts = name
@@ -377,15 +371,12 @@ impl<'a> Lexer<'a> {
                 );
             }
         } else {
-            let text = self.get_text_clear();
+            let text = self.get_text();
             if let Some(token) = crate::KEYWORDS.string_is_builtin_function(&text) {
-                println!("found builtin function: {:?}", token);
                 Some(self.add_token(TokenType::BuiltinFunction(token)))
             } else if let Some(token) = crate::KEYWORDS.string_is_keyword(&text) {
-                println!("found keyword: {:?}", token);
                 Some(self.add_token(token))
             } else {
-                println!("found identifier: {:?}", text);
                 Some(self.add_token(TokenType::Identifier(text)))
             }
         }
@@ -393,9 +384,8 @@ impl<'a> Lexer<'a> {
 
     fn function_agument(&mut self) -> Token<'a> {
         self.start += 1; // advance start past the $ so that we can parse it into a number
-        let hex_char = vec!['A', 'B', 'C', 'D', 'E', 'F'];
-        while self.peek().is_ascii_digit() || hex_char.contains(&self.peek()) {
-            self.advance();
+        while self.peek().is_ascii_hexdigit() {
+            self.advance_insert();
         }
         let identifier = format!(
             "${}",
@@ -417,14 +407,22 @@ impl<'a> Lexer<'a> {
         char_vec[self.current - 1]
     }
 
+    fn advance_insert(&mut self) -> char {
+        let char_vec: Vec<char> = self.source.chars().collect();
+        self.insert_text(char_vec[self.current]);
+        self.current += 1;
+        char_vec[self.current - 1]
+    }
+
     fn add_token(&mut self, token_type: TokenType) -> Token<'a> {
-        let text: std::str::Chars<'_> = self.text_buffer.chars();
+        let text: std::str::Chars<'_> = self.source.chars();
         let mut final_text: String = String::new();
         text.enumerate().for_each(|i| {
             if i.0 >= self.start && i.0 < self.current {
                 final_text.push(i.1);
             }
         });
+        self.text_buffer.clear();
         Token::new(token_type, final_text.as_str(), self.get_info())
     }
 
@@ -432,7 +430,10 @@ impl<'a> Lexer<'a> {
         let text: String = format!(
             "{}",
             self.source.chars().nth(self.start).unwrap_or_else(|| {
-                error(self.get_info(), format!("could not get unicode character at {}", self.start));
+                error(
+                    self.get_info(),
+                    format!("could not get unicode character at {}", self.start),
+                );
             })
         );
         Token::new(token_type, &text, self.get_info())
@@ -443,20 +444,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn peek_next(&self) -> char {
-        self.text_buffer
-            .chars()
-            .nth(self.current + 1)
-            .unwrap_or('\0')
+        self.source.chars().nth(self.current + 1).unwrap_or('\0')
     }
 
     fn get_text(&self) -> String {
         self.text_buffer.clone()
-    }
-
-    fn get_text_clear(&mut self) -> String {
-        let text = self.get_text();
-        self.text_buffer.clear();
-        text
     }
 
     fn insert_text(&mut self, text: char) {
