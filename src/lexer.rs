@@ -122,17 +122,9 @@ impl<'a> Lexer<'a> {
                 }
                 Some(self.add_unicode_token(TokenType::FunctionIdentifier(c)))
             }
-            c if c == 't' || c == 'f' => {
-                self.text_buffer.push(c);
-                self.boolean().map_or_else(|| self.identifier(), Some)
-            }
-            c if c == 'h' => {
-                self.text_buffer.push(c);
-                self.hempty().map_or_else(|| self.identifier(), Some)
-            }
             c if c.is_lowercase() => {
                 self.text_buffer.push(c);
-                self.identifier()
+                self.lex_lit()
             }
             c => {
                 error(self.get_info(), format!("uknown character {c}"));
@@ -140,7 +132,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn boolean(&mut self) -> Option<Token<'a>> {
+    fn lex_lit(&mut self) -> Option<Token<'a>> {
         while self.peek().is_alphabetic() {
             self.advance_insert();
         }
@@ -148,20 +140,12 @@ impl<'a> Lexer<'a> {
             Some(self.add_token(TokenType::Boolean(true)))
         } else if self.get_text() == "false" {
             Some(self.add_token(TokenType::Boolean(false)))
-        } else {
-            None
-        }
-    }
-
-    fn hempty(&mut self) -> Option<Token<'a>> {
-        while self.peek().is_alphabetic() {
-            self.advance_insert();
-        }
-        if self.get_text() == "hempty" {
+        } else if self.get_text() == "hempty" {
             Some(self.add_token(TokenType::Hempty))
         } else {
-            None
+            self.identifier()
         }
+
     }
 
     #[allow(clippy::too_many_lines)]
