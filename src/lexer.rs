@@ -38,14 +38,8 @@ impl<'a> Lexer<'a> {
 
     pub const fn get_info(&self) -> Info<'a> {
         Info {
-            begin: Position {
-                line: self.line,
-                column: self.colunm,
-            },
-            end: Position {
-                line: self.line,
-                column: self.colunm,
-            },
+            begin: Position::new(self.line, self.colunm),
+            end: Position::new(self.line, self.colunm),
             file_name: self.name,
         }
     }

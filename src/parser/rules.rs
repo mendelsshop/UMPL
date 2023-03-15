@@ -235,7 +235,7 @@ pub struct Cons<'a, A> {
     pub cdr: Option<Box<A>>,
 }
 
-#[allow(dead_code)]
+// TODO: impl Iterator for Cons<'a, A>
 impl<'a, A: ListUtils<'a, A>> Cons<'a, A> {
     pub fn new(info: Info<'a>, car: A, cdr: Option<A>) -> Self {
         Self {
@@ -298,17 +298,6 @@ impl<'a, A: Display> Display for Cons<'a, A> {
         write!(f, ")")
     }
 }
-
-// impl <A: Clone>Iterator for Cons<'_, A> {
-//     type Item = A;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         let car = self.car.clone();
-//         self.cdr = self.cdr.take().map(|cdr| *cdr);
-//         Some(car)
-//     }
-// }
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lambda<'a> {
     pub info: Info<'a>,
