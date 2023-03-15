@@ -511,6 +511,8 @@ pub enum IdentType {
     Var(Interlaced<String, Accesor>),
     FnIdent(Interlaced<char, char>),
     Builtin(BuiltinFunction),
+    // TODO: if function in function, we loose original funtion parameters
+    FnParam(u64),
 }
 
 impl Display for IdentType {
@@ -535,6 +537,7 @@ impl Display for IdentType {
                 }
             ),
             Self::Builtin(builtin) => write!(f, "builtin function {builtin}"),
+            Self::FnParam(param) => write!(f, "function parameter {param}"),
         }
     }
 }

@@ -89,7 +89,7 @@ pub enum TokenType {
     Hempty,
     Boolean(bool),
     Function,
-    FunctionArgument(String),
+    FunctionArgument(u64),
     EOF,
     Program,
     BuiltinFunction(BuiltinFunction),

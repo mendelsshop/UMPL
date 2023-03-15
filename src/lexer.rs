@@ -358,18 +358,16 @@ impl<'a> Lexer<'a> {
         while self.peek().is_ascii_hexdigit() {
             self.advance_insert();
         }
-        let identifier = format!(
-            "${}",
-            match format!("0x{}", self.get_text()).parse::<FloatLiteral>() {
-                Ok(contents) => {
-                    contents.convert::<f64>().inner()
-                }
-                Err(errors) => {
-                    error(self.get_info(), errors);
-                }
-            }
-        );
-        self.add_token(TokenType::Identifier(identifier))
+        let number: u64 = self.get_text().parse().unwrap_or_else(|_| {
+            error(
+                self.get_info(),
+                format!(
+                    "invalid function argument need number: '{}'",
+                    self.get_text()
+                ),
+            )
+        });
+        self.add_token(TokenType::FunctionArgument(number))
     }
 
     fn advance(&mut self) -> char {

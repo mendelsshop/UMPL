@@ -138,6 +138,11 @@ impl<'a> Parser<'a> {
                 self.token.info,
                 Ident::new(self.token.info, IdentType::Builtin(name)),
             )),
+            // function parameters
+            TokenType::FunctionArgument(num) => Some(Expr::new_identifier(
+                self.token.info,
+                Ident::new(self.token.info, IdentType::FnParam(num)),
+            )),
             // fn identifiers
             TokenType::FunctionIdentifier(name) => Some(Expr::new_identifier(
                 self.token.info,
