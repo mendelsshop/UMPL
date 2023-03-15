@@ -1,7 +1,7 @@
 use crate::{
     error::error,
     parser::rules::{FnCall, PrintType},
-    token::{Info, Token, TokenType},
+    token::{Info, Position, Token, TokenType},
 };
 
 use self::rules::{
@@ -22,7 +22,7 @@ pub struct Parser<'a> {
 }
 static START_TOKEN: Token<'static> = Token {
     token_type: TokenType::EOF,
-    info: Info::new("", 0, 0),
+    info: Info::new("", Position::new(0, 0), Position::new(0, 0)),
     lexeme: String::new(),
 };
 
@@ -74,7 +74,7 @@ impl<'a> Parser<'a> {
 
         // check if we ran out of tokens or are done parsing (if EOF is encountered)
         if self.tokens.is_empty() {
-            error(Info::new(self.file_path, 0, 0), "no self.tokens found");
+            error(START_TOKEN.info, "no self.tokens found");
         }
         if self.done {
             return None;
@@ -254,7 +254,7 @@ impl<'a> Parser<'a> {
 
     fn parse_parenthissized(&mut self) -> Expr<'a> {
         // save the line number because the next token can be on the next line
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         let mut args = Vec::new();
         while self.token.token_type != TokenType::CallEnd {
             if let Some(token) = self.parse_from_token_advance() {
@@ -265,9 +265,9 @@ impl<'a> Parser<'a> {
         self.advance("parse_parenthissized - looking for printing indicator");
         match self.token.token_type {
             TokenType::LessThanSymbol => Expr::new_call(
-                Info::new(self.file_path, start_line, self.token.info.line),
+                Info::new(self.file_path, start_line, self.token.info.end),
                 FnCall::new(
-                    Info::new(self.file_path, start_line, self.token.info.line),
+                    Info::new(self.file_path, start_line, self.token.info.end),
                     args,
                     PrintType::None,
                 ),
@@ -275,9 +275,9 @@ impl<'a> Parser<'a> {
             TokenType::GreaterThanSymbol => {
                 // TODO: check if next token is a > if it is use PrintType::NoNewline
                 Expr::new_call(
-                    Info::new(self.file_path, start_line, self.token.info.line),
+                    Info::new(self.file_path, start_line, self.token.info.end),
                     FnCall::new(
-                        Info::new(self.file_path, start_line, self.token.info.line),
+                        Info::new(self.file_path, start_line, self.token.info.end),
                         args,
                         PrintType::Newline,
                     ),
@@ -291,7 +291,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_function(&mut self) -> Option<Expr<'a>> {
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         self.advance("parse_function - start");
         match self.token.token_type.clone() {
             TokenType::FunctionIdentifier(name) => {
@@ -299,14 +299,14 @@ impl<'a> Parser<'a> {
                 // because if is a a call it can have modules seperated by + (the module operator)
                 let fn_def = self.parse_named_function(name, vec![]);
                 Some(Expr::new_fn(
-                    Info::new(self.file_path, start_line, self.token.info.line),
+                    Info::new(self.file_path, start_line, self.token.info.end),
                     fn_def,
                 ))
             }
             TokenType::Star | TokenType::CodeBlockBegin | TokenType::Number { .. } => {
                 let lambda = self.parse_function_body();
                 Some(Expr::new_lambda(
-                    Info::new(self.file_path, start_line, self.token.info.line),
+                    Info::new(self.file_path, start_line, self.token.info.end),
                     lambda,
                 ))
             }
@@ -318,7 +318,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_named_function(&mut self, name: char, modules: Vec<char>) -> FnDef<'a> {
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         self.advance("parsed_named_function");
         let body = match self.token.token_type.clone() {
             TokenType::Number { .. } | TokenType::Star | TokenType::CodeBlockBegin => {
@@ -330,7 +330,7 @@ impl<'a> Parser<'a> {
             ),
         };
         FnDef::new(
-            Info::new(self.file_path, start_line, self.token.info.line),
+            Info::new(self.file_path, start_line, self.token.info.end),
             name,
             modules,
             body,
@@ -341,6 +341,7 @@ impl<'a> Parser<'a> {
     fn parse_function_body(&mut self) -> Lambda<'a> {
         let mut arg_count = 0;
         let mut extra_args = false;
+        let start_line = self.token.info.begin;
         match self.token.token_type {
             TokenType::Star => {
                 extra_args = true;
@@ -380,7 +381,7 @@ impl<'a> Parser<'a> {
         let body = self.parse_list_exprs();
         self.in_function = false;
         Lambda::new(
-            Info::new(self.file_path, self.token.info.line, self.token.info.line),
+            Info::new(self.file_path, start_line, self.token.info.end),
             arg_count,
             extra_args,
             body,
@@ -388,7 +389,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_loop(&mut self) -> Loop<'a> {
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         self.check_next(
             "expected ⧼ after loop keyword found",
             &TokenType::CodeBlockBegin,
@@ -399,13 +400,13 @@ impl<'a> Parser<'a> {
         self.in_loop = false;
         // println!("loop parsed");
         Loop::new(
-            Info::new(self.file_path, start_line, self.token.info.line),
+            Info::new(self.file_path, start_line, self.token.info.end),
             loop_exprs,
         )
     }
 
     fn parse_if(&mut self) -> If<'a> {
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         self.check_next(
             "expected {{ after if keyword",
             &TokenType::LeftBrace,
@@ -440,7 +441,7 @@ impl<'a> Parser<'a> {
         );
         let else_exprs = self.parse_list_exprs();
         If::new(
-            Info::new(self.file_path, start_line, self.token.info.line),
+            Info::new(self.file_path, start_line, self.token.info.end),
             cond,
             if_then_exprs,
             else_exprs,
@@ -458,11 +459,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_list(&mut self) -> Expr<'a> {
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         self.advance("parse list");
         match self.token.token_type.clone() {
             TokenType::LeftBracket => Expr::new_cons(
-                Info::new(self.file_path, start_line, self.token.info.line),
+                Info::new(self.file_path, start_line, self.token.info.end),
                 self.parse_list_inner(),
             ),
             TokenType::Identifier(name) => {
@@ -477,12 +478,12 @@ impl<'a> Parser<'a> {
                     "parse list",
                 );
                 Expr::new_var(
-                    Info::new(self.file_path, start_line, self.token.info.line),
+                    Info::new(self.file_path, start_line, self.token.info.end),
                     Var::new(
-                        Info::new(self.file_path, start_line, self.token.info.line),
+                        Info::new(self.file_path, start_line, self.token.info.end),
                         name,
                         Expr::new_cons(
-                            Info::new(self.file_path, start_line, self.token.info.line),
+                            Info::new(self.file_path, start_line, self.token.info.end),
                             self.parse_list_inner(),
                         ),
                     ),
@@ -501,7 +502,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_list_inner(&mut self) -> Cons<'a, Expr<'a>> {
-        let start_line = self.token.info.line;
+        let start_line = self.token.info.begin;
         self.advance("parse list inner");
         let car = if let Some(expr) = self.parse_from_token() {
             expr
@@ -520,7 +521,7 @@ impl<'a> Parser<'a> {
             "parse list inner",
         );
         return Cons::new(
-            Info::new(self.file_path, start_line, self.token.info.line),
+            Info::new(self.file_path, start_line, self.token.info.end),
             car,
             Some(cdr),
         );

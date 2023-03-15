@@ -103,6 +103,6 @@ fn run(line: &str, name: &str) {
     for expr in &parsed {
         println!("{}", expr);
     }
-    println!("{:#?}", parsed);
+    // println!("{:#?}", parsed);
     // Eval::new(parsed);
 }

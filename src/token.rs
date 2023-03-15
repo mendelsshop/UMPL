@@ -4,16 +4,35 @@ use std::fmt::{self, Debug, Display};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord, Default)]
 pub struct Info<'a> {
     pub file_name: &'a str,
+    pub begin: Position,
+    pub end: Position,
+}
+
+// struct to store the line and column of a token
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, PartialOrd, Ord, Default)]
+pub struct Position {
     pub line: u32,
-    pub end_line: u32,
+    pub column: u32,
+}
+
+impl Position {
+    pub const fn new(line: u32, column: u32) -> Self {
+        Self { line, column }
+    }
+}
+
+impl Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.column)
+    }
 }
 
 impl<'a> Info<'a> {
-    pub const fn new(file_name: &'a str, line: u32, end_line: u32) -> Self {
+    pub const fn new(file_name: &'a str, begin: Position, end: Position) -> Self {
         Self {
             file_name,
-            line,
-            end_line,
+            begin,
+            end,
         }
     }
 }
@@ -24,10 +43,11 @@ impl Display for Info<'_> {
             f,
             "File [{}:{}]",
             self.file_name,
-            if self.line == self.end_line {
-                format!("{}", self.line)
+            if self.begin == self.end {
+                format!("{}", self.begin)
             } else {
-                format!("{}..{}", self.line, self.end_line)
+                // TODO figure out how to get ides to select the whole range not just the first char
+                format!("{}.{}", self.begin, self.end)
             }
         )
     }

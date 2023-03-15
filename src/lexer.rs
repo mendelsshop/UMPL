@@ -1,6 +1,6 @@
 use crate::{
     error::error,
-    token::{Info, Token, TokenType},
+    token::{Info, Position, Token, TokenType},
 };
 use hexponent::FloatLiteral;
 
@@ -14,6 +14,7 @@ pub struct Lexer<'a> {
     module: Vec<char>,
     name: &'a str,
     text_buffer: String,
+    colunm: u32,
 }
 
 impl<'a> Lexer<'a> {
@@ -27,6 +28,7 @@ impl<'a> Lexer<'a> {
             module: Vec::new(),
             name,
             text_buffer: String::new(),
+            colunm: 1,
         }
     }
 
@@ -36,8 +38,14 @@ impl<'a> Lexer<'a> {
 
     pub const fn get_info(&self) -> Info<'a> {
         Info {
-            line: self.line,
-            end_line: self.line,
+            begin: Position {
+                line: self.line,
+                column: self.colunm,
+            },
+            end: Position {
+                line: self.line,
+                column: self.colunm,
+            },
             file_name: self.name,
         }
     }
@@ -102,6 +110,7 @@ impl<'a> Lexer<'a> {
 
             '\n' => {
                 self.line += 1;
+                self.colunm = 1;
                 None
             }
             '`' => Some(self.string()),
@@ -145,7 +154,6 @@ impl<'a> Lexer<'a> {
         } else {
             self.identifier()
         }
-
     }
 
     #[allow(clippy::too_many_lines)]
@@ -372,15 +380,15 @@ impl<'a> Lexer<'a> {
 
     fn advance(&mut self) -> char {
         self.current += 1;
+        self.colunm += 1;
         let char_vec: Vec<char> = self.source.chars().collect();
         char_vec[self.current - 1]
     }
 
     fn advance_insert(&mut self) -> char {
-        let char_vec: Vec<char> = self.source.chars().collect();
-        self.text_buffer.push(char_vec[self.current]);
-        self.current += 1;
-        char_vec[self.current - 1]
+        let new_char = self.advance();
+        self.text_buffer.push(new_char);
+        new_char
     }
 
     fn add_token(&mut self, token_type: TokenType) -> Token<'a> {
