@@ -7,7 +7,7 @@ repository = "https://github.com/mendelsshop/umpl"
 keywords = ["umpl", "umpl-lang"]
 categories = ["language", "lang"]
 description = "Umpl is a a meme language that is a mix of c like languages and lisp like languages."
-rust-version = "1.59.0"
+rust-version = "1.61.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

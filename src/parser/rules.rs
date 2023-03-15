@@ -7,10 +7,33 @@ pub struct Expr<'a> {
     pub info: Info<'a>,
     pub expr: ExprType<'a>,
 }
+
+impl<'a> ListUtils<'a, Expr<'a>> for Expr<'a> {
+    fn get_list(&self) -> Option<&Cons<'a, Expr<'a>>> {
+        match &self.expr {
+            ExprType::Cons(cons) => Some(cons),
+            _ => None,
+        }
+    }
+
+    fn get_list_mut(&mut self) -> Option<&mut Cons<'a, Expr<'a>>> {
+        match &mut self.expr {
+            ExprType::Cons(cons) => Some(cons),
+            _ => None,
+        }
+    }
+
+    fn new_list(info: Info<'a>, list: Cons<'a, Expr<'a>>) -> Expr<'a> {
+        Expr {
+            info,
+            expr: ExprType::Cons(list),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprType<'a> {
     Literal(Lit<'a>),
-    List(List<'a>),
     Fn(FnDef<'a>),
     Call(Box<FnCall<'a>>),
     If(Box<If<'a>>),
@@ -20,6 +43,7 @@ pub enum ExprType<'a> {
     Return(Box<Expr<'a>>),
     Break(Box<Expr<'a>>),
     Identifier(Ident<'a>),
+    Cons(Cons<'a, Expr<'a>>),
     Continue,
 }
 
@@ -28,13 +52,6 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Literal(value),
-        }
-    }
-
-    pub const fn new_list(info: Info<'a>, value: List<'a>) -> Self {
-        Self {
-            info,
-            expr: ExprType::List(value),
         }
     }
 
@@ -107,13 +124,19 @@ impl<'a> Expr<'a> {
             expr: ExprType::Identifier(value),
         }
     }
+
+    pub const fn new_cons(info: Info<'a>, value: Cons<'a, Expr<'a>>) -> Self {
+        Self {
+            info,
+            expr: ExprType::Cons(value),
+        }
+    }
 }
 
 impl<'a> Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.expr {
             ExprType::Literal(lit) => write!(f, "literal [{lit}]"),
-            ExprType::List(list) => write!(f, "list [{list}]"),
             ExprType::Fn(fn_def) => write!(f, "fn [{fn_def}]"),
             ExprType::Call(call) => write!(f, "call [{call}]"),
             ExprType::If(if_) => write!(f, "if [{if_}]"),
@@ -124,6 +147,7 @@ impl<'a> Display for Expr<'a> {
             ExprType::Break(break_) => write!(f, "break [{break_}]"),
             ExprType::Continue => write!(f, "continue"),
             ExprType::Identifier(ident) => write!(f, "ident [{ident}]"),
+            ExprType::Cons(cons) => write!(f, "cons [{cons}]"),
         }
     }
 }
@@ -198,136 +222,88 @@ impl fmt::Display for LitType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct List<'a> {
-    pub info: Info<'a>,
-    pub car: Box<Expr<'a>>,
-    pub cdr: Box<Expr<'a>>,
+pub trait ListUtils<'a, A> {
+    fn get_list(&self) -> Option<&Cons<'a, A>>;
+    fn get_list_mut(&mut self) -> Option<&mut Cons<'a, A>>;
+    fn new_list(info: Info<'a>, list: Cons<'a, A>) -> A;
 }
 
-impl<'a> List<'a> {
-    pub fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cons<'a, A> {
+    pub info: Info<'a>,
+    pub car: Box<A>,
+    pub cdr: Option<Box<A>>,
+}
+
+// TODO: impl Iterator for Cons<'a, A>
+impl<'a, A: ListUtils<'a, A>> Cons<'a, A> {
+    pub fn new(info: Info<'a>, car: A, cdr: Option<A>) -> Self {
         Self {
             info,
             car: Box::new(car),
-            cdr: Box::new(cdr),
+            cdr: cdr.map(|cdr| Box::new(cdr)),
         }
     }
 
-    pub const fn car(&self) -> &Expr<'a> {
+    pub const fn car(&self) -> &A {
         &self.car
     }
 
-    pub const fn cdr(&self) -> &Expr<'a> {
+    pub const fn cdr(&self) -> &Option<Box<A>> {
         &self.cdr
     }
 
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         let mut len = 0;
         let mut list = self;
-        while let ExprType::List(list_) = &list.cdr.expr {
-            len += 1;
-            list = list_;
+        while let Some(list_) = &list.cdr {
+            if let Some(list_) = list_.get_list() {
+                len += 1;
+                list = list_;
+            }
         }
         len
     }
 
-    pub fn new_cdr_empty(info: Info<'a>, car: Expr<'a>) -> Self {
+    pub fn new_cdr_empty(info: Info<'a>, car: A) -> Self {
         Self {
             info,
             car: Box::new(car),
-            cdr: Box::new(Expr::new_literal(info, Lit::new_hempty(info))),
+            cdr: None,
         }
     }
 
-    pub fn push(&mut self, car: Expr<'a>) {
-        self.cdr = Box::new(Expr::new_list(
-            car.info,
-            Self::new_cdr_empty(self.info, car),
-        ));
-    }
-
-    pub fn from_vec(info: Info<'a>, mut exprs: Vec<Expr<'a>>) -> Option<List<'a>> {
-        // should be a recursive function
-        // to create the list
-        // if the exprs is empty, set the cdr to be a hempty
-        // otherwise, set the cdr to be a list
-        if exprs.is_empty() {
-            None
-        } else {
-            let first = exprs.first().unwrap().clone();
-            let cdr = if exprs.len() == 1 {
-                Expr::new_literal(first.info, Lit::new_hempty(first.info))
+    pub fn set_cdr(&mut self, cdr: A) {
+        if let Some(cdr_) = &mut self.cdr {
+            if let Some(cdr_) = cdr_.get_list_mut() {
+                cdr_.set_cdr(cdr);
             } else {
-                exprs.remove(0);
-                Expr::new_list(
-                    first.info,
-                    Self::from_vec(first.info, exprs).expect("failed to create list from vec"),
-                )
-            };
-            Some(Self::new(info, first.clone(), cdr))
-        }
-    }
-}
-
-impl Default for List<'_> {
-    fn default() -> Self {
-        let info = Info::default();
-        Self::new(
-            info,
-            Expr::new_literal(info, Lit::new_hempty(info)),
-            Expr::new_literal(info, Lit::new_hempty(info)),
-        )
-    }
-}
-
-impl<'a> TryFrom<Vec<Expr<'a>>> for List<'a> {
-    type Error = String;
-
-    fn try_from(exprs: Vec<Expr<'a>>) -> Result<Self, Self::Error> {
-        // this will have be a recursive function
-        // to create the list
-        if exprs.is_empty() {
-            Ok(Self::default())
+                *cdr_ = Box::new(A::new_list(self.info, Self::new_cdr_empty(self.info, cdr)));
+            }
         } else {
-            let first = exprs.first().unwrap();
-            Self::from_vec(first.info, exprs)
-                .ok_or_else(|| "failed to create list from vec".to_string())
+            self.cdr = Some(Box::new(A::new_list(
+                self.info,
+                Self::new_cdr_empty(self.info, cdr),
+            )));
         }
     }
 }
 
-impl<'a> Iterator for List<'a> {
-    type Item = Expr<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let ExprType::List(list) = &self.cdr.expr {
-            let car = self.car.clone();
-            self.car = list.car.clone();
-            self.cdr = list.cdr.clone();
-            Some(*car)
-        } else {
-            None
-        }
-    }
-}
-
-impl<'a> Display for List<'a> {
+impl<'a, A: Display> Display for Cons<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "list: [car: {} cdr: {} [{}]]",
-            self.car, self.cdr, self.info
-        )
+        write!(f, "({car}", car = self.car)?;
+        if let Some(cdr) = &self.cdr {
+            write!(f, " {cdr}")?;
+        }
+        write!(f, ")")
     }
 }
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lambda<'a> {
     pub info: Info<'a>,
     pub param_count: usize,
     pub extra_params: bool,
-    pub body: List<'a>,
+    pub body: Cons<'a, Expr<'a>>,
 }
 
 impl<'a> Lambda<'a> {
@@ -335,7 +311,7 @@ impl<'a> Lambda<'a> {
         info: Info<'a>,
         param_count: usize,
         extra_params: bool,
-        body: List<'a>,
+        body: Cons<'a, Expr<'a>>,
     ) -> Self {
         Self {
             info,
@@ -353,11 +329,7 @@ impl<'a> Display for Lambda<'a> {
             "fn: [with {} {} parameters {} [{}]]",
             if self.extra_params { "at least" } else { "" },
             self.param_count,
-            self.body
-                .clone()
-                .map(|e| format!("{e}"))
-                .collect::<Vec<String>>()
-                .join(" "),
+            self.body,
             self.info
         )
     }
@@ -434,16 +406,16 @@ impl<'a> Display for FnCall<'a> {
 pub struct If<'a> {
     pub info: Info<'a>,
     pub condition: Expr<'a>,
-    pub then: List<'a>,
-    pub otherwise: List<'a>,
+    pub then: Cons<'a, Expr<'a>>,
+    pub otherwise: Cons<'a, Expr<'a>>,
 }
 
 impl<'a> If<'a> {
     pub const fn new(
         info: Info<'a>,
         condition: Expr<'a>,
-        then: List<'a>,
-        otherwise: List<'a>,
+        then: Cons<'a, Expr<'a>>,
+        otherwise: Cons<'a, Expr<'a>>,
     ) -> Self {
         Self {
             info,
@@ -459,18 +431,7 @@ impl<'a> Display for If<'a> {
         write!(
             f,
             "if {} then {} else {} [{}]",
-            self.condition,
-            self.then
-                .clone()
-                .map(|e| format!("{e}"))
-                .collect::<Vec<String>>()
-                .join(" "),
-            self.otherwise
-                .clone()
-                .map(|e| format!("{e}"))
-                .collect::<Vec<String>>()
-                .join(" "),
-            self.info
+            self.condition, self.then, self.otherwise, self.info,
         )
     }
 }
@@ -478,27 +439,18 @@ impl<'a> Display for If<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loop<'a> {
     pub info: Info<'a>,
-    pub body: List<'a>,
+    pub body: Cons<'a, Expr<'a>>,
 }
 
 impl<'a> Loop<'a> {
-    pub const fn new(info: Info<'a>, body: List<'a>) -> Self {
+    pub const fn new(info: Info<'a>, body: Cons<'a, Expr<'a>>) -> Self {
         Self { info, body }
     }
 }
 
 impl<'a> Display for Loop<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "loop {} [{}]",
-            self.body
-                .clone()
-                .map(|e| e.to_string())
-                .collect::<Vec<String>>()
-                .join(" "),
-            self.info
-        )
+        write!(f, "loop {} [{}]", self.body, self.info)
     }
 }
 

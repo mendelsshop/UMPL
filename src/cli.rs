@@ -1,6 +1,9 @@
 use std::process::exit;
 
-use crate::{error, token::Info};
+use crate::{
+    error,
+    token::{Info, Position},
+};
 pub static mut EASY_MODE: bool = false;
 pub static mut TOGGLE_CASE: i32 = 0;
 #[derive(PartialEq, Eq, Debug)]
@@ -27,8 +30,8 @@ impl ParsedArgs {
                 f if f.is_empty() => "<uwkown>",
                 f => f,
             },
-            0,
-            0,
+            Position::new(0, 0),
+            Position::new(0, 0),
         )
     }
 }
