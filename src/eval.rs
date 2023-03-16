@@ -209,6 +209,17 @@
 //     pub files: HashMap<String, File>,
 // }
 
+use std::{collections::HashMap, fs::File};
+
+use crate::parser::rules::{Accesor, Expr, Interlaced};
+
+pub struct Scope<'a> {
+    vars: HashMap<Interlaced<String, Accesor>, Expr<'a>>,
+    functions: HashMap<Interlaced<char, char>, (Vec<Expr<'a>>, f64, bool)>,
+    files: HashMap<String, File>,
+    parent_scope: Option<Box<Scope<'a>>>,
+}
+
 // impl Scope {
 //     pub fn new() -> Self {
 //         Self {

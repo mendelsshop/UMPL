@@ -9,6 +9,36 @@ use self::rules::{
 };
 pub(crate) mod rules;
 
+macro_rules! parse_car_cdr {
+    ($self:ident, $var:expr, $fntype:ident) => {{
+        let mut cars_and_cdrs = vec![];
+        while $self.peek().token_type == TokenType::Dot {
+            $self.advance("parse_from_token - dot");
+            $self.advance("parse_from_token - dot looking for car or cdr");
+            match $self.token.token_type.clone() {
+                TokenType::Car => {
+                    cars_and_cdrs.push(Accesor::Car);
+                }
+                TokenType::Cdr => {
+                    cars_and_cdrs.push(Accesor::Cdr);
+                }
+                tt => {
+                    error(
+                        $self.token.info,
+                        format!("expected car or cdr after dot, found {tt}"),
+                    );
+                }
+            }
+        }
+        Expr::new_identifier(
+            $self.token.info,
+            Ident::new(
+                $self.token.info,
+                IdentType::$fntype(Interlaced::new($var, cars_and_cdrs)),
+            ),
+        )
+    }};
+}
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
     current_position: usize,
@@ -132,17 +162,14 @@ impl<'a> Parser<'a> {
             }
             TokenType::List => Some(self.parse_list()),
             TokenType::Create => Some(self.parse_var()),
-            TokenType::Identifier(name) => Some(self.parse_var_ident(name)),
+            TokenType::Identifier(name) => Some(parse_car_cdr!(self, name, Var)),
             // built in functions
             TokenType::BuiltinFunction(name) => Some(Expr::new_identifier(
                 self.token.info,
                 Ident::new(self.token.info, IdentType::Builtin(name)),
             )),
             // function parameters
-            TokenType::FunctionArgument(num) => Some(Expr::new_identifier(
-                self.token.info,
-                Ident::new(self.token.info, IdentType::FnParam(num)),
-            )),
+            TokenType::FunctionArgument(num) => Some(parse_car_cdr!(self, num, FnParam)),
             // fn identifiers
             TokenType::FunctionIdentifier(name) => Some(Expr::new_identifier(
                 self.token.info,
@@ -158,37 +185,6 @@ impl<'a> Parser<'a> {
                 error(self.token.info, format!("unexpected token {keyword}"));
             }
         }
-    }
-
-    fn parse_var_ident(&mut self, name: String) -> Expr<'a> {
-        // TODO: check for car and cdr
-        // TODO: make general function that parses interlaced token ie tt::n tt::sep tt::n
-        let mut cars_and_cdrs = vec![];
-        while self.peek().token_type == TokenType::Dot {
-            self.advance("parse_from_token - dot");
-            self.advance("parse_from_token - dot looking for car or cdr");
-            match self.token.token_type.clone() {
-                TokenType::Car => {
-                    cars_and_cdrs.push(Accesor::Car);
-                }
-                TokenType::Cdr => {
-                    cars_and_cdrs.push(Accesor::Cdr);
-                }
-                tt => {
-                    error(
-                        self.token.info,
-                        format!("expected car or cdr after dot, found {tt}"),
-                    );
-                }
-            }
-        }
-        Expr::new_identifier(
-            self.token.info,
-            Ident::new(
-                self.token.info,
-                IdentType::Var(Interlaced::new(name, cars_and_cdrs)),
-            ),
-        )
     }
 
     fn parse_function_path(&mut self) -> Expr<'a> {
