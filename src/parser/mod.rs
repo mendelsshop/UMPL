@@ -356,7 +356,7 @@ impl<'a> Parser<'a> {
                 if literal.round() != literal {
                     error(self.token.info, "Expected integer number of arguments");
                 }
-                arg_count = literal as usize;
+                arg_count = literal as u64;
                 if self.peek().token_type == TokenType::Star {
                     extra_args = true;
                     self.advance("parse_function_body");

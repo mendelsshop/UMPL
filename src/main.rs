@@ -9,6 +9,7 @@ use std::{
 use umpl::{
     cli,
     error,
+    eval::Eval,
     // eval::Eval,
     lexer::Lexer,
     parser::Parser,
@@ -104,5 +105,6 @@ fn run(line: &str, name: &str) {
         println!("{}", expr);
     }
     // println!("{:#?}", parsed);
-    // Eval::new(parsed);
+    let eval = Eval::new(parsed);
+    println!("eval---\n{}", eval.scope);
 }

@@ -301,7 +301,7 @@ impl<'a, A: Display> Display for Cons<'a, A> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lambda<'a> {
     pub info: Info<'a>,
-    pub param_count: usize,
+    pub param_count: u64,
     pub extra_params: bool,
     pub body: Cons<'a, Expr<'a>>,
 }
@@ -309,7 +309,7 @@ pub struct Lambda<'a> {
 impl<'a> Lambda<'a> {
     pub const fn new(
         info: Info<'a>,
-        param_count: usize,
+        param_count: u64,
         extra_params: bool,
         body: Cons<'a, Expr<'a>>,
     ) -> Self {
@@ -326,8 +326,8 @@ impl<'a> Display for Lambda<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "fn: [with {} {} parameters {} [{}]]",
-            if self.extra_params { "at least" } else { "" },
+            "fn: [with {}{} parameters {}  [{}]]",
+            if self.extra_params { " at least" } else { "" },
             self.param_count,
             self.body,
             self.info
@@ -351,6 +351,10 @@ impl<'a> FnDef<'a> {
             modules,
             inner,
         }
+    }
+
+    pub const fn get_inner(&self) -> &Lambda<'a> {
+        &self.inner
     }
 }
 
@@ -472,7 +476,7 @@ impl<'a> Display for Var<'a> {
         write!(f, "var {} = {} [{}]", self.name, self.value, self.info)
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Interlaced<A: Debug + Display + Clone, B: Debug + Clone + Display> {
     pub main: A,
     pub interlaced: Vec<B>,
