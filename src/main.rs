@@ -104,6 +104,7 @@ fn run(line: &str, name: &str) {
     for expr in &parsed {
         println!("{}", expr);
     }
+
     // println!("{:#?}", parsed);
     let eval = Eval::new(parsed);
     println!("eval---\n{}", eval.scope);

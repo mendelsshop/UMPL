@@ -116,12 +116,14 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
 }
 
 fn usage() {
-    println!("Usage: umpl [File] [OPTIONS]
+    println!(
+        "Usage: umpl [File] [OPTIONS]
 \t\tOPTIONS: 
 \t-r, -i: interactive mode
 \t-h: help
 \t-f: force
-\t-t=number: toggle case");
+\t-t=number: toggle case"
+    );
     unsafe {
         if EASY_MODE {
             exit(0)
@@ -129,5 +131,4 @@ fn usage() {
             error::stackoverflow();
         }
     }
-    
 }

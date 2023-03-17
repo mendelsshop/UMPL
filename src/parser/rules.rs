@@ -8,27 +8,12 @@ pub struct Expr<'a> {
     pub expr: ExprType<'a>,
 }
 
-impl<'a> ListUtils<'a, Expr<'a>> for Expr<'a> {
-    fn get_list(&self) -> Option<&Cons<'a, Expr<'a>>> {
-        match &self.expr {
-            ExprType::Cons(cons) => Some(cons),
-            _ => None,
-        }
+pub fn to_string(code: &[Expr<'_>]) -> String {
+    let mut to_return = String::new();
+    for expr in code {
+        to_return.push_str(&format!("{expr}"));
     }
-
-    fn get_list_mut(&mut self) -> Option<&mut Cons<'a, Expr<'a>>> {
-        match &mut self.expr {
-            ExprType::Cons(cons) => Some(cons),
-            _ => None,
-        }
-    }
-
-    fn new_list(info: Info<'a>, list: Cons<'a, Expr<'a>>) -> Expr<'a> {
-        Expr {
-            info,
-            expr: ExprType::Cons(list),
-        }
-    }
+    to_return
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,7 +28,7 @@ pub enum ExprType<'a> {
     Return(Box<Expr<'a>>),
     Break(Box<Expr<'a>>),
     Identifier(Ident<'a>),
-    Cons(Cons<'a, Expr<'a>>),
+    Cons(Cons<'a>),
     Continue,
 }
 
@@ -125,7 +110,7 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub const fn new_cons(info: Info<'a>, value: Cons<'a, Expr<'a>>) -> Self {
+    pub const fn new_cons(info: Info<'a>, value: Cons<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Cons(value),
@@ -222,80 +207,89 @@ impl fmt::Display for LitType {
     }
 }
 
-pub trait ListUtils<'a, A> {
-    fn get_list(&self) -> Option<&Cons<'a, A>>;
-    fn get_list_mut(&mut self) -> Option<&mut Cons<'a, A>>;
-    fn new_list(info: Info<'a>, list: Cons<'a, A>) -> A;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cons<'a, A> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cons<'a> {
     pub info: Info<'a>,
-    pub car: Box<A>,
-    pub cdr: Option<Box<A>>,
+    pub car: Box<Expr<'a>>,
+    pub cdr: Box<Expr<'a>>,
 }
 
-// TODO: impl Iterator for Cons<'a, A>
-impl<'a, A: ListUtils<'a, A>> Cons<'a, A> {
-    pub fn new(info: Info<'a>, car: A, cdr: Option<A>) -> Self {
+// TODO: impl Iterator for Cons<'a, Expr>
+impl<'a> Cons<'a> {
+    pub fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
         Self {
             info,
             car: Box::new(car),
-            cdr: cdr.map(|cdr| Box::new(cdr)),
+            cdr: Box::new(cdr),
         }
     }
 
-    pub const fn car(&self) -> &A {
+    pub const fn car(&self) -> &Expr<'a> {
         &self.car
     }
 
-    pub const fn cdr(&self) -> &Option<Box<A>> {
+    pub const fn cdr(&self) -> &Expr<'a> {
         &self.cdr
     }
 
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         let mut len = 0;
         let mut list = self;
-        while let Some(list_) = &list.cdr {
-            if let Some(list_) = list_.get_list() {
-                len += 1;
-                list = list_;
-            }
+        while let ExprType::Cons(cons) = &list.cdr.expr {
+            len += 1;
+            list = cons;
         }
+
         len
     }
 
-    pub fn new_cdr_empty(info: Info<'a>, car: A) -> Self {
+    pub fn new_cdr_empty(info: Info<'a>, car: Expr<'a>) -> Self {
         Self {
             info,
             car: Box::new(car),
-            cdr: None,
+            cdr: Box::new(Expr::new_literal(info, Lit::new_hempty(info))),
         }
     }
 
-    pub fn set_cdr(&mut self, cdr: A) {
-        if let Some(cdr_) = &mut self.cdr {
-            if let Some(cdr_) = cdr_.get_list_mut() {
-                cdr_.set_cdr(cdr);
-            } else {
-                *cdr_ = Box::new(A::new_list(self.info, Self::new_cdr_empty(self.info, cdr)));
+    pub fn set_cdr(&mut self, cdr: Expr<'a>, recursive: bool) {
+        // check if cdr is a list
+        // if it is, if recursive, set go to the end of the list and set the cdr
+        // if not recursive, set the cdr to the list
+        // if it is not a list, set the cdr to a new list with the cdr as the car
+        let cdr = match cdr.expr {
+            ExprType::Cons(_) => cdr,
+            _ => Expr::new_cons(self.info, Cons::new_cdr_empty(self.info, cdr)),
+        };
+        match &mut self.cdr.expr {
+            ExprType::Cons(cons) => {
+                if recursive {
+                    cons.set_cdr(cdr, recursive);
+                } else {
+                    self.cdr = Box::new(cdr);
+                }
             }
-        } else {
-            self.cdr = Some(Box::new(A::new_list(
-                self.info,
-                Self::new_cdr_empty(self.info, cdr),
-            )));
+            _ => {
+                self.cdr = Box::new(cdr);
+            }
         }
     }
 }
 
-impl<'a, A: Display> Display for Cons<'a, A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({car}", car = self.car)?;
-        if let Some(cdr) = &self.cdr {
-            write!(f, " {cdr}")?;
+impl<'a> From<Cons<'a>> for Vec<Expr<'a>> {
+    fn from(value: Cons<'a>) -> Self {
+        let mut list = value;
+        let mut vec = Self::new();
+        while let ExprType::Cons(cons) = &list.cdr.expr {
+            vec.push(*list.car.clone());
+            list = cons.clone();
         }
-        write!(f, ")")
+        vec
+    }
+}
+
+impl<'a> Display for Cons<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({} . {})", self.car, self.cdr)
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -303,7 +297,7 @@ pub struct Lambda<'a> {
     pub info: Info<'a>,
     pub param_count: u64,
     pub extra_params: bool,
-    pub body: Cons<'a, Expr<'a>>,
+    body: Vec<Expr<'a>>,
 }
 
 impl<'a> Lambda<'a> {
@@ -311,7 +305,7 @@ impl<'a> Lambda<'a> {
         info: Info<'a>,
         param_count: u64,
         extra_params: bool,
-        body: Cons<'a, Expr<'a>>,
+        body: Vec<Expr<'a>>,
     ) -> Self {
         Self {
             info,
@@ -329,7 +323,7 @@ impl<'a> Display for Lambda<'a> {
             "fn: [with {}{} parameters {}  [{}]]",
             if self.extra_params { " at least" } else { "" },
             self.param_count,
-            self.body,
+            to_string(&self.body),
             self.info
         )
     }
@@ -410,16 +404,16 @@ impl<'a> Display for FnCall<'a> {
 pub struct If<'a> {
     pub info: Info<'a>,
     pub condition: Expr<'a>,
-    pub then: Cons<'a, Expr<'a>>,
-    pub otherwise: Cons<'a, Expr<'a>>,
+    pub then: Vec<Expr<'a>>,
+    pub otherwise: Vec<Expr<'a>>,
 }
 
 impl<'a> If<'a> {
     pub const fn new(
         info: Info<'a>,
         condition: Expr<'a>,
-        then: Cons<'a, Expr<'a>>,
-        otherwise: Cons<'a, Expr<'a>>,
+        then: Vec<Expr<'a>>,
+        otherwise: Vec<Expr<'a>>,
     ) -> Self {
         Self {
             info,
@@ -435,7 +429,10 @@ impl<'a> Display for If<'a> {
         write!(
             f,
             "if {} then {} else {} [{}]",
-            self.condition, self.then, self.otherwise, self.info,
+            self.condition,
+            to_string(&self.then),
+            to_string(&self.otherwise),
+            self.info,
         )
     }
 }
@@ -443,18 +440,18 @@ impl<'a> Display for If<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loop<'a> {
     pub info: Info<'a>,
-    pub body: Cons<'a, Expr<'a>>,
+    pub body: Vec<Expr<'a>>,
 }
 
 impl<'a> Loop<'a> {
-    pub const fn new(info: Info<'a>, body: Cons<'a, Expr<'a>>) -> Self {
+    pub const fn new(info: Info<'a>, body: Vec<Expr<'a>>) -> Self {
         Self { info, body }
     }
 }
 
 impl<'a> Display for Loop<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "loop {} [{}]", self.body, self.info)
+        write!(f, "loop {} [{}]", to_string(&self.body), self.info)
     }
 }
 
@@ -477,13 +474,13 @@ impl<'a> Display for Var<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Interlaced<A: Debug + Display + Clone, B: Debug + Clone + Display> {
-    pub main: A,
+pub struct Interlaced<Expr: Debug + Display + Clone, B: Debug + Clone + Display> {
+    pub main: Expr,
     pub interlaced: Vec<B>,
 }
 
-impl<A: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<A, B> {
-    pub fn new(main: A, interlaced: Vec<B>) -> Self {
+impl<Expr: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<Expr, B> {
+    pub fn new(main: Expr, interlaced: Vec<B>) -> Self {
         Self { main, interlaced }
     }
 

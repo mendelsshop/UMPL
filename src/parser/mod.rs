@@ -5,7 +5,7 @@ use crate::{
 };
 
 use self::rules::{
-    Accesor, Cons, Expr, ExprType, FnDef, Ident, IdentType, If, Interlaced, Lambda, Lit, Loop, Var,
+    Accesor, Cons, Expr, FnDef, Ident, IdentType, If, Interlaced, Lambda, Lit, Loop, Var,
 };
 pub(crate) mod rules;
 
@@ -72,7 +72,6 @@ macro_rules! parse_break_return {
     };
 }
 
-type Module<'a> = Vec<Expr<'a>>;
 impl<'a> Parser<'a> {
     pub fn new(tokens: Vec<Token<'a>>, file_path: &'a str) -> Self {
         Self {
@@ -88,7 +87,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Module<'a> {
+    pub fn parse(&mut self) -> Vec<Expr<'a>> {
         let mut module = Vec::new();
         while !self.done {
             if let Some(token) = self.parse_from_token_advance() {
@@ -502,7 +501,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list_inner(&mut self) -> Cons<'a, Expr<'a>> {
+    fn parse_list_inner(&mut self) -> Cons<'a> {
         let start_line = self.token.info.begin;
         self.advance("parse list inner");
         let car = if let Some(expr) = self.parse_from_token() {
@@ -524,37 +523,22 @@ impl<'a> Parser<'a> {
         return Cons::new(
             Info::new(self.file_path, start_line, self.token.info.end),
             car,
-            Some(cdr),
+            cdr,
         );
     }
 
-    fn parse_list_exprs(&mut self) -> Cons<'a, Expr<'a>> {
-        let mut exprs = Cons::new_cdr_empty(
-            self.token.info,
-            Expr::new_literal(self.token.info, Lit::new_hempty(self.token.info)),
-        );
+    fn parse_list_exprs(&mut self) -> Vec<Expr<'a>> {
+        let mut exprs = vec![];
         let in_loop = self.in_loop;
         let in_function = self.in_function;
         while self.peek().token_type != TokenType::CodeBlockEnd {
             self.in_loop = in_loop;
             self.in_function = in_function;
             if let Some(expr) = self.parse_from_token_advance() {
-                exprs.set_cdr(expr);
+                exprs.push(expr);
             }
         }
-
-        // remove hempty at the beginning if there is something after it
-        let exprs = if let Some(expr) = &exprs.cdr {
-            if let ExprType::Cons(cons) = &expr.expr {
-                cons.clone()
-            } else {
-                exprs
-            }
-        } else {
-            exprs
-        };
-
-        self.advance("parse list exprs");
+        self.advance("parse list exprs - end of list");
         exprs
     }
 

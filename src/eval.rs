@@ -200,10 +200,9 @@
 //         }
 //     }
 // }
-
 use std::{cell::RefCell, collections::HashMap, fmt, fs::File, rc::Rc};
 
-use crate::parser::rules::{Accesor, Cons, Expr, ExprType, Interlaced, Lambda};
+use crate::parser::rules::{Accesor, Expr, ExprType, Interlaced, Lambda};
 
 #[derive(Debug, Default)]
 pub struct Scope<'a> {
