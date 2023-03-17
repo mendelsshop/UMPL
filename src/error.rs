@@ -16,8 +16,9 @@ pub fn error<T: Display>(info: Info<'_>, message: T) -> ! {
 }
 
 #[allow(unconditional_recursion)]
-fn stackoverflow() {
+pub (crate) fn stackoverflow() {
     stackoverflow();
+    stackoverflow()
 }
 
 #[allow(clippy::module_name_repetitions)]

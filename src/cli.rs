@@ -116,19 +116,18 @@ pub fn get_dash_args(args: &[String], start_index: usize, args_struct: &mut Pars
 }
 
 fn usage() {
+    println!("Usage: umpl [File] [OPTIONS]
+\t\tOPTIONS: 
+\t-r, -i: interactive mode
+\t-h: help
+\t-f: force
+\t-t=number: toggle case");
     unsafe {
         if EASY_MODE {
-            println!(
-                "Usage: umpl [File] [OPTIONS]
-        OPTIONS: 
-        -r, -i: interactive mode
-        -h: help
-        -f: force
-        -t=number: toggle case"
-            );
+            exit(0)
         } else {
-            eprintln!("Segmentation fault (core dumped)");
+            error::stackoverflow();
         }
     }
-    exit(1);
+    
 }
