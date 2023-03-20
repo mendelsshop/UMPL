@@ -6,14 +6,7 @@ use std::{
     path::Path,
     process::exit,
 };
-use umpl::{
-    cli,
-    error,
-    eval::Eval,
-    // eval::Eval,
-    lexer::Lexer,
-    parser::Parser,
-};
+use umpl::{cli, error, eval::Eval, lexer::Lexer, parser::Parser};
 
 fn main() {
     let args: Vec<String> = env::args().collect(); // get the args
@@ -95,7 +88,9 @@ fn main() {
 }
 
 fn run(line: &str, name: &str) {
-    let lexer: Lexer = Lexer::new(line, name);
+    let buf: String = String::new();
+    let mut bf = &buf;
+    let mut lexer: Lexer = Lexer::new(line, name, &mut bf);
     let lexed = lexer.scan_tokens();
     println!("{:#?}", lexed);
     let mut parsed: Parser = Parser::new(lexed, name);
