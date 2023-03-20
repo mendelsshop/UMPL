@@ -53,9 +53,9 @@ impl Display for Info<'_> {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy, PartialOrd)]
 #[allow(clippy::module_name_repetitions)]
-pub enum TokenType {
+pub enum TokenType<'a> {
     CallEnd,
     CallBegin,
     GreaterThanSymbol,
@@ -69,10 +69,10 @@ pub enum TokenType {
     LeftBrace,
     CodeBlockBegin,
     CodeBlockEnd,
-    Identifier(String),
+    Identifier(&'a str),
     FunctionIdentifier(char),
     ModuleIdentifier(char),
-    String(String),
+    String(&'a str),
     Number(f64),
     Create,
     With,
@@ -89,14 +89,14 @@ pub enum TokenType {
     Hempty,
     Boolean(bool),
     Function,
-    FunctionArgument(String),
+    FunctionArgument(u64),
     EOF,
     Program,
     BuiltinFunction(BuiltinFunction),
     PlusSymbol,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
 
 pub enum BuiltinFunction {
     StrToNum,
@@ -139,7 +139,7 @@ pub enum BuiltinFunction {
     MultiplyWith,
 }
 
-impl TokenType {
+impl<'a> TokenType<'a> {
     // #[allow(clippy::too_many_lines)]
     // pub fn r#do(&self, args: &[LiteralType], line: u32, scope: &mut Eval) -> LiteralType {
     //     if crate::KEYWORDS.is_keyword(self) {
@@ -512,7 +512,7 @@ impl TokenType {
     // }
 }
 
-impl Display for TokenType {
+impl Display for TokenType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BuiltinFunction(builtinfn) => write!(f, "builtin {builtinfn}"),
@@ -532,14 +532,14 @@ impl Display for BuiltinFunction {
 }
 
 #[derive(PartialEq, Clone)]
-pub struct Token<'a> {
-    pub token_type: TokenType,
+pub struct Token<'a, 'b> {
+    pub token_type: TokenType<'a>,
     pub lexeme: String,
-    pub info: Info<'a>,
+    pub info: Info<'b>,
 }
 
-impl<'a> Token<'a> {
-    pub fn new(token_type: TokenType, lexeme: &str, info: Info<'a>) -> Self {
+impl<'a, 'b> Token<'a, 'b> {
+    pub fn new(token_type: TokenType<'a>, lexeme: &str, info: Info<'b>) -> Self {
         Self {
             token_type,
             lexeme: lexeme.to_string(),
@@ -558,7 +558,7 @@ impl<'a> Token<'a> {
     }
 }
 
-impl Display for Token<'_> {
+impl Display for Token<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.token_type {
             TokenType::String(literal) => {
@@ -575,7 +575,7 @@ impl Display for Token<'_> {
     }
 }
 
-impl fmt::Debug for Token<'_> {
+impl fmt::Debug for Token<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self} at {}", self.info)
     }

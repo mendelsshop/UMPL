@@ -10,17 +10,17 @@ use self::rules::{
 pub(crate) mod rules;
 
 pub struct Parser<'a> {
-    tokens: Vec<Token<'a>>,
+    tokens: Vec<Token<'a, 'a>>,
     current_position: usize,
     done: bool,
-    token: Token<'a>,
+    token: Token<'a, 'a>,
     in_function: bool,
     in_loop: bool,
     paren_count: usize,
     weird_bracket_count: usize,
     file_path: &'a str,
 }
-static START_TOKEN: Token<'static> = Token {
+static START_TOKEN: Token<'static, 'static> = Token {
     token_type: TokenType::EOF,
     info: Info::new("", Position::new(0, 0), Position::new(0, 0)),
     lexeme: String::new(),
@@ -42,9 +42,44 @@ macro_rules! parse_break_return {
     };
 }
 
+macro_rules! parse_var_ident {
+    ($self:ident, $name:expr, $type_:ident) => {
+        // TODO: check for car and cdr
+        // TODO: make general function that parses interlaced token ie tt::n tt::sep tt::n
+        {
+            let mut cars_and_cdrs = vec![];
+            while $self.peek().token_type == TokenType::Dot {
+                $self.advance("parse_from_token - dot");
+                $self.advance("parse_from_token - dot looking for car or cdr");
+                match $self.token.token_type {
+                    TokenType::Car => {
+                        cars_and_cdrs.push(Accesor::Car);
+                    }
+                    TokenType::Cdr => {
+                        cars_and_cdrs.push(Accesor::Cdr);
+                    }
+                    tt => {
+                        error(
+                            $self.token.info,
+                            format!("expected car or cdr after dot, found {tt}"),
+                        );
+                    }
+                }
+            }
+            Expr::new_identifier(
+                $self.token.info,
+                Ident::new(
+                    $self.token.info,
+                    IdentType::$type_(Interlaced::new($name, cars_and_cdrs)),
+                ),
+            )
+        }
+    };
+}
+
 type Module<'a> = Vec<Expr<'a>>;
 impl<'a> Parser<'a> {
-    pub fn new(tokens: Vec<Token<'a>>, file_path: &'a str) -> Self {
+    pub fn new(tokens: Vec<Token<'a, 'a>>, file_path: &'a str) -> Self {
         Self {
             tokens,
             current_position: 0,
@@ -79,7 +114,7 @@ impl<'a> Parser<'a> {
         if self.done {
             return None;
         }
-        match self.token.token_type.clone() {
+        match self.token.token_type {
             // we have entered an expression
             TokenType::CallBegin => Some(self.parse_parenthissized()),
             // we have entered a function
@@ -132,7 +167,8 @@ impl<'a> Parser<'a> {
             }
             TokenType::List => Some(self.parse_list()),
             TokenType::Create => Some(self.parse_var()),
-            TokenType::Identifier(name) => Some(self.parse_var_ident(name)),
+            TokenType::Identifier(name) => Some(parse_var_ident!(self, name, Var)),
+            TokenType::FunctionArgument(name) => Some(parse_var_ident!(self, name, FnArg)),
             // built in functions
             TokenType::BuiltinFunction(name) => Some(Expr::new_identifier(
                 self.token.info,
@@ -155,37 +191,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_var_ident(&mut self, name: String) -> Expr<'a> {
-        // TODO: check for car and cdr
-        // TODO: make general function that parses interlaced token ie tt::n tt::sep tt::n
-        let mut cars_and_cdrs = vec![];
-        while self.peek().token_type == TokenType::Dot {
-            self.advance("parse_from_token - dot");
-            self.advance("parse_from_token - dot looking for car or cdr");
-            match self.token.token_type.clone() {
-                TokenType::Car => {
-                    cars_and_cdrs.push(Accesor::Car);
-                }
-                TokenType::Cdr => {
-                    cars_and_cdrs.push(Accesor::Cdr);
-                }
-                tt => {
-                    error(
-                        self.token.info,
-                        format!("expected car or cdr after dot, found {tt}"),
-                    );
-                }
-            }
-        }
-        Expr::new_identifier(
-            self.token.info,
-            Ident::new(
-                self.token.info,
-                IdentType::Var(Interlaced::new(name, cars_and_cdrs)),
-            ),
-        )
-    }
-
     fn parse_function_path(&mut self) -> Expr<'a> {
         // advance tokens until function identifier is reached
         // each module identifier is followed by a plus sign
@@ -193,7 +198,7 @@ impl<'a> Parser<'a> {
         while self.peek().token_type == TokenType::PlusSymbol
             || matches!(self.token.token_type, TokenType::FunctionIdentifier(_))
         {
-            match self.token.token_type.clone() {
+            match self.token.token_type {
                 TokenType::ModuleIdentifier(name) => {
                     modules.push(name);
                 }
@@ -221,7 +226,7 @@ impl<'a> Parser<'a> {
 
     fn parse_var(&mut self) -> Expr<'a> {
         self.advance("parse_from_token - create");
-        let name = match self.token.token_type.clone() {
+        let name = match self.token.token_type {
             TokenType::Identifier(name) => name,
             _ => error(self.token.info, "expected identifier after create"),
         };
@@ -234,7 +239,7 @@ impl<'a> Parser<'a> {
             self.token.info,
             Var::new(
                 self.token.info,
-                name.clone(),
+                name,
                 if let Some(s) = self.parse_from_token_advance() {
                     s
                 } else {
@@ -293,7 +298,7 @@ impl<'a> Parser<'a> {
     fn parse_function(&mut self) -> Option<Expr<'a>> {
         let start_line = self.token.info.begin;
         self.advance("parse_function - start");
-        match self.token.token_type.clone() {
+        match self.token.token_type {
             TokenType::FunctionIdentifier(name) => {
                 // this is not validated in the lexer because it is not possible to know if the function identifier is being used to define a function or to call a function
                 // because if is a a call it can have modules seperated by + (the module operator)
@@ -320,7 +325,7 @@ impl<'a> Parser<'a> {
     fn parse_named_function(&mut self, name: char, modules: Vec<char>) -> FnDef<'a> {
         let start_line = self.token.info.begin;
         self.advance("parsed_named_function");
-        let body = match self.token.token_type.clone() {
+        let body = match self.token.token_type {
             TokenType::Number { .. } | TokenType::Star | TokenType::CodeBlockBegin => {
                 self.parse_function_body()
             }
@@ -448,7 +453,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn check_next(&mut self, message: &str, token_type: &TokenType, advancer: &str) {
+    fn check_next(&mut self, message: &str, token_type: &TokenType<'_>, advancer: &str) {
         self.advance(advancer);
         if &self.token.token_type != token_type {
             error(
@@ -461,7 +466,7 @@ impl<'a> Parser<'a> {
     fn parse_list(&mut self) -> Expr<'a> {
         let start_line = self.token.info.begin;
         self.advance("parse list");
-        match self.token.token_type.clone() {
+        match self.token.token_type {
             TokenType::LeftBracket => Expr::new_cons(
                 Info::new(self.file_path, start_line, self.token.info.end),
                 self.parse_list_inner(),
@@ -620,10 +625,7 @@ impl<'a> Parser<'a> {
                 self.token = self.tokens[self.current_position].clone();
             }
             TokenType::GreaterThanSymbol | TokenType::LessThanSymbol => {
-                match (
-                    self.token.token_type.clone(),
-                    self.peek().token_type.clone(),
-                ) {
+                match (self.token.token_type, self.peek().token_type) {
                     (TokenType::CallEnd, TokenType::LessThanSymbol)
                     | (
                         TokenType::CallEnd | TokenType::GreaterThanSymbol,
@@ -645,7 +647,7 @@ impl<'a> Parser<'a> {
         self.current_position += 1;
     }
 
-    fn peek(&self) -> &Token<'a> {
+    fn peek(&self) -> &Token<'a, 'a> {
         &self.tokens[self.current_position]
     }
 }

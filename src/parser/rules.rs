@@ -155,7 +155,7 @@ impl<'a> Display for Expr<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lit<'a> {
     pub info: Info<'a>,
-    pub value: LitType,
+    pub value: LitType<'a>,
 }
 
 impl<'a> Lit<'a> {
@@ -166,7 +166,7 @@ impl<'a> Lit<'a> {
         }
     }
 
-    pub const fn new_string(info: Info<'a>, value: String) -> Self {
+    pub const fn new_string(info: Info<'a>, value: &'a str) -> Self {
         Self {
             info,
             value: LitType::String(value),
@@ -187,7 +187,7 @@ impl<'a> Lit<'a> {
         }
     }
 
-    pub const fn new_file(info: Info<'a>, value: String) -> Self {
+    pub const fn new_file(info: Info<'a>, value: &'a str) -> Self {
         Self {
             info,
             value: LitType::File(value),
@@ -202,15 +202,15 @@ impl<'a> Display for Lit<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LitType {
-    String(String),
+pub enum LitType<'a> {
+    String(&'a str),
     Number(f64),
     Boolean(bool),
-    File(String),
+    File(&'a str),
     Hempty,
 }
 
-impl fmt::Display for LitType {
+impl fmt::Display for LitType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::String(s) => write!(f, "string: {s}"),
@@ -457,12 +457,12 @@ impl<'a> Display for Loop<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Var<'a> {
     pub info: Info<'a>,
-    pub name: String,
+    pub name: &'a str,
     pub value: Expr<'a>,
 }
 
 impl<'a> Var<'a> {
-    pub const fn new(info: Info<'a>, name: String, value: Expr<'a>) -> Self {
+    pub const fn new(info: Info<'a>, name: &'a str, value: Expr<'a>) -> Self {
         Self { info, name, value }
     }
 }
@@ -507,13 +507,14 @@ impl Display for Accesor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IdentType {
-    Var(Interlaced<String, Accesor>),
+pub enum IdentType<'a> {
+    Var(Interlaced<&'a str, Accesor>),
     FnIdent(Interlaced<char, char>),
+    FnArg(Interlaced<u64, Accesor>),
     Builtin(BuiltinFunction),
 }
 
-impl Display for IdentType {
+impl Display for IdentType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Var(name) => write!(
@@ -535,6 +536,15 @@ impl Display for IdentType {
                 }
             ),
             Self::Builtin(builtin) => write!(f, "builtin function {builtin}"),
+            Self::FnArg(arg) => write!(
+                f,
+                "function argument {}{}",
+                arg.main,
+                match arg.interlaced_to_string(".") {
+                    s if s.is_empty() => String::new(),
+                    s => format!(".{s}"),
+                }
+            ),
         }
     }
 }
@@ -542,11 +552,11 @@ impl Display for IdentType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ident<'a> {
     pub info: Info<'a>,
-    pub ident_type: IdentType,
+    pub ident_type: IdentType<'a>,
 }
 
 impl<'a> Ident<'a> {
-    pub const fn new(info: Info<'a>, ident_type: IdentType) -> Self {
+    pub const fn new(info: Info<'a>, ident_type: IdentType<'a>) -> Self {
         Self { info, ident_type }
     }
 }

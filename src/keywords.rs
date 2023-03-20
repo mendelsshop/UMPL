@@ -2,15 +2,15 @@ use std::collections::HashMap;
 
 use crate::token::{BuiltinFunction, TokenType};
 #[derive(PartialEq, Clone)]
-pub struct Keyword {
-    pub keywords: HashMap<String, TokenType>,
+pub struct Keyword<'a> {
+    pub keywords: HashMap<String, TokenType<'a>>,
     pub builtin_functions: HashMap<String, BuiltinFunction>,
 }
 
 // TODO: make each keyword with whacky case semantics ie: evary 5th character has to be uppercase etc
-impl Keyword {
+impl Keyword<'_> {
     pub fn new() -> Self {
-        let mut keywords: HashMap<String, TokenType> = HashMap::new();
+        let mut keywords: HashMap<String, TokenType<'_>> = HashMap::new();
         let mut builtin_functions: HashMap<String, BuiltinFunction> = HashMap::new();
         builtin_functions.insert(toggle_case("plus"), BuiltinFunction::Plus);
         builtin_functions.insert(toggle_case("minus"), BuiltinFunction::Minus);
@@ -68,27 +68,27 @@ impl Keyword {
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<TokenType> {
-        self.keywords.get(name).cloned()
+    pub fn get(&self, name: &str) -> Option<TokenType<'_>> {
+        self.keywords.get(name).copied()
     }
 
-    pub fn is_keyword(&self, token_type: &TokenType) -> bool {
+    pub fn is_keyword(&self, token_type: &TokenType<'_>) -> bool {
         self.keywords.values().any(|val| val == token_type)
     }
 
-    pub const fn is_builtin_function(&self, token_type: &TokenType) -> bool {
+    pub const fn is_builtin_function(&self, token_type: &TokenType<'_>) -> bool {
         matches!(token_type, TokenType::BuiltinFunction(_))
     }
 
-    pub fn string_is_keyword(&self, string: &str) -> Option<TokenType> {
-        self.keywords.get(string).cloned()
+    pub fn string_is_keyword(&self, string: &str) -> Option<TokenType<'_>> {
+        self.keywords.get(string).copied()
     }
 
     pub fn string_is_builtin_function(&self, string: &str) -> Option<BuiltinFunction> {
-        self.builtin_functions.get(string).cloned()
+        self.builtin_functions.get(string).copied()
     }
 }
-impl Default for Keyword {
+impl Default for Keyword<'_> {
     fn default() -> Self {
         Self::new()
     }
