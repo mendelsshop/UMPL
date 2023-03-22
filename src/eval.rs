@@ -200,13 +200,13 @@
 //         }
 //     }
 // }
-use std::{cell::RefCell, collections::HashMap, fmt, fs::File, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, fs::File, rc::Rc, thread::AccessError};
 
-use crate::parser::rules::{Accesor, Expr, ExprType, Interlaced, Lambda};
+use crate::{parser::rules::{Accesor, Expr, ExprType, Interlaced, Lambda, FnDef, FnCall, LitType, Lit, PrintType, Var}, token::Info, error::error};
 
 #[derive(Debug, Default)]
 pub struct Scope<'a> {
-    vars: HashMap<Interlaced<String, Accesor>, Expr<'a>>,
+    vars: HashMap<&'a str, Expr<'a>>,
     functions: HashMap<Interlaced<char, char>, Lambda<'a>>,
     files: HashMap<String, File>,
     parent_scope: Option<Box<Scope<'a>>>,
@@ -229,13 +229,13 @@ impl<'a> Scope<'a> {
             files: HashMap::new(),
         }
     }
-    //     pub fn set_var(
-    //         &mut self,
-    //         name: &str,
-    //         value: &mut Vec<LiteralOrFile>,
-    //         recurse: bool,
-    //         line: u32,
-    //     ) {
+        pub fn set_var(
+            &mut self,
+            name: Interlaced<&'a str, Accesor>,
+            value: Expr<'a>,
+            recurse: bool,
+            info: Info<'_>,
+        ) {
     //         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
     //         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
     //         let new_val: NewIdentifierType = match value.len() {
@@ -247,6 +247,28 @@ impl<'a> Scope<'a> {
     //                 "expected Identifier, got list with more than 2 elements",
     //             ),
     //         };
+                // if we are setting the car or cdr of a list
+                if !name.is_empty() {
+                    if recurse {
+                        todo!("set var in parent scope");
+                    } else {
+                        // check if the var exists because we are attempting to change it
+                        if self.has_var(name.main, false) {
+                            // get the var
+                            let var = self.get_var(name, info);
+                        } else {
+                            // if the var does not exist then we error
+                            error(info, &format!("variable {} does not exist", name.main));
+                        }
+                    }
+                }
+                else {
+                    if recurse {
+                        todo!("set var in parent scope");
+                    } else {
+                        self.vars.insert(name.main, value.clone());
+                    }
+                }
     //         match name {
     //             name if name.ends_with(".car") | name.ends_with(".cdr") => {
     //                 let new_name = name.trim_end_matches(".car").trim_end_matches(".cdr");
@@ -317,7 +339,7 @@ impl<'a> Scope<'a> {
     //                 }
     //             }
     //         }
-    //     }
+        }
     //     pub fn set_list(&mut self, name: &str, value: NewList, recurse: bool, line: u32) {
     //         if recurse {
     //             if self.has_var(name, false) {
@@ -338,7 +360,7 @@ impl<'a> Scope<'a> {
     //             );
     //         }
     //     }
-    //     pub fn get_var(&mut self, name: &str, line: u32) -> NewIdentifierType {
+    pub fn get_var(&mut self, name: Interlaced<&'a str, Accesor>, info: Info<'_>) -> Expr<'a> {
     //         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
     //         if name.ends_with(".car") || name.ends_with(".cdr") {
     //             if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4], line) {
@@ -369,17 +391,30 @@ impl<'a> Scope<'a> {
     //             }
     //             error(line, "expected list, got something else");
     //         }
-    //         match self.vars.get(name) {
-    //             Some(v) => match v {
-    //                 NewIdentifierType::Vairable(_) => v.clone(),
-    //                 NewIdentifierType::List(list) => NewIdentifierType::List(list.clone()),
-    //             },
-    //             None => self.parent_scope.as_mut().map_or_else(
-    //                 || error(line, format!("variable not found {name}")),
-    //                 |parent| parent.get_var(name, line),
-    //             ),
-    //         }
-    //     }
+                // if !name.is_empty() {
+  
+                // } else {
+                    
+                // }
+            match self.vars.get(name.main) {
+                Some(v) => match (&v.expr, name.len()) {
+                    // match the type of the variable and accesor length
+                    // if the accesor length is 0 then it can be any type
+                    // if the accesor length is > 0 then it must be a list
+
+                    (_, 0) => v.clone(),
+                    (ExprType::Cons(list), _) => {
+                        todo!("use accesor to get value from list")
+                    }
+                    (expr, _) => error(info, format!("only lists can be accessed wit car and cdr, got {}", expr)),
+
+                },
+                None => self.parent_scope.as_mut().map_or_else(
+                    || error(info, format!("variable not found {}", name.main)),
+                    |parent| parent.get_var(name.clone(), info),
+                ),
+            }
+    }
     pub fn set_function(&mut self, name: Interlaced<char, char>, body: Lambda<'a>) {
         self.functions.insert(name, body);
     }
@@ -395,23 +430,23 @@ impl<'a> Scope<'a> {
     //     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
     //         self.vars.remove(name)
     //     }
-    //     pub fn has_var(&self, name: &str, recurse: bool) -> bool {
-    //         let name: &str = if name.ends_with(".car") || name.ends_with(".cdr") {
-    //             &name[..name.len() - 4]
-    //         } else {
-    //             name
-    //         };
-    //         if !recurse {
-    //             return self.vars.contains_key(name);
-    //         }
-    //         if self.vars.contains_key(name) {
-    //             true
-    //         } else {
-    //             self.parent_scope
-    //                 .as_ref()
-    //                 .map_or(false, |parent| parent.has_var(name, recurse))
-    //         }
-    //     }
+        pub fn has_var(&self, name: &str, recurse: bool) -> bool {
+            let name: &str = if name.ends_with(".car") || name.ends_with(".cdr") {
+                &name[..name.len() - 4]
+            } else {
+                name
+            };
+            if !recurse {
+                return self.vars.contains_key(name);
+            }
+            if self.vars.contains_key(name) {
+                true
+            } else {
+                self.parent_scope
+                    .as_ref()
+                    .map_or(false, |parent| parent.has_var(name, recurse))
+            }
+        }
     //     pub fn drop_scope(&mut self) {
     //         let p_scope: Self = self
     //             .parent_scope
@@ -439,7 +474,7 @@ impl fmt::Display for Scope<'_> {
             "Scope {{ \nvars:\n{},\nfunctions:\n{} }}",
             self.vars
                 .iter()
-                .map(|(k, v)| format!("{}{}: {}", k.main, k.interlaced_to_string("."), v))
+                .map(|(k, v)| format!("{}: {}", k, v))
                 .collect::<Vec<String>>()
                 .join(", "),
             self.functions
@@ -457,11 +492,11 @@ impl fmt::Display for Scope<'_> {
 //     }
 // }
 
-// pub enum Stopper {
-//     Break,
-//     Continue,
-//     Return(LiteralOrFile),
-// }
+pub enum Stopper<'a> {
+    Break(Expr<'a>),
+    Continue,
+    Return(Expr<'a>),
+}
 
 pub struct Eval<'a> {
     pub scope: Scope<'a>,
@@ -511,12 +546,13 @@ impl<'a> Eval<'a> {
     }
 
     //     #[allow(clippy::too_many_lines)]
-    //     pub fn find_variables(&mut self, body: Vec<Thing>) -> Option<Stopper> {
-    //         // create a vector to return instead of inplace modification
-    //         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
-    //         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-    //         for thing in body {
-    //             match thing {
+        pub fn find_variables(&mut self, body: Vec<Expr<'a>>) -> Option<Stopper<'_>> {
+            // create a vector to return instead of inplace modification
+            // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
+            // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
+            for expr in body {
+                match expr.expr {
+                    // we should never find functions in the outer scope, as those are found in the find_functions function
     //                 Thing::Identifier(ref variable) => match variable.value {
     //                     IdentifierType::Vairable(ref name) => {
     //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
@@ -675,13 +711,13 @@ impl<'a> Eval<'a> {
     //                     return Some(Stopper::Break);
     //                 }
     //                 Thing::Continue(..) => {
-    //                     return Some(Stopper::Continue);
-    //                 }
-    //                 _ => {}
-    //             }
-    //         }
-    //         None
-    //     }
+                    //     return Some(Stopper::Continue);
+                    // }
+                    _ => {}
+                }
+            }
+            None
+        }
 
     pub fn find_imports(&mut self, body: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
         // body.into_iter()
@@ -720,6 +756,24 @@ impl<'a> Eval<'a> {
         todo!()
     }
 
+    
+    pub fn add_function(&mut self, function: FnDef<'a>) -> Expr<'a> {
+        self.scope.set_function(
+            Interlaced::new(function.name, function.modules.clone()),
+            function.get_inner().clone(),
+        );
+        Expr::new_call(function.info, FnCall::new(function.info, vec![Expr::new_literal(function.info, Lit::new_string(function.info, "function added"))], PrintType::Newline))
+    }
+
+    pub fn add_variable(&mut self, variable: Var<'a>) -> Expr<'a> {
+        self.scope.set_var(
+            Interlaced::new(variable.name, vec![]),
+            variable.value,
+            false,
+            variable.info
+        );
+        Expr::new_call(variable.info, FnCall::new(variable.info, vec![Expr::new_literal(variable.info, Lit::new_string(variable.info, "variable added"))], PrintType::Newline))
+    }
     //     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralOrFile> {
     //         match other_stuff {
     //             OtherStuff::Identifier(ident) => match self.scope.get_var(&ident.name, ident.line) {

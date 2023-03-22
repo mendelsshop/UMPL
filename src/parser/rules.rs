@@ -118,9 +118,9 @@ impl<'a> Expr<'a> {
     }
 }
 
-impl<'a> Display for Expr<'a> {
+impl<'a> Display for ExprType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.expr {
+        match &self {
             ExprType::Literal(lit) => write!(f, "literal [{lit}]"),
             ExprType::Fn(fn_def) => write!(f, "fn [{fn_def}]"),
             ExprType::Call(call) => write!(f, "call [{call}]"),
@@ -134,6 +134,12 @@ impl<'a> Display for Expr<'a> {
             ExprType::Identifier(ident) => write!(f, "ident [{ident}]"),
             ExprType::Cons(cons) => write!(f, "cons [{cons}]"),
         }
+    }
+}
+
+impl<'a> Display for Expr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at [{}]", self.expr, self.info)
     }
 }
 
@@ -491,8 +497,16 @@ impl<Expr: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<Expr,
             .collect::<Vec<String>>()
             .join(sep)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.interlaced.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.interlaced.len()
+    }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Accesor {
     Car,
     Cdr,
