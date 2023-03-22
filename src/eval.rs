@@ -479,7 +479,7 @@ impl fmt::Display for Scope<'_> {
                 .iter()
                 .map(|(k, v)| format!("{k}: {v}"))
                 .collect::<Vec<String>>()
-                .join(", "),
+                .join(",\n\n"),
             self.functions
                 .iter()
                 .map(|(k, v)| format!("{}{}: {}", k.main, k.interlaced_to_string("+"), v))
@@ -555,6 +555,9 @@ impl<'a> Eval<'a> {
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
         for expr in body {
             match expr.expr {
+                ExprType::Var(var) => {
+                    self.scope.set_var(&Interlaced::new(var.name, vec![]), var.value, false, var.info)
+                }
                 // we should never find functions in the outer scope, as those are found in the find_functions function
                 //                 Thing::Identifier(ref variable) => match variable.value {
                 //                     IdentifierType::Vairable(ref name) => {
