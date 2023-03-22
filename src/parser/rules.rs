@@ -353,8 +353,10 @@ impl<'a> FnDef<'a> {
         }
     }
 
-    pub const fn get_inner(&self) -> &Lambda<'a> {
-        &self.inner
+    // not allowed to be const because it destroys Self
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn take_inner(self) -> Lambda<'a> {
+        self.inner
     }
 }
 

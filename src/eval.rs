@@ -200,9 +200,15 @@
 //         }
 //     }
 // }
-use std::{cell::RefCell, collections::HashMap, fmt, fs::File, rc::Rc, thread::AccessError};
+use std::{cell::RefCell, collections::HashMap, fmt, fs::File, rc::Rc};
 
-use crate::{parser::rules::{Accesor, Expr, ExprType, Interlaced, Lambda, FnDef, FnCall, LitType, Lit, PrintType, Var}, token::Info, error::error};
+use crate::{
+    error::error,
+    parser::rules::{
+        Accesor, Expr, ExprType, FnCall, FnDef, Interlaced, Lambda, Lit, PrintType, Var,
+    },
+    token::Info,
+};
 
 #[derive(Debug, Default)]
 pub struct Scope<'a> {
@@ -229,117 +235,116 @@ impl<'a> Scope<'a> {
             files: HashMap::new(),
         }
     }
-        pub fn set_var(
-            &mut self,
-            name: Interlaced<&'a str, Accesor>,
-            value: Expr<'a>,
-            recurse: bool,
-            info: Info<'_>,
-        ) {
-    //         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
-    //         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
-    //         let new_val: NewIdentifierType = match value.len() {
-    //             0 => error(line, "expected Identifier, got empty list"),
-    //             1 => NewIdentifierType::Vairable(NewVairable::new(value.clone().remove(0))),
-    //             2 => NewIdentifierType::List(Rc::new(RefCell::new(NewList::new(value.clone())))),
-    //             _ => error(
-    //                 line,
-    //                 "expected Identifier, got list with more than 2 elements",
-    //             ),
-    //         };
-                // if we are setting the car or cdr of a list
-                if !name.is_empty() {
-                    if recurse {
-                        todo!("set var in parent scope");
-                    } else {
-                        // check if the var exists because we are attempting to change it
-                        if self.has_var(name.main, false) {
-                            // get the var
-                            let var = self.get_var(name, info);
-                        } else {
-                            // if the var does not exist then we error
-                            error(info, &format!("variable {} does not exist", name.main));
-                        }
-                    }
+    pub fn set_var(
+        &mut self,
+        name: &Interlaced<&'a str, Accesor>,
+        value: Expr<'a>,
+        recurse: bool,
+        info: Info<'_>,
+    ) {
+        //         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
+        //         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
+        //         let new_val: NewIdentifierType = match value.len() {
+        //             0 => error(line, "expected Identifier, got empty list"),
+        //             1 => NewIdentifierType::Vairable(NewVairable::new(value.clone().remove(0))),
+        //             2 => NewIdentifierType::List(Rc::new(RefCell::new(NewList::new(value.clone())))),
+        //             _ => error(
+        //                 line,
+        //                 "expected Identifier, got list with more than 2 elements",
+        //             ),
+        //         };
+        // if we are setting the car or cdr of a list
+        if !name.is_empty() {
+            if recurse {
+                todo!("set var in parent scope");
+            } else {
+                // check if the var exists because we are attempting to change it
+                if self.has_var(name.main, false) {
+                    // get the var
+                    let var = self.get_var(name, info);
+                    *var = value;
+                } else {
+                    // if the var does not exist then we error
+                    error(info, format!("variable {} does not exist", name.main));
                 }
-                else {
-                    if recurse {
-                        todo!("set var in parent scope");
-                    } else {
-                        self.vars.insert(name.main, value.clone());
-                    }
-                }
-    //         match name {
-    //             name if name.ends_with(".car") | name.ends_with(".cdr") => {
-    //                 let new_name = name.trim_end_matches(".car").trim_end_matches(".cdr");
-    //                 if recurse {
-    //                     if self.has_var(new_name, false) {
-    //                         let new_var = match self.get_var(new_name, line) {
-    //                             NewIdentifierType::List(list) => list,
-    //                             _ => error(line, "expected list"),
-    //                         };
-    //                         if name.ends_with(".cdr") {
-    //                             new_var.borrow_mut().cdr = match new_val {
-    //                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
-    //                                 NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
-    //                             };
-    //                         } else {
-    //                             new_var.borrow_mut().car = match new_val {
-    //                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
-    //                                 NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
-    //                             };
-    //                         }
-    //                         self.vars
-    //                             .insert(new_name.to_string(), NewIdentifierType::List(new_var));
-    //                     } else {
-    //                         self.parent_scope.as_mut().map_or_else(
-    //                             || error(line, "variable not found"),
-    //                             |parent| {
-    //                                 parent.set_var(
-    //                                     name,
-    //                                     &mut new_val.to_vec_literaltype(line),
-    //                                     recurse,
-    //                                     line,
-    //                                 );
-    //                             },
-    //                         );
-    //                     }
-    //                 } else {
-    //                     let new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
-    //                         NewIdentifierType::List(list) => list,
-    //                         _ => error(line, "expected list"),
-    //                     };
-    //                     if name.ends_with(".cdr") {
-    //                         new_var.borrow_mut().cdr = match new_val {
-    //                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
-    //                             NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
-    //                         };
-    //                     } else {
-    //                         new_var.borrow_mut().car = match new_val {
-    //                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
-    //                             NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
-    //                         };
-    //                     }
-    //                     self.vars
-    //                         .insert(new_name.to_string(), NewIdentifierType::List(new_var));
-    //                 }
-    //             }
-    //             _ => {
-    //                 if recurse {
-    //                     if self.has_var(name, false) {
-    //                         self.vars.insert(name.to_string(), new_val);
-    //                     } else {
-    //                         self.parent_scope.as_mut().map_or_else(
-    //                             || error(line, "variable not found"),
-    //                             |parent| parent.set_var(name, value, recurse, line),
-    //                         );
-    //                     }
-    //                 } else {
-    //                     self.vars.insert(name.to_string(), new_val);
-    //                 }
-    //             }
-    //         }
+            }
+        } else if recurse {
+            todo!("set var in parent scope");
+        } else {
+            self.vars.insert(name.main, value.clone());
         }
+
+        //         match name {
+        //             name if name.ends_with(".car") | name.ends_with(".cdr") => {
+        //                 let new_name = name.trim_end_matches(".car").trim_end_matches(".cdr");
+        //                 if recurse {
+        //                     if self.has_var(new_name, false) {
+        //                         let new_var = match self.get_var(new_name, line) {
+        //                             NewIdentifierType::List(list) => list,
+        //                             _ => error(line, "expected list"),
+        //                         };
+        //                         if name.ends_with(".cdr") {
+        //                             new_var.borrow_mut().cdr = match new_val {
+        //                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
+        //                                 NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
+        //                             };
+        //                         } else {
+        //                             new_var.borrow_mut().car = match new_val {
+        //                                 NewIdentifierType::List(list) => LitOrList::Identifier(list),
+        //                                 NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
+        //                             };
+        //                         }
+        //                         self.vars
+        //                             .insert(new_name.to_string(), NewIdentifierType::List(new_var));
+        //                     } else {
+        //                         self.parent_scope.as_mut().map_or_else(
+        //                             || error(line, "variable not found"),
+        //                             |parent| {
+        //                                 parent.set_var(
+        //                                     name,
+        //                                     &mut new_val.to_vec_literaltype(line),
+        //                                     recurse,
+        //                                     line,
+        //                                 );
+        //                             },
+        //                         );
+        //                     }
+        //                 } else {
+        //                     let new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
+        //                         NewIdentifierType::List(list) => list,
+        //                         _ => error(line, "expected list"),
+        //                     };
+        //                     if name.ends_with(".cdr") {
+        //                         new_var.borrow_mut().cdr = match new_val {
+        //                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
+        //                             NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
+        //                         };
+        //                     } else {
+        //                         new_var.borrow_mut().car = match new_val {
+        //                             NewIdentifierType::List(list) => LitOrList::Identifier(list),
+        //                             NewIdentifierType::Vairable(var) => LitOrList::Literal(var.value),
+        //                         };
+        //                     }
+        //                     self.vars
+        //                         .insert(new_name.to_string(), NewIdentifierType::List(new_var));
+        //                 }
+        //             }
+        //             _ => {
+        //                 if recurse {
+        //                     if self.has_var(name, false) {
+        //                         self.vars.insert(name.to_string(), new_val);
+        //                     } else {
+        //                         self.parent_scope.as_mut().map_or_else(
+        //                             || error(line, "variable not found"),
+        //                             |parent| parent.set_var(name, value, recurse, line),
+        //                         );
+        //                     }
+        //                 } else {
+        //                     self.vars.insert(name.to_string(), new_val);
+        //                 }
+        //             }
+        //         }
+    }
     //     pub fn set_list(&mut self, name: &str, value: NewList, recurse: bool, line: u32) {
     //         if recurse {
     //             if self.has_var(name, false) {
@@ -360,60 +365,58 @@ impl<'a> Scope<'a> {
     //             );
     //         }
     //     }
-    pub fn get_var(&mut self, name: Interlaced<&'a str, Accesor>, info: Info<'_>) -> Expr<'a> {
-    //         // the reason for this being its own method vs using the get method is because it will be easier to use/implemnet getting variable from different scopes
-    //         if name.ends_with(".car") || name.ends_with(".cdr") {
-    //             if let NewIdentifierType::List(list) = self.get_var(&name[..name.len() - 4], line) {
-    //                 if name.ends_with(".car") {
-    //                     match &list.borrow_mut().car {
-    //                         LitOrList::Identifier(list2) => {
-    //                             return NewIdentifierType::List(Rc::clone(list2));
-    //                         }
-    //                         LitOrList::Literal(var) => match var {
-    //                             LiteralOrFile::Literal(_) => {
-    //                                 return NewIdentifierType::Vairable(NewVairable::new(var.clone()));
-    //                             }
-    //                             _ => error(line, "expected literal"),
-    //                         },
-    //                     }
-    //                 }
-    //                 match &list.borrow_mut().cdr {
-    //                     LitOrList::Identifier(list2) => {
-    //                         return NewIdentifierType::List(Rc::clone(&list2));
-    //                     }
-    //                     LitOrList::Literal(var) => match var {
-    //                         LiteralOrFile::Literal(_) => {
-    //                             return NewIdentifierType::Vairable(NewVairable::new(var.clone()));
-    //                         }
-    //                         _ => error(line, "expected literal"),
-    //                     },
-    //                 }
-    //             }
-    //             error(line, "expected list, got something else");
-    //         }
-                // if !name.is_empty() {
-  
-                // } else {
-                    
-                // }
-            match self.vars.get(name.main) {
-                Some(v) => match (&v.expr, name.len()) {
+
+    // TODO: possibly make this _mut and have another get_var that doesn't return a mutable reference
+    pub fn get_var(
+        &mut self,
+        name: &Interlaced<&'a str, Accesor>,
+        info: Info<'_>,
+    ) -> &mut Expr<'a> {
+        match self.vars.get_mut(name.main) {
+            Some(v) => {
+                match (v, name.len()) {
                     // match the type of the variable and accesor length
                     // if the accesor length is 0 then it can be any type
                     // if the accesor length is > 0 then it must be a list
-
-                    (_, 0) => v.clone(),
-                    (ExprType::Cons(list), _) => {
-                        todo!("use accesor to get value from list")
+                    (v, 0) => v,
+                    (v, _) if matches!(v.expr, ExprType::Cons(_)) => {
+                        // todo!("use accesor to get value from list")
+                        let mut expr = v;
+                        let mut cloned_expr = expr.clone();
+                        for (_, accesor) in name.interlaced.iter().enumerate() {
+                            if let ExprType::Cons(ref mut list) = &mut expr.expr {
+                                match accesor {
+                                    Accesor::Car => {
+                                        expr = list.car.as_mut();
+                                        cloned_expr = expr.clone();
+                                    }
+                                    Accesor::Cdr => {
+                                        expr = list.cdr.as_mut();
+                                        cloned_expr = expr.clone();
+                                    }
+                                }
+                            } else {
+                                error(
+                                    info,
+                                    format!(
+                                        "only lists can be accessed with car and cdr, got {cloned_expr}",
+                                    ),
+                                );
+                            }
+                        }
+                        expr
                     }
-                    (expr, _) => error(info, format!("only lists can be accessed wit car and cdr, got {}", expr)),
-
-                },
-                None => self.parent_scope.as_mut().map_or_else(
-                    || error(info, format!("variable not found {}", name.main)),
-                    |parent| parent.get_var(name.clone(), info),
-                ),
+                    (expr, _) => error(
+                        info,
+                        format!("only lists can be accessed with car and cdr, got {expr}"),
+                    ),
+                }
             }
+            None => self.parent_scope.as_mut().map_or_else(
+                || error(info, format!("variable not found {}", name.main)),
+                |parent| parent.get_var(name, info),
+            ),
+        }
     }
     pub fn set_function(&mut self, name: Interlaced<char, char>, body: Lambda<'a>) {
         self.functions.insert(name, body);
@@ -430,23 +433,23 @@ impl<'a> Scope<'a> {
     //     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
     //         self.vars.remove(name)
     //     }
-        pub fn has_var(&self, name: &str, recurse: bool) -> bool {
-            let name: &str = if name.ends_with(".car") || name.ends_with(".cdr") {
-                &name[..name.len() - 4]
-            } else {
-                name
-            };
-            if !recurse {
-                return self.vars.contains_key(name);
-            }
-            if self.vars.contains_key(name) {
-                true
-            } else {
-                self.parent_scope
-                    .as_ref()
-                    .map_or(false, |parent| parent.has_var(name, recurse))
-            }
+    pub fn has_var(&self, name: &str, recurse: bool) -> bool {
+        let name: &str = if name.ends_with(".car") || name.ends_with(".cdr") {
+            &name[..name.len() - 4]
+        } else {
+            name
+        };
+        if !recurse {
+            return self.vars.contains_key(name);
         }
+        if self.vars.contains_key(name) {
+            true
+        } else {
+            self.parent_scope
+                .as_ref()
+                .map_or(false, |parent| parent.has_var(name, recurse))
+        }
+    }
     //     pub fn drop_scope(&mut self) {
     //         let p_scope: Self = self
     //             .parent_scope
@@ -474,7 +477,7 @@ impl fmt::Display for Scope<'_> {
             "Scope {{ \nvars:\n{},\nfunctions:\n{} }}",
             self.vars
                 .iter()
-                .map(|(k, v)| format!("{}: {}", k, v))
+                .map(|(k, v)| format!("{k}: {v}"))
                 .collect::<Vec<String>>()
                 .join(", "),
             self.functions
@@ -516,7 +519,7 @@ impl<'a> Eval<'a> {
             module_name: String::new(),
         };
         body = self_.find_functions(body);
-        // self_.find_variables(body);
+        self_.find_variables(body);
         self_
     }
 
@@ -534,7 +537,7 @@ impl<'a> Eval<'a> {
                 if let ExprType::Fn(function) = &thing.expr {
                     self.scope.set_function(
                         Interlaced::new(function.name, vec![]),
-                        function.get_inner().clone(),
+                        function.clone().take_inner(),
                     );
                     false
                 } else {
@@ -546,178 +549,178 @@ impl<'a> Eval<'a> {
     }
 
     //     #[allow(clippy::too_many_lines)]
-        pub fn find_variables(&mut self, body: Vec<Expr<'a>>) -> Option<Stopper<'_>> {
-            // create a vector to return instead of inplace modification
-            // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
-            // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-            for expr in body {
-                match expr.expr {
-                    // we should never find functions in the outer scope, as those are found in the find_functions function
-    //                 Thing::Identifier(ref variable) => match variable.value {
-    //                     IdentifierType::Vairable(ref name) => {
-    //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
-    //                             self.scope.set_var(
-    //                                 &variable.name,
-    //                                 &mut vec![pointer],
-    //                                 false,
-    //                                 variable.line,
-    //                             );
-    //                         } else {
-    //                             self.scope.set_var(
-    //                                 &variable.name,
-    //                                 &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
-    //                                     &name.value,
-    //                                     variable.line,
-    //                                 ))],
-    //                                 false,
-    //                                 variable.line,
-    //                             );
-    //                         }
-    //                     }
-    //                     IdentifierType::List(ref list) => {
-    //                         let car: LiteralOrFile =
-    //                             self.find_pointer_in_other_stuff(&list.car).map_or_else(
-    //                                 || {
-    //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
-    //                                         &list.car,
-    //                                         variable.line,
-    //                                     ))
-    //                                 },
-    //                                 |pointer| pointer,
-    //                             );
-    //                         let cdr: LiteralOrFile =
-    //                             self.find_pointer_in_other_stuff(&list.cdr).map_or_else(
-    //                                 || {
-    //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
-    //                                         &list.cdr,
-    //                                         variable.line,
-    //                                     ))
-    //                                 },
-    //                                 |pointer| pointer,
-    //                             );
-    //                         self.scope.set_var(
-    //                             &variable.name,
-    //                             &mut vec![car, cdr],
-    //                             false,
-    //                             variable.line,
-    //                         );
-    //                     }
-    //                 },
-    //                 Thing::Return(os, line, _) => {
-    //                     let ret: LiteralOrFile =
-    //                         os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
-    //                             self.find_pointer_in_other_stuff(&os).map_or_else(
-    //                                 || LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
-    //                                 |identifier| identifier,
-    //                             )
-    //                         });
-    //                     return Some(Stopper::Return(ret));
-    //                 }
-    //                 Thing::Expression(expr) => {
-    //                     let exprs = self.find_pointer_in_stuff(&expr.inside);
-    //                     print!(
-    //                         "{}",
-    //                         NewExpression {
-    //                             inside: exprs,
-    //                             print: expr.print,
-    //                             line: expr.line,
-    //                             new_line: expr.new_line,
-    //                         }
-    //                     );
-    //                 }
-    //                 Thing::IfStatement(mut if_statement) => {
-    //                     let conditon: LiteralType =
-    //                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
-    //                             Some(pointer) => {
-    //                                 info!("if {:?}", pointer);
-    //                                 match pointer {
-    //                                     LiteralOrFile::Literal(literal) => literal,
-    //                                     _ => error(if_statement.line, "cannot compare files"),
-    //                                 }
-    //                             }
-    //                             None => LiteralType::from_other_stuff(
-    //                                 &if_statement.condition,
-    //                                 if_statement.line,
-    //                             ),
-    //                         };
-    //                     if conditon.type_eq(&LiteralType::Boolean(true)) {
-    //                     } else {
-    //                         error(if_statement.line, "expected boolean, got something else");
-    //                     }
-    //                     self.scope.from_parent();
-    //                     if conditon == LiteralType::Boolean(true) {
-    //                         if_statement.body_true = self.find_functions(if_statement.body_true);
-    //                         let body_true: Option<Stopper> =
-    //                             self.find_variables(if_statement.body_true);
-    //                         self.scope.drop_scope();
-    //                         if let Some(stop) = body_true {
-    //                             match stop {
-    //                                 Stopper::Break | Stopper::Continue => {
-    //                                     if self.in_loop {
-    //                                         return Some(stop);
-    //                                     }
-    //                                     error(if_statement.line, "break or continue outside of loop");
-    //                                 }
-    //                                 Stopper::Return(ret) => {
-    //                                     if self.in_function {
-    //                                         return Some(Stopper::Return(ret));
-    //                                     }
-    //                                     error(if_statement.line, "return outside of function");
-    //                                 }
-    //                             }
-    //                         }
-    //                     } else {
-    //                         if_statement.body_false = self.find_functions(if_statement.body_false);
-    //                         let z = self.find_variables(if_statement.body_false);
-    //                         self.scope.drop_scope();
-    //                         if let Some(stop) = z {
-    //                             if let Stopper::Return(ret) = stop {
-    //                                 if self.in_function {
-    //                                     return Some(Stopper::Return(ret));
-    //                                 }
-    //                                 error(if_statement.line, "return outside of function");
-    //                             } else {
-    //                                 if self.in_loop {
-    //                                     return Some(stop);
-    //                                 }
-    //                                 error(if_statement.line, "break or continue outside of loop");
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //                 Thing::LoopStatement(loop_statement) => {
-    //                     'l: loop {
-    //                         self.scope.from_parent();
-    //                         let loop_body = self.find_functions(loop_statement.body.clone());
-    //                         self.in_loop = true;
-    //                         let z: Option<Stopper> = self.find_variables(loop_body.clone());
-    //                         self.scope.drop_scope();
-    //                         if let Some(stop) = z {
-    //                             match stop {
-    //                                 Stopper::Break => break 'l,
-    //                                 Stopper::Continue => continue 'l,
-    //                                 Stopper::Return(ret) => {
-    //                                     if self.in_function {
-    //                                         return Some(Stopper::Return(ret));
-    //                                     }
-    //                                     error(loop_statement.line, "return outside of function");
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                     self.in_loop = false;
-    //                 }
-    //                 Thing::Break(..) => {
-    //                     return Some(Stopper::Break);
-    //                 }
-    //                 Thing::Continue(..) => {
-                    //     return Some(Stopper::Continue);
-                    // }
-                    _ => {}
-                }
+    pub fn find_variables(&mut self, body: Vec<Expr<'a>>) -> Option<Stopper<'_>> {
+        // create a vector to return instead of inplace modification
+        // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
+        // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
+        for expr in body {
+            match expr.expr {
+                // we should never find functions in the outer scope, as those are found in the find_functions function
+                //                 Thing::Identifier(ref variable) => match variable.value {
+                //                     IdentifierType::Vairable(ref name) => {
+                //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
+                //                             self.scope.set_var(
+                //                                 &variable.name,
+                //                                 &mut vec![pointer],
+                //                                 false,
+                //                                 variable.line,
+                //                             );
+                //                         } else {
+                //                             self.scope.set_var(
+                //                                 &variable.name,
+                //                                 &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                //                                     &name.value,
+                //                                     variable.line,
+                //                                 ))],
+                //                                 false,
+                //                                 variable.line,
+                //                             );
+                //                         }
+                //                     }
+                //                     IdentifierType::List(ref list) => {
+                //                         let car: LiteralOrFile =
+                //                             self.find_pointer_in_other_stuff(&list.car).map_or_else(
+                //                                 || {
+                //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                //                                         &list.car,
+                //                                         variable.line,
+                //                                     ))
+                //                                 },
+                //                                 |pointer| pointer,
+                //                             );
+                //                         let cdr: LiteralOrFile =
+                //                             self.find_pointer_in_other_stuff(&list.cdr).map_or_else(
+                //                                 || {
+                //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                //                                         &list.cdr,
+                //                                         variable.line,
+                //                                     ))
+                //                                 },
+                //                                 |pointer| pointer,
+                //                             );
+                //                         self.scope.set_var(
+                //                             &variable.name,
+                //                             &mut vec![car, cdr],
+                //                             false,
+                //                             variable.line,
+                //                         );
+                //                     }
+                //                 },
+                //                 Thing::Return(os, line, _) => {
+                //                     let ret: LiteralOrFile =
+                //                         os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
+                //                             self.find_pointer_in_other_stuff(&os).map_or_else(
+                //                                 || LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
+                //                                 |identifier| identifier,
+                //                             )
+                //                         });
+                //                     return Some(Stopper::Return(ret));
+                //                 }
+                //                 Thing::Expression(expr) => {
+                //                     let exprs = self.find_pointer_in_stuff(&expr.inside);
+                //                     print!(
+                //                         "{}",
+                //                         NewExpression {
+                //                             inside: exprs,
+                //                             print: expr.print,
+                //                             line: expr.line,
+                //                             new_line: expr.new_line,
+                //                         }
+                //                     );
+                //                 }
+                //                 Thing::IfStatement(mut if_statement) => {
+                //                     let conditon: LiteralType =
+                //                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
+                //                             Some(pointer) => {
+                //                                 info!("if {:?}", pointer);
+                //                                 match pointer {
+                //                                     LiteralOrFile::Literal(literal) => literal,
+                //                                     _ => error(if_statement.line, "cannot compare files"),
+                //                                 }
+                //                             }
+                //                             None => LiteralType::from_other_stuff(
+                //                                 &if_statement.condition,
+                //                                 if_statement.line,
+                //                             ),
+                //                         };
+                //                     if conditon.type_eq(&LiteralType::Boolean(true)) {
+                //                     } else {
+                //                         error(if_statement.line, "expected boolean, got something else");
+                //                     }
+                //                     self.scope.from_parent();
+                //                     if conditon == LiteralType::Boolean(true) {
+                //                         if_statement.body_true = self.find_functions(if_statement.body_true);
+                //                         let body_true: Option<Stopper> =
+                //                             self.find_variables(if_statement.body_true);
+                //                         self.scope.drop_scope();
+                //                         if let Some(stop) = body_true {
+                //                             match stop {
+                //                                 Stopper::Break | Stopper::Continue => {
+                //                                     if self.in_loop {
+                //                                         return Some(stop);
+                //                                     }
+                //                                     error(if_statement.line, "break or continue outside of loop");
+                //                                 }
+                //                                 Stopper::Return(ret) => {
+                //                                     if self.in_function {
+                //                                         return Some(Stopper::Return(ret));
+                //                                     }
+                //                                     error(if_statement.line, "return outside of function");
+                //                                 }
+                //                             }
+                //                         }
+                //                     } else {
+                //                         if_statement.body_false = self.find_functions(if_statement.body_false);
+                //                         let z = self.find_variables(if_statement.body_false);
+                //                         self.scope.drop_scope();
+                //                         if let Some(stop) = z {
+                //                             if let Stopper::Return(ret) = stop {
+                //                                 if self.in_function {
+                //                                     return Some(Stopper::Return(ret));
+                //                                 }
+                //                                 error(if_statement.line, "return outside of function");
+                //                             } else {
+                //                                 if self.in_loop {
+                //                                     return Some(stop);
+                //                                 }
+                //                                 error(if_statement.line, "break or continue outside of loop");
+                //                             }
+                //                         }
+                //                     }
+                //                 }
+                //                 Thing::LoopStatement(loop_statement) => {
+                //                     'l: loop {
+                //                         self.scope.from_parent();
+                //                         let loop_body = self.find_functions(loop_statement.body.clone());
+                //                         self.in_loop = true;
+                //                         let z: Option<Stopper> = self.find_variables(loop_body.clone());
+                //                         self.scope.drop_scope();
+                //                         if let Some(stop) = z {
+                //                             match stop {
+                //                                 Stopper::Break => break 'l,
+                //                                 Stopper::Continue => continue 'l,
+                //                                 Stopper::Return(ret) => {
+                //                                     if self.in_function {
+                //                                         return Some(Stopper::Return(ret));
+                //                                     }
+                //                                     error(loop_statement.line, "return outside of function");
+                //                                 }
+                //                             }
+                //                         }
+                //                     }
+                //                     self.in_loop = false;
+                //                 }
+                //                 Thing::Break(..) => {
+                //                     return Some(Stopper::Break);
+                //                 }
+                //                 Thing::Continue(..) => {
+                //     return Some(Stopper::Continue);
+                // }
+                _ => {}
             }
-            None
         }
+        None
+    }
 
     pub fn find_imports(&mut self, body: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
         // body.into_iter()
@@ -756,23 +759,43 @@ impl<'a> Eval<'a> {
         todo!()
     }
 
-    
     pub fn add_function(&mut self, function: FnDef<'a>) -> Expr<'a> {
+        let info = function.info;
         self.scope.set_function(
             Interlaced::new(function.name, function.modules.clone()),
-            function.get_inner().clone(),
+            function.take_inner(),
         );
-        Expr::new_call(function.info, FnCall::new(function.info, vec![Expr::new_literal(function.info, Lit::new_string(function.info, "function added"))], PrintType::Newline))
+        Expr::new_call(
+            info,
+            FnCall::new(
+                info,
+                vec![Expr::new_literal(
+                    info,
+                    Lit::new_string(info, "function added"),
+                )],
+                PrintType::Newline,
+            ),
+        )
     }
 
     pub fn add_variable(&mut self, variable: Var<'a>) -> Expr<'a> {
         self.scope.set_var(
-            Interlaced::new(variable.name, vec![]),
+            &Interlaced::new(variable.name, vec![]),
             variable.value,
             false,
-            variable.info
+            variable.info,
         );
-        Expr::new_call(variable.info, FnCall::new(variable.info, vec![Expr::new_literal(variable.info, Lit::new_string(variable.info, "variable added"))], PrintType::Newline))
+        Expr::new_call(
+            variable.info,
+            FnCall::new(
+                variable.info,
+                vec![Expr::new_literal(
+                    variable.info,
+                    Lit::new_string(variable.info, "variable added"),
+                )],
+                PrintType::Newline,
+            ),
+        )
     }
     //     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralOrFile> {
     //         match other_stuff {
