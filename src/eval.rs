@@ -581,9 +581,10 @@ impl<'a> Eval<'a> {
                     }
                     error(expr.info, "return statement outside of function");
                 }
-                _ if idx == len - 1 => {
+                // implicit return
+                _ if idx == len - 1 && self.in_function  =>{
                     // if the last expression is not a return statement then we return the last expression
-                    return Some(Stopper::Return(expr));
+                        return Some(Stopper::Return(expr));
                 }
                 _ => {} // we should never find functions in the outer scope, as those are found in the find_functions function
 
