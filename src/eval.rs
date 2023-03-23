@@ -550,176 +550,203 @@ impl<'a> Eval<'a> {
 
     //     #[allow(clippy::too_many_lines)]
     pub fn find_variables(&mut self, body: Vec<Expr<'a>>) -> Option<Stopper<'_>> {
+        let len = body.len();
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-        for expr in body {
+        for (idx, expr) in body.into_iter().enumerate() {
             match expr.expr {
-                ExprType::Var(var) => {
-                    self.scope.set_var(&Interlaced::new(var.name, vec![]), var.value, false, var.info)
+                // variables are lazily evaluted
+                ExprType::Var(var) => self.scope.set_var(
+                    &Interlaced::new(var.name, vec![]),
+                    var.value,
+                    false,
+                    var.info,
+                ),
+                ExprType::Continue => {
+                    if self.in_loop {
+                        return Some(Stopper::Continue);
+                    }
+                    error(expr.info, "continue statement outside of loop");
                 }
-                // we should never find functions in the outer scope, as those are found in the find_functions function
-                //                 Thing::Identifier(ref variable) => match variable.value {
-                //                     IdentifierType::Vairable(ref name) => {
-                //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
-                //                             self.scope.set_var(
-                //                                 &variable.name,
-                //                                 &mut vec![pointer],
-                //                                 false,
-                //                                 variable.line,
-                //                             );
-                //                         } else {
-                //                             self.scope.set_var(
-                //                                 &variable.name,
-                //                                 &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                //                                     &name.value,
-                //                                     variable.line,
-                //                                 ))],
-                //                                 false,
-                //                                 variable.line,
-                //                             );
-                //                         }
-                //                     }
-                //                     IdentifierType::List(ref list) => {
-                //                         let car: LiteralOrFile =
-                //                             self.find_pointer_in_other_stuff(&list.car).map_or_else(
-                //                                 || {
-                //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                //                                         &list.car,
-                //                                         variable.line,
-                //                                     ))
-                //                                 },
-                //                                 |pointer| pointer,
-                //                             );
-                //                         let cdr: LiteralOrFile =
-                //                             self.find_pointer_in_other_stuff(&list.cdr).map_or_else(
-                //                                 || {
-                //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                //                                         &list.cdr,
-                //                                         variable.line,
-                //                                     ))
-                //                                 },
-                //                                 |pointer| pointer,
-                //                             );
-                //                         self.scope.set_var(
-                //                             &variable.name,
-                //                             &mut vec![car, cdr],
-                //                             false,
-                //                             variable.line,
-                //                         );
-                //                     }
-                //                 },
-                //                 Thing::Return(os, line, _) => {
-                //                     let ret: LiteralOrFile =
-                //                         os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
-                //                             self.find_pointer_in_other_stuff(&os).map_or_else(
-                //                                 || LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
-                //                                 |identifier| identifier,
-                //                             )
-                //                         });
-                //                     return Some(Stopper::Return(ret));
-                //                 }
-                //                 Thing::Expression(expr) => {
-                //                     let exprs = self.find_pointer_in_stuff(&expr.inside);
-                //                     print!(
-                //                         "{}",
-                //                         NewExpression {
-                //                             inside: exprs,
-                //                             print: expr.print,
-                //                             line: expr.line,
-                //                             new_line: expr.new_line,
-                //                         }
-                //                     );
-                //                 }
-                //                 Thing::IfStatement(mut if_statement) => {
-                //                     let conditon: LiteralType =
-                //                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
-                //                             Some(pointer) => {
-                //                                 info!("if {:?}", pointer);
-                //                                 match pointer {
-                //                                     LiteralOrFile::Literal(literal) => literal,
-                //                                     _ => error(if_statement.line, "cannot compare files"),
-                //                                 }
-                //                             }
-                //                             None => LiteralType::from_other_stuff(
-                //                                 &if_statement.condition,
-                //                                 if_statement.line,
-                //                             ),
-                //                         };
-                //                     if conditon.type_eq(&LiteralType::Boolean(true)) {
-                //                     } else {
-                //                         error(if_statement.line, "expected boolean, got something else");
-                //                     }
-                //                     self.scope.from_parent();
-                //                     if conditon == LiteralType::Boolean(true) {
-                //                         if_statement.body_true = self.find_functions(if_statement.body_true);
-                //                         let body_true: Option<Stopper> =
-                //                             self.find_variables(if_statement.body_true);
-                //                         self.scope.drop_scope();
-                //                         if let Some(stop) = body_true {
-                //                             match stop {
-                //                                 Stopper::Break | Stopper::Continue => {
-                //                                     if self.in_loop {
-                //                                         return Some(stop);
-                //                                     }
-                //                                     error(if_statement.line, "break or continue outside of loop");
-                //                                 }
-                //                                 Stopper::Return(ret) => {
-                //                                     if self.in_function {
-                //                                         return Some(Stopper::Return(ret));
-                //                                     }
-                //                                     error(if_statement.line, "return outside of function");
-                //                                 }
-                //                             }
-                //                         }
-                //                     } else {
-                //                         if_statement.body_false = self.find_functions(if_statement.body_false);
-                //                         let z = self.find_variables(if_statement.body_false);
-                //                         self.scope.drop_scope();
-                //                         if let Some(stop) = z {
-                //                             if let Stopper::Return(ret) = stop {
-                //                                 if self.in_function {
-                //                                     return Some(Stopper::Return(ret));
-                //                                 }
-                //                                 error(if_statement.line, "return outside of function");
-                //                             } else {
-                //                                 if self.in_loop {
-                //                                     return Some(stop);
-                //                                 }
-                //                                 error(if_statement.line, "break or continue outside of loop");
-                //                             }
-                //                         }
-                //                     }
-                //                 }
-                //                 Thing::LoopStatement(loop_statement) => {
-                //                     'l: loop {
-                //                         self.scope.from_parent();
-                //                         let loop_body = self.find_functions(loop_statement.body.clone());
-                //                         self.in_loop = true;
-                //                         let z: Option<Stopper> = self.find_variables(loop_body.clone());
-                //                         self.scope.drop_scope();
-                //                         if let Some(stop) = z {
-                //                             match stop {
-                //                                 Stopper::Break => break 'l,
-                //                                 Stopper::Continue => continue 'l,
-                //                                 Stopper::Return(ret) => {
-                //                                     if self.in_function {
-                //                                         return Some(Stopper::Return(ret));
-                //                                     }
-                //                                     error(loop_statement.line, "return outside of function");
-                //                                 }
-                //                             }
-                //                         }
-                //                     }
-                //                     self.in_loop = false;
-                //                 }
-                //                 Thing::Break(..) => {
-                //                     return Some(Stopper::Break);
-                //                 }
-                //                 Thing::Continue(..) => {
-                //     return Some(Stopper::Continue);
-                // }
-                _ => {}
+                ExprType::Break(value) => {
+                    if self.in_loop {
+                        return Some(Stopper::Break(*value));
+                    }
+                    error(expr.info, "break statement outside of loop");
+                }
+                ExprType::Return(value) => {
+                    if self.in_function {
+                        return Some(Stopper::Return(*value));
+                    }
+                    error(expr.info, "return statement outside of function");
+                }
+                _ if idx == len - 1 => {
+                    // if the last expression is not a return statement then we return the last expression
+                    return Some(Stopper::Return(expr));
+                }
+                _ => {} // we should never find functions in the outer scope, as those are found in the find_functions function
+
+                        //                 Thing::Identifier(ref variable) => match variable.value {
+                        //                     IdentifierType::Vairable(ref name) => {
+                        //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
+                        //                             self.scope.set_var(
+                        //                                 &variable.name,
+                        //                                 &mut vec![pointer],
+                        //                                 false,
+                        //                                 variable.line,
+                        //                             );
+                        //                         } else {
+                        //                             self.scope.set_var(
+                        //                                 &variable.name,
+                        //                                 &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                        //                                     &name.value,
+                        //                                     variable.line,
+                        //                                 ))],
+                        //                                 false,
+                        //                                 variable.line,
+                        //                             );
+                        //                         }
+                        //                     }
+                        //                     IdentifierType::List(ref list) => {
+                        //                         let car: LiteralOrFile =
+                        //                             self.find_pointer_in_other_stuff(&list.car).map_or_else(
+                        //                                 || {
+                        //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                        //                                         &list.car,
+                        //                                         variable.line,
+                        //                                     ))
+                        //                                 },
+                        //                                 |pointer| pointer,
+                        //                             );
+                        //                         let cdr: LiteralOrFile =
+                        //                             self.find_pointer_in_other_stuff(&list.cdr).map_or_else(
+                        //                                 || {
+                        //                                     LiteralOrFile::Literal(LiteralType::from_other_stuff(
+                        //                                         &list.cdr,
+                        //                                         variable.line,
+                        //                                     ))
+                        //                                 },
+                        //                                 |pointer| pointer,
+                        //                             );
+                        //                         self.scope.set_var(
+                        //                             &variable.name,
+                        //                             &mut vec![car, cdr],
+                        //                             false,
+                        //                             variable.line,
+                        //                         );
+                        //                     }
+                        //                 },
+                        //                 Thing::Return(os, line, _) => {
+                        //                     let ret: LiteralOrFile =
+                        //                         os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
+                        //                             self.find_pointer_in_other_stuff(&os).map_or_else(
+                        //                                 || LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
+                        //                                 |identifier| identifier,
+                        //                             )
+                        //                         });
+                        //                     return Some(Stopper::Return(ret));
+                        //                 }
+                        //                 Thing::Expression(expr) => {
+                        //                     let exprs = self.find_pointer_in_stuff(&expr.inside);
+                        //                     print!(
+                        //                         "{}",
+                        //                         NewExpression {
+                        //                             inside: exprs,
+                        //                             print: expr.print,
+                        //                             line: expr.line,
+                        //                             new_line: expr.new_line,
+                        //                         }
+                        //                     );
+                        //                 }
+                        //                 Thing::IfStatement(mut if_statement) => {
+                        //                     let conditon: LiteralType =
+                        //                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
+                        //                             Some(pointer) => {
+                        //                                 info!("if {:?}", pointer);
+                        //                                 match pointer {
+                        //                                     LiteralOrFile::Literal(literal) => literal,
+                        //                                     _ => error(if_statement.line, "cannot compare files"),
+                        //                                 }
+                        //                             }
+                        //                             None => LiteralType::from_other_stuff(
+                        //                                 &if_statement.condition,
+                        //                                 if_statement.line,
+                        //                             ),
+                        //                         };
+                        //                     if conditon.type_eq(&LiteralType::Boolean(true)) {
+                        //                     } else {
+                        //                         error(if_statement.line, "expected boolean, got something else");
+                        //                     }
+                        //                     self.scope.from_parent();
+                        //                     if conditon == LiteralType::Boolean(true) {
+                        //                         if_statement.body_true = self.find_functions(if_statement.body_true);
+                        //                         let body_true: Option<Stopper> =
+                        //                             self.find_variables(if_statement.body_true);
+                        //                         self.scope.drop_scope();
+                        //                         if let Some(stop) = body_true {
+                        //                             match stop {
+                        //                                 Stopper::Break | Stopper::Continue => {
+                        //                                     if self.in_loop {
+                        //                                         return Some(stop);
+                        //                                     }
+                        //                                     error(if_statement.line, "break or continue outside of loop");
+                        //                                 }
+                        //                                 Stopper::Return(ret) => {
+                        //                                     if self.in_function {
+                        //                                         return Some(Stopper::Return(ret));
+                        //                                     }
+                        //                                     error(if_statement.line, "return outside of function");
+                        //                                 }
+                        //                             }
+                        //                         }
+                        //                     } else {
+                        //                         if_statement.body_false = self.find_functions(if_statement.body_false);
+                        //                         let z = self.find_variables(if_statement.body_false);
+                        //                         self.scope.drop_scope();
+                        //                         if let Some(stop) = z {
+                        //                             if let Stopper::Return(ret) = stop {
+                        //                                 if self.in_function {
+                        //                                     return Some(Stopper::Return(ret));
+                        //                                 }
+                        //                                 error(if_statement.line, "return outside of function");
+                        //                             } else {
+                        //                                 if self.in_loop {
+                        //                                     return Some(stop);
+                        //                                 }
+                        //                                 error(if_statement.line, "break or continue outside of loop");
+                        //                             }
+                        //                         }
+                        //                     }
+                        //                 }
+                        //                 Thing::LoopStatement(loop_statement) => {
+                        //                     'l: loop {
+                        //                         self.scope.from_parent();
+                        //                         let loop_body = self.find_functions(loop_statement.body.clone());
+                        //                         self.in_loop = true;
+                        //                         let z: Option<Stopper> = self.find_variables(loop_body.clone());
+                        //                         self.scope.drop_scope();
+                        //                         if let Some(stop) = z {
+                        //                             match stop {
+                        //                                 Stopper::Break => break 'l,
+                        //                                 Stopper::Continue => continue 'l,
+                        //                                 Stopper::Return(ret) => {
+                        //                                     if self.in_function {
+                        //                                         return Some(Stopper::Return(ret));
+                        //                                     }
+                        //                                     error(loop_statement.line, "return outside of function");
+                        //                                 }
+                        //                             }
+                        //                         }
+                        //                     }
+                        //                     self.in_loop = false;
+                        //                 }
+                        //                 Thing::Break(..) => {
+                        //                     return Some(Stopper::Break);
+                        //                 }
+                        //                 Thing::Continue(..) => {
+                        //     return Some(Stopper::Continue);
+                        // }
             }
         }
         None
