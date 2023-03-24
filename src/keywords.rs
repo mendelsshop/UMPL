@@ -40,6 +40,7 @@ impl Keyword<'_> {
         keywords.insert(toggle_case("potato"), TokenType::Potato);
         keywords.insert(toggle_case("if"), TokenType::If);
         keywords.insert(toggle_case("else"), TokenType::Else);
+        keywords.insert(toggle_case("module"), TokenType::Module);
         builtin_functions.insert(toggle_case("input"), BuiltinFunction::Input);
         builtin_functions.insert(toggle_case("new"), BuiltinFunction::New);
         builtin_functions.insert(toggle_case("setwith"), BuiltinFunction::Set);
@@ -61,7 +62,6 @@ impl Keyword<'_> {
         builtin_functions.insert(toggle_case("createfile"), BuiltinFunction::CreateFile);
         builtin_functions.insert(toggle_case("deletefile"), BuiltinFunction::DeleteFile);
         builtin_functions.insert(toggle_case("type"), BuiltinFunction::Type);
-        builtin_functions.insert(toggle_case("module"), BuiltinFunction::Module);
         Self {
             keywords,
             builtin_functions,

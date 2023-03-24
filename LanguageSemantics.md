@@ -81,3 +81,11 @@ loop ⧼
     ! same applies to continue
 ⧽
 ```
+
+## importing modules
+
+The module system has the same semantics as defining a function. That is that if a module is declared in the outermost part of a scope, then it can be used even before it has been defined.
+
+## how imports work
+
+The same semantics that make function and module declarations that are in the outermost part of a scope are also the the only functions and modules that will be imported with a module declaration

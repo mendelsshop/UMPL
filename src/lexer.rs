@@ -8,18 +8,18 @@ use unic_emoji_char as emoji;
 #[derive(Debug, PartialEq)]
 pub struct Lexer<'a, 'b> {
     token_list: Vec<Token<'b, 'a>>,
-    source: &'a str,
+    source: String,
     start: usize,
     current: usize,
     line: u32,
     module: Vec<char>,
     name: &'a str,
-    text_buffer: &'b mut &'b String,
+    text_buffer: String,
     colunm: u32,
 }
 
 impl<'a, 'b> Lexer<'a, 'b> {
-    pub fn new(source: &'b str, name: &'a str, text_buffer: &'b mut &'b String) -> Self
+    pub const fn new(source: String, name: &'a str) -> Self
     where
         'b: 'a,
     {
@@ -31,13 +31,13 @@ impl<'a, 'b> Lexer<'a, 'b> {
             line: 1,
             module: Vec::new(),
             name,
-            text_buffer,
+            text_buffer: String::new(),
             colunm: 1,
         }
     }
 
-    pub const fn get_source(&self) -> &'a str {
-        self.source
+    pub fn get_source(&self) -> &str {
+        &self.source
     }
 
     pub const fn get_info(&self) -> Info<'a> {
@@ -52,7 +52,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.module = module;
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token<'_, 'a>>
+    pub fn scan_tokens(&mut self) -> Vec<Token<'b, 'a>>
     where
         'a: 'b,
     {
@@ -435,17 +435,17 @@ impl<'a, 'b> Lexer<'a, 'b> {
     }
 
     fn get_text(&self) -> &'b str {
-        self.text_buffer
+        // use box leak
+        let boxed = self.text_buffer.clone().into_boxed_str();
+        let leaked = Box::leak(boxed);
+        leaked
     }
 
     fn push_text(&mut self, char: char) {
-        let mut boxed = Box::new((**self.text_buffer).to_string());
-        boxed.push(char);
-        *self.text_buffer = Box::leak(boxed);
+        self.text_buffer.push(char);
     }
 
     fn clear_text(&mut self) {
-        let boxed = Box::<String>::default();
-        *self.text_buffer = Box::leak(boxed);
+        self.text_buffer.clear();
     }
 }

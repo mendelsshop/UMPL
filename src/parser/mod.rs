@@ -5,7 +5,8 @@ use crate::{
 };
 
 use self::rules::{
-    Accesor, Cons, Expr, FnDef, Ident, IdentType, If, Interlaced, Lambda, Lit, Loop, Var,
+    Accesor, Cons, Expr, FnDef, Ident, IdentType, If, Interlaced, Lambda, Lit, Loop, Module,
+    ModuleType, Var,
 };
 pub(crate) mod rules;
 
@@ -178,6 +179,31 @@ impl<'a> Parser<'a> {
                 ),
             )),
             TokenType::ModuleIdentifier(_) => Some(self.parse_function_path()),
+            TokenType::Module => {
+                self.advance("module");
+                let name = if let TokenType::String(str) = self.token.token_type {
+                    str
+                } else {
+                    error(self.token.info, "")
+                };
+                if name.chars().count() != 1 {
+                    error(self.token.info, "module name must be one character long");
+                }
+                self.advance("module name");
+                let mod_type = match self.token.token_type {
+                    TokenType::CodeBlockBegin => ModuleType::Inline(self.parse_list_exprs()),
+                    TokenType::String(str) => ModuleType::File(str),
+                    _ => error(self.token.info, ""),
+                };
+                Some(Expr::new_mod(
+                    self.token.info,
+                    Module::new(
+                        self.token.info,
+                        name.chars().next().unwrap(),
+                        mod_type,
+                    ),
+                ))
+            }
 
             // if we hit any other token type we have an error
             keyword => {

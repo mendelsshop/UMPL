@@ -211,7 +211,14 @@ use std::{
 
 use crate::{
     error::error,
-    parser::rules::{Accesor, Expr, ExprType, FnDef, Interlaced, Lambda, Lit, LitType, Var},
+    lexer::Lexer,
+    parser::{
+        rules::{
+            Accesor, Expr, ExprType, FnDef, Interlaced, Lambda, Lit, LitType, Module, ModuleType,
+            Var,
+        },
+        Parser,
+    },
     token::Info,
 };
 
@@ -487,18 +494,20 @@ impl fmt::Display for Scope<'_> {
                 .join(",\n\n"),
             self.functions
                 .iter()
-                .map(|(k, v)| format!("{}{}: {}", k.main, k.interlaced_to_string("+"), v))
+                .map(|(k, v)| format!(
+                    "{}{}: {}",
+                    match k.interlaced_to_string("+") {
+                        string if string.is_empty() => string,
+                        string => string + "+",
+                    },
+                    k.main,
+                    v
+                ))
                 .collect::<Vec<String>>()
                 .join(", ")
         )
     }
 }
-
-// impl Default for Scope {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
 
 pub enum Stopper<'a> {
     Break(Expr<'a>),
@@ -514,6 +523,7 @@ pub struct Eval<'a> {
     pub in_if: bool,
     pub files: HashMap<String, Rc<RefCell<File>>>,
     pub module_name: String,
+    modules: Vec<char>,
 }
 
 impl<'a> Eval<'a> {
@@ -525,6 +535,7 @@ impl<'a> Eval<'a> {
             in_if: false,
             files: HashMap::new(),
             module_name: String::new(),
+            modules: Vec::new(),
         };
         body = self_.find_functions(body);
         self_.find_variables(body);
@@ -544,7 +555,7 @@ impl<'a> Eval<'a> {
             .filter(|thing| -> bool {
                 if let ExprType::Fn(function) = &thing.expr {
                     self.scope.set_function(
-                        Interlaced::new(function.name, vec![]),
+                        Interlaced::new(function.name, self.modules.clone()),
                         function.clone().take_inner(),
                     );
                     false
@@ -556,7 +567,6 @@ impl<'a> Eval<'a> {
         self.find_imports(body)
     }
 
-    //     #[allow(clippy::too_many_lines)]
     pub fn find_variables(&mut self, body: Vec<Expr<'a>>) -> Option<Stopper<'a>> {
         let len = body.len();
         // create a vector to return instead of inplace modification
@@ -581,7 +591,7 @@ impl<'a> Eval<'a> {
                 // implicit return should be checked before any other expression kind
                 _ if idx == len - 1 && (self.in_function || self.in_if) => {
                     // if the last expression is not a return statement then we return the last expression
-                    return Some(Stopper::Return(expr));
+                    return Some(Stopper::End(expr));
                 }
                 _ => match self.eval_expr(expr) {
                     // TODO: proper formatting
@@ -594,40 +604,42 @@ impl<'a> Eval<'a> {
     }
 
     pub fn find_imports(&mut self, body: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
-        // body.into_iter()
-        //     .filter(|thing| match thing {
-        //         Thing::Expression(e) => match &e.inside {
-        //             Stuff::Call(call) => match call.keyword {
-        //                 TokenType::Module => {
-        //                     let mut new_stuff: Vec<LiteralType> = Vec::new();
-        //                     call.arguments.iter().for_each(|thing| {
-        //                         match self.find_pointer_in_stuff(thing) {
-        //                             LiteralOrFile::Literal(literal) => {
-        //                                 new_stuff.push(literal);
-        //                             }
-        //                             LiteralOrFile::File(_) => {
-        //                                 error(
-        //                                     call.line,
-        //                                     format!(
-        //                                         "Cannot use file as argument for function {}",
-        //                                         call.keyword
-        //                                     )
-        //                                     .as_str(),
-        //                                 );
-        //                             }
-        //                         }
-        //                     });
-        //                     TokenType::Module.r#do(&new_stuff, call.line, self);
-        //                     false
-        //                 }
-        //                 _ => true,
-        //             },
-        //             _ => true,
-        //         },
-        //         _ => true,
-        //     })
-        //     .collect()
-        todo!()
+        body.into_iter()
+            .filter(|expr| {
+                if let ExprType::Module(module) = &expr.expr {
+                    self.add_module(module);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect()
+    }
+
+    pub fn add_module(&mut self, module: &Module<'a>) -> Expr<'a> {
+        self.modules.push(module.get_name());
+        match module.get_type() {
+            ModuleType::Inline(code) => {
+                self.find_functions(code.clone());
+            }
+            ModuleType::File(file) => {
+                let contents = std::fs::read_to_string(file).unwrap_or_else(|_| {
+                    error(
+                        *module.get_info(),
+                        format!("Could not read file {file}"),
+                    );
+                });
+                let mut lexer: Lexer<'a, 'a> = Lexer::new(contents, file);
+                let mut parser = Parser::new(lexer.scan_tokens(), file);
+                let parsed = parser.parse();
+                self.find_functions(parsed);
+            }
+        }
+        self.modules.pop();
+        Expr::new_literal(
+            *module.get_info(),
+            Lit::new_string(*module.get_info(), "module added"),
+        )
     }
 
     pub fn add_function(&mut self, function: FnDef<'a>) -> Expr<'a> {

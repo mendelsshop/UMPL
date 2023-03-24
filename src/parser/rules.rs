@@ -29,6 +29,7 @@ pub enum ExprType<'a> {
     Break(Box<Expr<'a>>),
     Identifier(Ident<'a>),
     Cons(Cons<'a>),
+    Module(Module<'a>),
     Continue,
 }
 
@@ -116,6 +117,13 @@ impl<'a> Expr<'a> {
             expr: ExprType::Cons(value),
         }
     }
+
+    pub const fn new_mod(info: Info<'a>, value: Module<'a>) -> Self {
+        Self {
+            info,
+            expr: ExprType::Module(value),
+        }
+    }
 }
 
 impl<'a> Display for ExprType<'a> {
@@ -133,6 +141,7 @@ impl<'a> Display for ExprType<'a> {
             ExprType::Continue => write!(f, "continue"),
             ExprType::Identifier(ident) => write!(f, "ident [{ident}]"),
             ExprType::Cons(cons) => write!(f, "cons [{cons}]"),
+            ExprType::Module(module) => write!(f, "module [{module}]"),
         }
     }
 }
@@ -582,4 +591,54 @@ impl<'a> Display for Ident<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} [{}]", self.ident_type, self.info)
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Module<'a> {
+    info: Info<'a>,
+    name: char,
+    mod_type: ModuleType<'a>,
+}
+
+impl<'a> fmt::Display for Module<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            " module: {} type: {} [{}]",
+            self.name,
+            match self.mod_type {
+                ModuleType::Inline(_) => "in file".to_string(),
+                ModuleType::File(file) => format!("external file: {file}"),
+            },
+            self.info
+        )
+    }
+}
+
+impl<'a> Module<'a> {
+    pub const fn new(info: Info<'a>, name: char, mod_type: ModuleType<'a>) -> Self {
+        Self {
+            info,
+            name,
+            mod_type,
+        }
+    }
+
+    pub const fn get_name(&self) -> char {
+        self.name
+    }
+
+    pub const  fn get_type(&self) -> &ModuleType<'a> {
+        &self.mod_type
+    }
+
+    pub const fn get_info(&self) -> &Info<'a> {
+        &self.info
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModuleType<'a> {
+    Inline(Vec<Expr<'a>>),
+    File(&'a str),
 }

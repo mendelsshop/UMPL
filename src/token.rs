@@ -94,6 +94,7 @@ pub enum TokenType<'a> {
     Program,
     BuiltinFunction(BuiltinFunction),
     PlusSymbol,
+    Module,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, PartialOrd, Ord, Hash)]
@@ -116,7 +117,6 @@ pub enum BuiltinFunction {
     CreateFile,
     DeleteFile,
     Type,
-    Module,
     Input,
     Plus,
     Minus,
