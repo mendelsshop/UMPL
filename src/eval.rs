@@ -509,6 +509,8 @@ impl fmt::Display for Scope<'_> {
     }
 }
 
+
+#[derive(Debug, Clone)]
 pub enum Stopper<'a> {
     Break(Expr<'a>),
     Continue,
@@ -690,8 +692,17 @@ impl<'a> Eval<'a> {
             // if its a literal then its reduced enough
             ExprType::Literal(_) => Ok(expr),
             ExprType::Call(call) => {
-                let mut expr_list = call.args.into_iter().map(|expr| self.eval_expr(expr));
-                expr_list.find_map(Result::err).map_or_else(|| todo!(), Err)
+                let expr_list = call.args.into_iter().map(|expr| self.eval_expr(expr));
+                // unwrap the results if any of them are errors then return the error
+                // if all of them are ok then todo
+                let mut args = Vec::new();
+                for expr in expr_list {
+                    match expr {
+                        Ok(expr) => args.push(expr),
+                        Err(e) => return Err(e),
+                    }
+                }
+                todo!("call function with args {args:?}");
             }
             // if statements and loops are not lazily evaluated
             ExprType::If(if_statement) => {
@@ -732,7 +743,7 @@ impl<'a> Eval<'a> {
                     )),
                 }
             }
-            _ => todo!(), //                 Thing::Identifier(ref variable) => match variable.value {
+            expr => todo!("{}", expr), //                 Thing::Identifier(ref variable) => match variable.value {
                           //                     IdentifierType::Vairable(ref name) => {
                           //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
                           //                             self.scope.set_var(
