@@ -531,8 +531,7 @@ impl<'a> Eval<'a> {
     // this means that functions defined in the most outer scope can be called from anywhere in the file even before they are defined in the file
     // but functions defined in calls can only be called after they are defined
     pub fn find_functions(&mut self, body: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
-        // let body =
-        body.into_iter()
+        let body = body.into_iter()
             .filter(|thing| -> bool {
                 if let ExprType::Fn(function) = &thing.expr {
                     self.scope.set_function(
@@ -544,8 +543,8 @@ impl<'a> Eval<'a> {
                     true
                 }
             })
-            .collect() // ;
-                       // self.find_imports(body)
+            .collect();
+        self.find_imports(body)
     }
 
     //     #[allow(clippy::too_many_lines)]
@@ -556,38 +555,111 @@ impl<'a> Eval<'a> {
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
         for (idx, expr) in body.into_iter().enumerate() {
             match expr.expr {
-                // variables are lazily evaluted
-                ExprType::Var(var) => self.scope.set_var(
-                    &Interlaced::new(var.name, vec![]),
-                    var.value,
-                    false,
-                    var.info,
-                ),
-                ExprType::Continue => {
-                    if self.in_loop {
-                        return Some(Stopper::Continue);
-                    }
-                    error(expr.info, "continue statement outside of loop");
-                }
-                ExprType::Break(value) => {
-                    if self.in_loop {
-                        return Some(Stopper::Break(*value));
-                    }
-                    error(expr.info, "break statement outside of loop");
-                }
+                // we explicity match the return statement so that if we are on the last expression of a function
+                // that we dont end up falling into the implicit return and returning a return statement
                 ExprType::Return(value) => {
                     if self.in_function {
                         return Some(Stopper::Return(*value));
                     }
                     error(expr.info, "return statement outside of function");
                 }
-                // implicit return
+                // implicit return should be checked before any other expression kind
                 _ if idx == len - 1 && self.in_function => {
                     // if the last expression is not a return statement then we return the last expression
                     return Some(Stopper::Return(expr));
                 }
-                _ => {} // we should never find functions in the outer scope, as those are found in the find_functions function
+                _ => match self.eval_expr(expr) {
+                    // TODO: proper formatting
+                    Ok(expr) => println!("{}", expr),
+                    Err(stopper) => return Some(stopper),
+                },
+            }
+        }
+        None
+    }
 
+    pub fn find_imports(&mut self, body: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
+        // body.into_iter()
+        //     .filter(|thing| match thing {
+        //         Thing::Expression(e) => match &e.inside {
+        //             Stuff::Call(call) => match call.keyword {
+        //                 TokenType::Module => {
+        //                     let mut new_stuff: Vec<LiteralType> = Vec::new();
+        //                     call.arguments.iter().for_each(|thing| {
+        //                         match self.find_pointer_in_stuff(thing) {
+        //                             LiteralOrFile::Literal(literal) => {
+        //                                 new_stuff.push(literal);
+        //                             }
+        //                             LiteralOrFile::File(_) => {
+        //                                 error(
+        //                                     call.line,
+        //                                     format!(
+        //                                         "Cannot use file as argument for function {}",
+        //                                         call.keyword
+        //                                     )
+        //                                     .as_str(),
+        //                                 );
+        //                             }
+        //                         }
+        //                     });
+        //                     TokenType::Module.r#do(&new_stuff, call.line, self);
+        //                     false
+        //                 }
+        //                 _ => true,
+        //             },
+        //             _ => true,
+        //         },
+        //         _ => true,
+        //     })
+        //     .collect()
+        todo!()
+    }
+
+    pub fn add_function(&mut self, function: FnDef<'a>) -> Expr<'a> {
+        let info = function.info;
+        self.scope.set_function(
+            Interlaced::new(function.name, function.modules.clone()),
+            function.take_inner(),
+        );
+        Expr::new_literal(info, Lit::new_string(info, "function added"))
+    }
+
+    pub fn add_variable(&mut self, variable: Var<'a>) -> Expr<'a> {
+        self.scope.set_var(
+            &Interlaced::new(variable.name, vec![]),
+            variable.value,
+            false,
+            variable.info,
+        );
+        Expr::new_literal(variable.info, Lit::new_string(variable.info, "variable added"))
+    }
+
+    // attempts to simplify an expression to its simplest form
+    pub fn eval_expr(&mut self, expr: Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> {
+        match expr.expr {
+            ExprType::Return(value) => {
+                if self.in_function {
+                    return Err(Stopper::Return(*value));
+                }
+                error(expr.info, "return statement outside of function");
+            }
+            // implicit return should be checked before any other expression kind
+            ExprType::Var(var) => {
+                Ok(self.add_variable(*var))
+            },
+            ExprType::Continue => {
+                if self.in_loop {
+                    return Err(Stopper::Continue);
+                }
+                error(expr.info, "continue statement outside of loop");
+            }
+            ExprType::Break(value) => {
+                if self.in_loop {
+                    return Err(Stopper::Break(*value));
+                }
+                error(expr.info, "break statement outside of loop");
+            }
+            _ => todo!()
                         //                 Thing::Identifier(ref variable) => match variable.value {
                         //                     IdentifierType::Vairable(ref name) => {
                         //                         if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
@@ -748,86 +820,10 @@ impl<'a> Eval<'a> {
                         //                 Thing::Continue(..) => {
                         //     return Some(Stopper::Continue);
                         // }
-            }
         }
-        None
     }
 
-    pub fn find_imports(&mut self, body: Vec<Expr<'a>>) -> Vec<Expr<'a>> {
-        // body.into_iter()
-        //     .filter(|thing| match thing {
-        //         Thing::Expression(e) => match &e.inside {
-        //             Stuff::Call(call) => match call.keyword {
-        //                 TokenType::Module => {
-        //                     let mut new_stuff: Vec<LiteralType> = Vec::new();
-        //                     call.arguments.iter().for_each(|thing| {
-        //                         match self.find_pointer_in_stuff(thing) {
-        //                             LiteralOrFile::Literal(literal) => {
-        //                                 new_stuff.push(literal);
-        //                             }
-        //                             LiteralOrFile::File(_) => {
-        //                                 error(
-        //                                     call.line,
-        //                                     format!(
-        //                                         "Cannot use file as argument for function {}",
-        //                                         call.keyword
-        //                                     )
-        //                                     .as_str(),
-        //                                 );
-        //                             }
-        //                         }
-        //                     });
-        //                     TokenType::Module.r#do(&new_stuff, call.line, self);
-        //                     false
-        //                 }
-        //                 _ => true,
-        //             },
-        //             _ => true,
-        //         },
-        //         _ => true,
-        //     })
-        //     .collect()
-        todo!()
-    }
 
-    pub fn add_function(&mut self, function: FnDef<'a>) -> Expr<'a> {
-        let info = function.info;
-        self.scope.set_function(
-            Interlaced::new(function.name, function.modules.clone()),
-            function.take_inner(),
-        );
-        Expr::new_call(
-            info,
-            FnCall::new(
-                info,
-                vec![Expr::new_literal(
-                    info,
-                    Lit::new_string(info, "function added"),
-                )],
-                PrintType::Newline,
-            ),
-        )
-    }
-
-    pub fn add_variable(&mut self, variable: Var<'a>) -> Expr<'a> {
-        self.scope.set_var(
-            &Interlaced::new(variable.name, vec![]),
-            variable.value,
-            false,
-            variable.info,
-        );
-        Expr::new_call(
-            variable.info,
-            FnCall::new(
-                variable.info,
-                vec![Expr::new_literal(
-                    variable.info,
-                    Lit::new_string(variable.info, "variable added"),
-                )],
-                PrintType::Newline,
-            ),
-        )
-    }
     //     fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralOrFile> {
     //         match other_stuff {
     //             OtherStuff::Identifier(ident) => match self.scope.get_var(&ident.name, ident.line) {
