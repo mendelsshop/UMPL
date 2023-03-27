@@ -1,4 +1,8 @@
-use std::fmt::{self, Debug, Display};
+use std::{
+    cell::{Ref, RefCell},
+    fmt::{self, Debug, Display},
+    rc::Rc,
+};
 
 use crate::token::{BuiltinFunction, Info};
 
@@ -6,6 +10,15 @@ use crate::token::{BuiltinFunction, Info};
 pub struct Expr<'a> {
     pub info: Info<'a>,
     pub expr: ExprType<'a>,
+}
+
+impl<'a> Default for Expr<'a> {
+    fn default() -> Self {
+        Self {
+            info: Info::default(),
+            expr: ExprType::Literal(Lit::new_hempty(Info::default())),
+        }
+    }
 }
 
 pub fn to_string(code: &[Expr<'_>]) -> String {
@@ -19,14 +32,17 @@ pub fn to_string(code: &[Expr<'_>]) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprType<'a> {
     Literal(Lit<'a>),
+    /// function definition
     Fn(FnDef<'a>),
     Call(Box<FnCall<'a>>),
     If(Box<If<'a>>),
     Loop(Loop<'a>),
+    /// variable declarations
     Var(Box<Var<'a>>),
     Lambda(Lambda<'a>),
     Return(Box<Expr<'a>>),
     Break(Box<Expr<'a>>),
+    /// variable, function, refrences
     Identifier(Ident<'a>),
     Cons(Cons<'a>),
     Module(Module<'a>),
@@ -225,8 +241,8 @@ impl fmt::Display for LitType<'_> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cons<'a> {
     pub info: Info<'a>,
-    pub car: Box<Expr<'a>>,
-    pub cdr: Box<Expr<'a>>,
+    pub car: Rc<RefCell<Expr<'a>>>,
+    pub cdr: Rc<RefCell<Expr<'a>>>,
 }
 
 // TODO: impl Iterator for Cons<'a, Expr>
@@ -234,35 +250,32 @@ impl<'a> Cons<'a> {
     pub fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
         Self {
             info,
-            car: Box::new(car),
-            cdr: Box::new(cdr),
+            car: Rc::new(RefCell::new(car)),
+            cdr: Rc::new(RefCell::new(cdr)),
         }
     }
 
-    pub const fn car(&self) -> &Expr<'a> {
-        &self.car
+    pub fn car(&self) -> Ref<'_, Expr<'a>> {
+        self.car.borrow()
     }
 
-    pub const fn cdr(&self) -> &Expr<'a> {
-        &self.cdr
+    pub fn cdr(&self) -> Ref<'_, Expr<'a>> {
+        self.cdr.borrow()
     }
 
-    pub const fn len(&self) -> usize {
-        let mut len = 0;
-        let mut list = self;
-        while let ExprType::Cons(cons) = &list.cdr.expr {
-            len += 1;
-            list = cons;
+    pub fn len(&self) -> usize {
+        // recursively get the length of the list
+        match &self.cdr.borrow().expr {
+            ExprType::Cons(cons) => 1 + cons.len(),
+            _ => 1,
         }
-
-        len
     }
 
     pub fn new_cdr_empty(info: Info<'a>, car: Expr<'a>) -> Self {
         Self {
             info,
-            car: Box::new(car),
-            cdr: Box::new(Expr::new_literal(info, Lit::new_hempty(info))),
+            car: Rc::new(RefCell::new(car)),
+            cdr: Rc::new(RefCell::new(Expr::new_literal(info, Lit::new_hempty(info)))),
         }
     }
 
@@ -275,16 +288,16 @@ impl<'a> Cons<'a> {
             ExprType::Cons(_) => cdr,
             _ => Expr::new_cons(self.info, Cons::new_cdr_empty(self.info, cdr)),
         };
-        match &mut self.cdr.expr {
-            ExprType::Cons(cons) => {
+        match self.cdr.borrow_mut().expr {
+            ExprType::Cons(ref mut cons) => {
                 if recursive {
                     cons.set_cdr(cdr, recursive);
                 } else {
-                    self.cdr = Box::new(cdr);
+                    self.cdr.replace(cdr);
                 }
             }
             _ => {
-                self.cdr = Box::new(cdr);
+                self.cdr.replace(cdr);
             }
         }
     }
@@ -294,9 +307,10 @@ impl<'a> From<Cons<'a>> for Vec<Expr<'a>> {
     fn from(value: Cons<'a>) -> Self {
         let mut list = value;
         let mut vec = Self::new();
-        while let ExprType::Cons(cons) = &list.cdr.expr {
-            vec.push(*list.car.clone());
-            list = cons.clone();
+        vec.push(list.car.replace(Expr::default()));
+        while let ExprType::Cons(cons) = list.cdr.replace(Expr::default()).expr {
+            list = cons;
+            vec.push(list.car.replace(Expr::default()));
         }
         vec
     }
@@ -304,7 +318,7 @@ impl<'a> From<Cons<'a>> for Vec<Expr<'a>> {
 
 impl<'a> Display for Cons<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} . {})", self.car, self.cdr)
+        write!(f, "({} . {})", self.car.borrow(), self.cdr.borrow())
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -628,7 +642,7 @@ impl<'a> Module<'a> {
         self.name
     }
 
-    pub const  fn get_type(&self) -> &ModuleType<'a> {
+    pub const fn get_type(&self) -> &ModuleType<'a> {
         &self.mod_type
     }
 

@@ -197,11 +197,7 @@ impl<'a> Parser<'a> {
                 };
                 Some(Expr::new_mod(
                     self.token.info,
-                    Module::new(
-                        self.token.info,
-                        name.chars().next().unwrap(),
-                        mod_type,
-                    ),
+                    Module::new(self.token.info, name.chars().next().unwrap(), mod_type),
                 ))
             }
 
