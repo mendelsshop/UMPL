@@ -4,7 +4,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::token::{BuiltinFunction, Info};
+use crate::{
+    error::error,
+    token::{BuiltinFunction, Info},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr<'a> {
@@ -288,7 +291,12 @@ impl<'a> Cons<'a> {
             ExprType::Cons(_) => cdr,
             _ => Expr::new_cons(self.info, Cons::new_cdr_empty(self.info, cdr)),
         };
-        match self.cdr.borrow_mut().expr {
+        match match self.cdr.try_borrow_mut() {
+            Ok(val) => val,
+            Err(err) => error(self.info, format!("refcell borrow error: {err}")),
+        }
+        .expr
+        {
             ExprType::Cons(ref mut cons) => {
                 if recursive {
                     cons.set_cdr(cdr, recursive);
@@ -318,7 +326,18 @@ impl<'a> From<Cons<'a>> for Vec<Expr<'a>> {
 
 impl<'a> Display for Cons<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} . {})", self.car.borrow(), self.cdr.borrow())
+        write!(
+            f,
+            "({} . {})",
+            match self.car.try_borrow() {
+                Ok(value) => value,
+                Err(err) => error(self.info, format!("refcell borrow error: {err}")),
+            },
+            match self.cdr.try_borrow() {
+                Ok(value) => value,
+                Err(err) => error(self.info, format!("refcell borrow error: {err}")),
+            }
+        )
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -505,13 +524,13 @@ impl<'a> Display for Var<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Interlaced<Expr: Debug + Display + Clone, B: Debug + Clone + Display> {
-    pub main: Expr,
+pub struct Interlaced<A: Debug + Display + Clone, B: Debug + Clone + Display> {
+    pub main: A,
     pub interlaced: Vec<B>,
 }
 
-impl<Expr: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<Expr, B> {
-    pub fn new(main: Expr, interlaced: Vec<B>) -> Self {
+impl<A: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<A, B> {
+    pub fn new(main: A, interlaced: Vec<B>) -> Self {
         Self { main, interlaced }
     }
 
@@ -530,7 +549,16 @@ impl<Expr: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<Expr,
     pub fn len(&self) -> usize {
         self.interlaced.len()
     }
+
+    // takes a self and a method/closure to change the main value and retruns an owned Self with the modified value
+    pub fn changed<C: Debug + Clone + Display, F: FnOnce(A) -> C>(
+        self,
+        new: F,
+    ) -> Interlaced<C, B> {
+        Interlaced::new(new(self.main), self.interlaced)
+    }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Accesor {
     Car,

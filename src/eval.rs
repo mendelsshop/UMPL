@@ -222,10 +222,26 @@ use crate::{
     token::Info,
 };
 
+// used to store function arguments and normal variables in the same scope
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VarType<'a> {
+    FnArg(u64),
+    Var(&'a str),
+}
+
+impl<'a> fmt::Display for VarType<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FnArg(i) => write!(f, "function argument ${i}"),
+            Self::Var(v) => write!(f, "variable {v}",),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Scope<'a> {
-    vars: HashMap<&'a str, Rc<RefCell<Expr<'a>>>>,
-    fn_params: HashMap<u64, Rc<RefCell<Expr<'a>>>>,
+    vars: HashMap<VarType<'a>, Rc<RefCell<Expr<'a>>>>,
+    // fn_params: HashMap<u64, Rc<RefCell<Expr<'a>>>>,
     functions: HashMap<Interlaced<char, char>, Lambda<'a>>,
     files: HashMap<String, File>,
     parent_scope: Option<Box<Scope<'a>>>,
@@ -238,7 +254,7 @@ impl<'a> Scope<'a> {
             functions: HashMap::new(),
             parent_scope: None,
             files: HashMap::new(),
-            fn_params: HashMap::new(),
+            // fn_params: HashMap::new(),
         }
     }
     pub fn new_with_parent(parent: Box<Self>) -> Self {
@@ -249,7 +265,7 @@ impl<'a> Scope<'a> {
     }
     pub fn set_var(
         &mut self,
-        name: &Interlaced<&'a str, Accesor>,
+        name: &Interlaced<VarType<'a>, Accesor>,
         value: Expr<'a>,
         recurse: bool,
         info: Info<'_>,
@@ -274,7 +290,10 @@ impl<'a> Scope<'a> {
                 if self.has_var(name.main, false) {
                     // get the var
                     let var = self.get_var(name, info);
-                    *var.borrow_mut() = value;
+                    *match var.try_borrow_mut() {
+                        Ok(val) => val,
+                        Err(err) => error(info, format!("refcell borrow error: {err}")),
+                    } = value;
                 } else {
                     // if the var does not exist then we error
                     error(info, format!("variable {} does not exist", name.main));
@@ -381,27 +400,43 @@ impl<'a> Scope<'a> {
     // TODO: possibly make this _mut and have another get_var that doesn't return a mutable reference
     pub fn get_var(
         &mut self,
-        name: &Interlaced<&'a str, Accesor>,
+        name: &Interlaced<VarType<'_>, Accesor>,
         info: Info<'_>,
     ) -> Rc<RefCell<Expr<'a>>> {
-        match self.vars.get(name.main) {
+        match self.vars.get(&name.main) {
             Some(v) => {
                 match (v, name.len()) {
                     // match the type of the variable and accesor length
                     // if the accesor length is 0 then it can be any type
                     // if the accesor length is > 0 then it must be a list
                     (v, 0) => Rc::clone(v),
-                    (v, _) if matches!(v.borrow().expr, ExprType::Cons(_)) => {
+                    (v, _)
+                        if matches!(
+                            match v.try_borrow() {
+                                Ok(val) => val,
+                                Err(err) => error(info, format!("refcell borrow error: {err}")),
+                            }
+                            .expr,
+                            ExprType::Cons(_)
+                        ) =>
+                    {
                         // todo!("use accesor to get value from list")
-                        let expr = Rc::clone(v);
+                        let mut expr = Rc::clone(v);
                         for (_, accesor) in name.interlaced.iter().enumerate() {
-                            if let ExprType::Cons(ref mut list) = expr.borrow_mut().expr {
+                            if let ExprType::Cons(ref list) = match v.try_borrow() {
+                                Ok(val) => val,
+                                Err(err) => error(info, format!("refcell borrow error: {err}")),
+                            }
+                            .expr
+                            {
                                 match accesor {
                                     Accesor::Car => {
-                                        expr.swap(&Rc::clone(&list.car));
+                                        // expr = Rc::clone(&list.car);
+                                        // expr;
+                                        expr = Rc::clone(&list.car);
                                     }
                                     Accesor::Cdr => {
-                                        expr.swap(&Rc::clone(&list.cdr));
+                                        expr = Rc::clone(&list.cdr);
                                     }
                                 }
                             } else {
@@ -409,7 +444,11 @@ impl<'a> Scope<'a> {
                                     info,
                                     format!(
                                         "only lists can be accessed with car and cdr, got {}",
-                                        expr.borrow()
+                                        match expr.try_borrow() {
+                                            Ok(val) => val,
+                                            Err(err) =>
+                                                error(info, format!("refcell borrow error: {err}")),
+                                        }
                                     ),
                                 );
                             }
@@ -420,7 +459,10 @@ impl<'a> Scope<'a> {
                         info,
                         format!(
                             "only lists can be accessed with car and cdr, got {}",
-                            expr.borrow()
+                            match expr.try_borrow() {
+                                Ok(val) => val,
+                                Err(err) => error(info, format!("refcell borrow error: {err}")),
+                            }
                         ),
                     ),
                 }
@@ -446,16 +488,11 @@ impl<'a> Scope<'a> {
     //     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
     //         self.vars.remove(name)
     //     }
-    pub fn has_var(&self, name: &str, recurse: bool) -> bool {
-        let name: &str = if name.ends_with(".car") || name.ends_with(".cdr") {
-            &name[..name.len() - 4]
-        } else {
-            name
-        };
+    pub fn has_var(&self, name: VarType<'_>, recurse: bool) -> bool {
         if !recurse {
-            return self.vars.contains_key(name);
+            return self.vars.contains_key(&name);
         }
-        if self.vars.contains_key(name) {
+        if self.vars.contains_key(&name) {
             true
         } else {
             self.parent_scope
@@ -490,7 +527,13 @@ impl fmt::Display for Scope<'_> {
             "Scope {{ \nvars:\n{},\nfunctions:\n{} }}",
             self.vars
                 .iter()
-                .map(|(k, v)| format!("{k}: {}", v.borrow()))
+                .map(|(k, v)| format!(
+                    "{k}: {}",
+                    match v.try_borrow() {
+                        Ok(val) => val,
+                        Err(err) => error(Info::default(), format!("refcell borrow error: {err}")),
+                    }
+                ))
                 .collect::<Vec<String>>()
                 .join(",\n\n"),
             self.functions
@@ -528,7 +571,14 @@ impl<'a> fmt::Display for ExprAccess<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExprAccess::Normal(expr) => write!(f, "{expr}"),
-            ExprAccess::RefMut(expr) => write!(f, "{}", expr.borrow()),
+            ExprAccess::RefMut(expr) => write!(
+                f,
+                "{}",
+                match expr.try_borrow() {
+                    Ok(val) => val,
+                    Err(err) => error(Info::default(), format!("refcell borrow error: {err}")),
+                }
+            ),
         }
     }
 }
@@ -667,7 +717,7 @@ impl<'a> Eval<'a> {
 
     pub fn add_variable(&mut self, variable: Var<'a>) -> Expr<'a> {
         self.scope.set_var(
-            &Interlaced::new(variable.name, vec![]),
+            &Interlaced::new(VarType::Var(variable.name), vec![]),
             variable.value,
             false,
             variable.info,
@@ -680,6 +730,7 @@ impl<'a> Eval<'a> {
 
     // attempts to simplify an expression to its simplest form
     pub fn eval_expr(&mut self, expr: Expr<'a>) -> Result<ExprAccess<'a>, Stopper<'a>> {
+        println!("evaling {expr}");
         match expr.expr {
             ExprType::Return(value) => {
                 if self.in_function {
@@ -773,11 +824,15 @@ impl<'a> Eval<'a> {
             }
             ExprType::Identifier(identype) => match identype.ident_type {
                 IdentType::Var(var) => Ok(ExprAccess::<'a>::RefMut(
-                    self.scope.get_var(&var, expr.info),
+                    self.scope
+                        .get_var(&var.changed(VarType::Var), identype.info),
+                )),
+                IdentType::FnParam(fnarg) => Ok(ExprAccess::<'a>::RefMut(
+                    self.scope
+                        .get_var(&fnarg.changed(VarType::FnArg), identype.info),
                 )),
                 IdentType::FnIdent(_) => todo!(),
                 IdentType::Builtin(_) => todo!(),
-                IdentType::FnParam(_) => todo!(),
             },
             ExprType::Fn(fndef) => Ok(ExprAccess::Normal(self.add_function(fndef))),
             ExprType::Module(module) => Ok(ExprAccess::Normal(self.add_module(&module))),
