@@ -148,26 +148,26 @@ impl<'a> Expr<'a> {
 impl<'a> Display for ExprType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            ExprType::Literal(lit) => write!(f, "literal [{lit}]"),
-            ExprType::Fn(fn_def) => write!(f, "fn [{fn_def}]"),
-            ExprType::Call(call) => write!(f, "call [{call}]"),
-            ExprType::If(if_) => write!(f, "if [{if_}]"),
-            ExprType::Loop(loop_def) => write!(f, "loop [{loop_def}]"),
-            ExprType::Var(var) => write!(f, "var [{var}]"),
-            ExprType::Lambda(lambda) => write!(f, "lambda [{lambda}]"),
-            ExprType::Return(return_) => write!(f, "return [{return_}]"),
-            ExprType::Break(break_) => write!(f, "break [{break_}]"),
+            ExprType::Literal(lit) => write!(f, "{lit}"),
+            ExprType::Fn(fn_def) => write!(f, "{fn_def}"),
+            ExprType::Call(call) => write!(f, "{call}"),
+            ExprType::If(if_) => write!(f, "{if_}"),
+            ExprType::Loop(loop_def) => write!(f, "{loop_def}"),
+            ExprType::Var(var) => write!(f, "{var}"),
+            ExprType::Lambda(lambda) => write!(f, "{lambda}"),
+            ExprType::Return(return_) => write!(f, "{return_}"),
+            ExprType::Break(break_) => write!(f, "{break_}"),
             ExprType::Continue => write!(f, "continue"),
-            ExprType::Identifier(ident) => write!(f, "ident [{ident}]"),
-            ExprType::Cons(cons) => write!(f, "cons [{cons}]"),
-            ExprType::Module(module) => write!(f, "module [{module}]"),
+            ExprType::Identifier(ident) => write!(f, "{ident}"),
+            ExprType::Cons(cons) => write!(f, "{cons}"),
+            ExprType::Module(module) => write!(f, "{module}"),
         }
     }
 }
 
 impl<'a> Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at [{}]", self.expr, self.info)
+        write!(f, "{}", self.expr)
     }
 }
 
@@ -216,7 +216,7 @@ impl<'a> Lit<'a> {
 
 impl<'a> Display for Lit<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at [{}]", self.value, self.info)
+        write!(f, "{}", self.value)
     }
 }
 
@@ -232,10 +232,10 @@ pub enum LitType<'a> {
 impl fmt::Display for LitType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::String(s) => write!(f, "string: {s}"),
-            Self::Number(n) => write!(f, "number: {n}"),
-            Self::Boolean(b) => write!(f, "boolean: {b}"),
-            Self::File(s) => write!(f, "file: {s}"),
+            Self::String(s) => write!(f, "{s}"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Boolean(b) => write!(f, "{b}"),
+            Self::File(s) => write!(f, "{s}"),
             Self::Hempty => write!(f, "hemty"),
         }
     }
@@ -362,17 +362,20 @@ impl<'a> Lambda<'a> {
             body,
         }
     }
+
+    pub fn body(&self) -> &Vec<Expr<'a>> {
+        &self.body
+    }
 }
 
 impl<'a> Display for Lambda<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "fn: [with {}{} parameters {}  [{}]]",
+            "lambda{} {}: {}",
             if self.extra_params { " at least" } else { "" },
             self.param_count,
             to_string(&self.body),
-            self.info
         )
     }
 }
@@ -404,11 +407,7 @@ impl<'a> FnDef<'a> {
 
 impl<'a> Display for FnDef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} defined as {} at [{}]",
-            self.name, self.inner, self.info
-        )
+        write!(f, "{} {}: [{}]", self.name, self.inner, self.info)
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -439,13 +438,12 @@ impl<'a> Display for FnCall<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "fn: {}() with {} args [{}]",
+            "fn call with {} {}",
             self.args
                 .iter()
                 .map(std::string::ToString::to_string)
                 .collect::<String>(),
             self.args.len(),
-            self.info
         )
     }
 }
@@ -478,7 +476,7 @@ impl<'a> Display for If<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "if {} then {} else {} [{}]",
+            "if {} then  {} otherwise {} [{}]",
             self.condition,
             to_string(&self.then),
             to_string(&self.otherwise),
@@ -520,7 +518,7 @@ impl<'a> Var<'a> {
 
 impl<'a> Display for Var<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "var {} = {} [{}]", self.name, self.value, self.info)
+        write!(f, "var {} value {} [{}]", self.name, self.value, self.info)
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -646,7 +644,7 @@ impl<'a> fmt::Display for Module<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            " module: {} type: {} [{}]",
+            "module {} type {} [{}]",
             self.name,
             match self.mod_type {
                 ModuleType::Inline(_) => "in file".to_string(),

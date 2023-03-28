@@ -90,15 +90,15 @@ fn main() {
 fn run(line: &str, name: &str) {
     let mut lexer: Lexer = Lexer::new(line.to_string(), name);
     let lexed = lexer.scan_tokens();
-    println!("{:#?}", lexed);
+    // println!("{:#?}", lexed);
     let mut parsed: Parser = Parser::new(lexed, name);
     let parsed = parsed.parse();
-    println!();
-    for expr in &parsed {
-        println!("{}", expr);
-    }
+    // println!();
+    // for expr in &parsed {
+    //     println!("{}", expr);
+    // }
 
     // println!("{:#?}", parsed);
     let eval = Eval::new(parsed);
-    println!("eval---\n{}", eval.scope);
+    // println!("eval---\n{}", eval.scope);
 }

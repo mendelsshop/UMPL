@@ -24,8 +24,8 @@ pub(crate) fn stackoverflow() {
 
 #[allow(clippy::module_name_repetitions)]
 pub fn arg_error<T: Display>(
-    num_args: u32,
-    given_args: u32,
+    num_args: u64,
+    given_args: u64,
     function: T,
     at_least: bool,
     info: Info<'_>,
