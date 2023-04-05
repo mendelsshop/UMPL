@@ -232,10 +232,9 @@ pub enum LitType<'a> {
 impl fmt::Display for LitType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::String(s) => write!(f, "{s}"),
+            Self::String(s) | Self::File(s) => write!(f, "{s}"),
             Self::Number(n) => write!(f, "{n}"),
             Self::Boolean(b) => write!(f, "{b}"),
-            Self::File(s) => write!(f, "{s}"),
             Self::Hempty => write!(f, "hemty"),
         }
     }
@@ -363,7 +362,7 @@ impl<'a> Lambda<'a> {
         }
     }
 
-    pub fn body(&self) -> &Vec<Expr<'a>> {
+    pub const fn body(&self) -> &Vec<Expr<'a>> {
         &self.body
     }
 }
@@ -410,7 +409,7 @@ impl<'a> Display for FnDef<'a> {
         write!(f, "{} {}: [{}]", self.name, self.inner, self.info)
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrintType {
     Newline,
     NoNewline,
