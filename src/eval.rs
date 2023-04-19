@@ -113,10 +113,13 @@ impl<'a> Scope<'a> {
                             ExprType::Cons(_)
                         ) =>
                     {
-                        // todo!("use accesor to get value from list")
+                        // TODO potenially eval expr here for example: a = [1 2] b = [3 4] c = [a b]
+                        // because c is a list of lists once we access c.car (a) we need to eval it
                         let mut expr = Rc::clone(v);
+                        let mut old_expr;
                         for (_, accesor) in name.interlaced.iter().enumerate() {
-                            if let ExprType::Cons(ref list) = match v.try_borrow() {
+                            old_expr = Rc::clone(&expr);
+                            if let ExprType::Cons(ref list) = match old_expr.try_borrow() {
                                 Ok(val) => val,
                                 Err(err) => error(info, format!("refcell borrow error: {err}")),
                             }
@@ -124,8 +127,6 @@ impl<'a> Scope<'a> {
                             {
                                 match accesor {
                                     Accesor::Car => {
-                                        // expr = Rc::clone(&list.car);
-                                        // expr;
                                         expr = Rc::clone(&list.car);
                                     }
                                     Accesor::Cdr => {
@@ -625,28 +626,128 @@ impl<'a> Eval<'a> {
             BuiltinFunction::Write => todo!(),
             BuiltinFunction::Read => todo!(),
             BuiltinFunction::ReadLine => todo!(),
-            BuiltinFunction::Exit => todo!(),
-            BuiltinFunction::Error => todo!(),
-            BuiltinFunction::Delete => todo!(),
+            BuiltinFunction::Exit | BuiltinFunction::Error => todo!(),
             BuiltinFunction::SplitOn => todo!(),
             BuiltinFunction::WriteLine => todo!(),
             BuiltinFunction::CreateFile => todo!(),
             BuiltinFunction::DeleteFile => todo!(),
             BuiltinFunction::Type => todo!(),
             BuiltinFunction::Input => todo!(),
-            BuiltinFunction::Plus => todo!(),
-            BuiltinFunction::Minus => todo!(),
-            BuiltinFunction::Divide => todo!(),
-            BuiltinFunction::Multiply => todo!(),
-            BuiltinFunction::Equal => todo!(),
-            BuiltinFunction::NotEqual => todo!(),
-            BuiltinFunction::GreaterEqual => todo!(),
-            BuiltinFunction::LessEqual => todo!(),
-            BuiltinFunction::GreaterThan => todo!(),
-            BuiltinFunction::LessThan => todo!(),
-            BuiltinFunction::And => todo!(),
-            BuiltinFunction::Or => todo!(),
-            BuiltinFunction::Not => todo!(),
+            BuiltinFunction::Plus
+            | BuiltinFunction::Minus
+            | BuiltinFunction::Divide
+            | BuiltinFunction::Multiply => {
+                let mut args = self.eval_args(args)?;
+                if let Some(expr) = args.pop() {
+                    match expr.expr {
+                        ExprType::Literal(Lit {
+                            value: LitType::Number(mut num),
+                            ..
+                        }) => {
+                            if args.len() == 0 && builtin_function == BuiltinFunction::Minus {
+                                num = -num;
+                            } else {
+                                num = args.iter().fold(num, |acc, expr| match expr.expr {
+                                    ExprType::Literal(Lit {
+                                        value: LitType::Number(num),
+                                        ..
+                                    }) => match builtin_function {
+                                        BuiltinFunction::Plus => acc + num,
+                                        BuiltinFunction::Minus => acc - num,
+                                        BuiltinFunction::Divide => acc / num,
+                                        BuiltinFunction::Multiply => acc * num,
+                                        _ => unreachable!(),
+                                    },
+                                    _ => error(
+                                        expr.info,
+                                        format!(
+                                            "expected number for {builtin_function} but found {}",
+                                            expr.expr
+                                        ),
+                                    ),
+                                });
+                            }
+                            Ok(Expr::new_literal(call, Lit::new_number(call, num)))
+                        }
+                        ExprType::Literal(Lit {
+                            value: LitType::String(mut string),
+                            ..
+                        }) => {
+                            if builtin_function == BuiltinFunction::Plus {
+                                let string_modified = args.iter().fold(
+                                    string.to_string(),
+                                    |acc, expr| 
+                                    // if its add then anythign can be added to a string
+                                    format!(
+                                        "{}{}",
+                                        acc,
+                                        expr
+                                    ), // if its multiply then only a number can be multiplied
+                                );
+                                let boxed = Box::new(string_modified);
+                                string = Box::leak(boxed);
+                            } else if builtin_function == BuiltinFunction::Multiply {
+                                let mult = args.iter().fold(1, |acc, expr| match expr.expr {
+                                    ExprType::Literal(Lit {
+                                        value: LitType::Number(num),
+                                        ..
+                                    }) => acc * num as usize,
+                                    _ => error(
+                                        expr.info,
+                                        format!(
+                                            "expected number for {builtin_function} but found {}",
+                                            expr.expr
+                                        ),
+                                    ),
+                                });
+                                let string_modified = string.repeat(mult);
+                                let boxed = Box::new(string_modified);
+                                string = Box::leak(boxed);
+                            } else {
+                                error(
+                                    expr.info,
+                                    format!("cannot use {builtin_function} with strings",),
+                                );
+                            }
+                            Ok(Expr::new_literal(call, Lit::new_string(call, string)))
+                        }
+                        _ => error(
+                            expr.info,
+                            format!(
+                                "expected number or string for {builtin_function} but found {}",
+                                expr.expr
+                            ),
+                        ),
+                    }
+                } else {
+                    error(
+                        call,
+                        format!("expected at least one argument for {builtin_function}"),
+                    )
+                }
+            }
+            // two or more args
+            BuiltinFunction::Equal | BuiltinFunction::NotEqual => todo!(),
+            // two args
+            BuiltinFunction::GreaterEqual | BuiltinFunction::LessEqual | BuiltinFunction::GreaterThan | BuiltinFunction::LessThan => todo!(),
+            // 2 or more args (booleans only)
+            BuiltinFunction::And | BuiltinFunction::Or => todo!(),
+            BuiltinFunction::Not => {
+                let mut args = self.eval_args(args)?;
+                // arg_error(num_args, given_args, function, at_least, info)
+                arg_error(1, args.len() as u64, "not", false, call);
+                let expr = args.pop().unwrap();
+                match expr.expr {
+                    ExprType::Literal(Lit {
+                        value: LitType::Boolean(bool),
+                        ..
+                    }) => Ok(Expr::new_literal(call, Lit::new_boolean(call, !bool))),
+                    _ => error(
+                        expr.info,
+                        format!("expected boolean for not but found {}", expr.expr),
+                    ),
+                }
+            }
             BuiltinFunction::New => {
                 if let Some(expr) = args.pop() {
                     match self.eval_expr(expr)?.expr {
@@ -685,12 +786,17 @@ impl<'a> Eval<'a> {
                     );
                 }
             }
+            BuiltinFunction::Delete => todo!(),
             BuiltinFunction::Set => todo!(),
-            BuiltinFunction::AddWith => todo!(),
-            BuiltinFunction::SubtractWith => todo!(),
-            BuiltinFunction::DivideWith => todo!(),
-            BuiltinFunction::MultiplyWith => todo!(),
+            // follow same rules as regular math operators (from above)
+            // but the first argument is the variable to set
+            BuiltinFunction::AddWith | BuiltinFunction::SubtractWith | BuiltinFunction::DivideWith | BuiltinFunction::MultiplyWith => todo!(),
         }
+    } 
+
+    fn eval_args(&mut self, args: &mut Vec<Expr<'a>>) -> Result<Vec<Expr<'a>>, Stopper<'a>> {
+        // we need to force the identifiers to be evaluated
+        args.drain(..).map(|arg| self.eval_expr(arg)).collect()
     }
 }
 

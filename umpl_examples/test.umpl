@@ -1,7 +1,11 @@
-potato 🍕 2* ⧼
-    (1 1)<
-    (potato 1 ⧼⧽ ()>)<
-    return (1 )<
-⧽
+!potato 🍕 2* ⧼
+!    (1 1)<
+!    (potato 1 ⧼⧽ ()>)<
+!1    return (1 )<
+!⧽
+list b with [2 6]
+list a with [2 list [2 6]]
 
-list a with [2 3]
+(multiply `d` 9 8 (plus 0 5)<)>
+
+(a.cdr.cdr)>
