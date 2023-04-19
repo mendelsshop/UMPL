@@ -264,63 +264,6 @@ impl<'a> Cons<'a> {
     pub fn cdr(&self) -> Ref<'_, Expr<'a>> {
         self.cdr.borrow()
     }
-
-    pub fn len(&self) -> usize {
-        // recursively get the length of the list
-        match &self.cdr.borrow().expr {
-            ExprType::Cons(cons) => 1 + cons.len(),
-            _ => 1,
-        }
-    }
-
-    pub fn new_cdr_empty(info: Info<'a>, car: Expr<'a>) -> Self {
-        Self {
-            info,
-            car: Rc::new(RefCell::new(car)),
-            cdr: Rc::new(RefCell::new(Expr::new_literal(info, Lit::new_hempty(info)))),
-        }
-    }
-
-    pub fn set_cdr(&mut self, cdr: Expr<'a>, recursive: bool) {
-        // check if cdr is a list
-        // if it is, if recursive, set go to the end of the list and set the cdr
-        // if not recursive, set the cdr to the list
-        // if it is not a list, set the cdr to a new list with the cdr as the car
-        let cdr = match cdr.expr {
-            ExprType::Cons(_) => cdr,
-            _ => Expr::new_cons(self.info, Cons::new_cdr_empty(self.info, cdr)),
-        };
-        match match self.cdr.try_borrow_mut() {
-            Ok(val) => val,
-            Err(err) => error(self.info, format!("refcell borrow error: {err}")),
-        }
-        .expr
-        {
-            ExprType::Cons(ref mut cons) => {
-                if recursive {
-                    cons.set_cdr(cdr, recursive);
-                } else {
-                    self.cdr.replace(cdr);
-                }
-            }
-            _ => {
-                self.cdr.replace(cdr);
-            }
-        }
-    }
-}
-
-impl<'a> From<Cons<'a>> for Vec<Expr<'a>> {
-    fn from(value: Cons<'a>) -> Self {
-        let mut list = value;
-        let mut vec = Self::new();
-        vec.push(list.car.replace(Expr::default()));
-        while let ExprType::Cons(cons) = list.cdr.replace(Expr::default()).expr {
-            list = cons;
-            vec.push(list.car.replace(Expr::default()));
-        }
-        vec
-    }
 }
 
 impl<'a> Display for Cons<'a> {
@@ -362,8 +305,10 @@ impl<'a> Lambda<'a> {
         }
     }
 
-    pub const fn body(&self) -> &Vec<Expr<'a>> {
-        &self.body
+    // cant destrcut const
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn body(self) -> Vec<Expr<'a>> {
+        self.body
     }
 }
 

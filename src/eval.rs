@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     fmt::{self},
     fs::File,
     mem::swap,
@@ -12,8 +12,8 @@ use crate::{
     lexer::Lexer,
     parser::{
         rules::{
-            Accesor, Expr, ExprType, FnCall, FnDef, Interlaced, Lambda, Lit, LitType, Module,
-            ModuleType, PrintType, Var,
+            Accesor, Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit,
+            LitType, Module, ModuleType, PrintType, Var,
         },
         Parser,
     },
@@ -64,7 +64,7 @@ impl<'a> Scope<'a> {
     pub fn set_var(
         &mut self,
         name: &Interlaced<VarType<'a>, Accesor>,
-        value: ExprAccess<'a>,
+        value: Expr<'a>,
         recurse: bool,
         info: Info<'_>,
     ) {
@@ -77,19 +77,7 @@ impl<'a> Scope<'a> {
                 if self.has_var(name.main, false) {
                     // get the var
                     let var = self.get_var(name, info);
-                    match value {
-                        ExprAccess::Normal(value) => {
-                            // set the var to the new value
-                            *match var.try_borrow_mut() {
-                                Ok(val) => val,
-                                Err(err) => error(info, format!("refcell borrow error: {err}")),
-                            } = value;
-                        }
-                        ExprAccess::RefMut(value) => {
-                            // set the var to the new value
-                            var.swap(&value);
-                        }
-                    }
+                    var.replace(value);
                 } else {
                     // if the var does not exist then we error
                     error(info, format!("variable {} does not exist", name.main));
@@ -98,13 +86,7 @@ impl<'a> Scope<'a> {
         } else if recurse {
             todo!("set var in parent scope");
         } else {
-            self.vars.insert(
-                name.main,
-                match value {
-                    ExprAccess::Normal(value) => Rc::new(RefCell::new(value)),
-                    ExprAccess::RefMut(value) => value,
-                },
-            );
+            self.vars.insert(name.main, Rc::new(RefCell::new(value)));
         }
     }
 
@@ -273,28 +255,6 @@ pub enum Stopper<'a> {
     End(Expr<'a>),
 }
 
-#[derive(Debug)]
-pub enum ExprAccess<'a> {
-    Normal(Expr<'a>),
-    RefMut(Rc<RefCell<Expr<'a>>>),
-}
-
-impl<'a> fmt::Display for ExprAccess<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExprAccess::Normal(expr) => write!(f, "{expr}"),
-            ExprAccess::RefMut(expr) => write!(
-                f,
-                "{}",
-                match expr.try_borrow() {
-                    Ok(val) => val,
-                    Err(err) => error(Info::default(), format!("refcell borrow error: {err}")),
-                }
-            ),
-        }
-    }
-}
-
 pub struct Eval<'a> {
     pub scope: Scope<'a>,
     pub in_function: bool,
@@ -358,8 +318,6 @@ impl<'a> Eval<'a> {
             self.in_if = in_if;
             self.in_loop = in_loop;
             self.in_function = in_function;
-            println!("idx: {idex}, len: {len}", idex = idx, len = len - 1);
-            println!("expr: {expr}");
             match expr.expr {
                 // we explicity match the return statement so that if we are on the last expression of a function
                 // that we dont end up falling into the implicit return and returning a return statement
@@ -430,21 +388,21 @@ impl<'a> Eval<'a> {
         Expr::new_literal(info, Lit::new_string(info, "function added"))
     }
 
-    pub fn add_variable(&mut self, variable: Var<'a>) -> Result<ExprAccess<'a>, Stopper<'a>> {
+    pub fn add_variable(&mut self, variable: Var<'a>) -> Result<Expr<'a>, Stopper<'a>> {
         self.scope.set_var(
             &Interlaced::new(VarType::Var(variable.name), vec![]),
-            ExprAccess::Normal(variable.value),
+            variable.value,
             false,
             variable.info,
         );
-        Ok(ExprAccess::Normal(Expr::new_literal(
+        Ok(Expr::new_literal(
             variable.info,
             Lit::new_string(variable.info, "variable added"),
-        )))
+        ))
     }
 
     // attempts to simplify an expression to its simplest form
-    pub fn eval_expr(&mut self, expr: Expr<'a>) -> Result<ExprAccess<'a>, Stopper<'a>> {
+    pub fn eval_expr(&mut self, expr: Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> {
         match expr.expr {
             ExprType::Return(value) => {
                 if self.in_function {
@@ -470,37 +428,109 @@ impl<'a> Eval<'a> {
             ExprType::Literal(_)
             | ExprType::Lambda(_)
             | ExprType::Cons(_)
-            | ExprType::Identifier(_) => Ok(ExprAccess::Normal(expr)),
-            ExprType::Call(mut call) => {
+            | ExprType::Identifier(_) => Ok(expr.clone()),
+            ExprType::Call(call) => {
                 // first remove and eval the first argument
                 // if its a builtin then apply it to the rest of the arguments
                 // otherwise if there are no additional done
                 // if there are more arguments then error out
                 // now check what type of print type the call want and act accordingly
                 // then return the value back to the caller
-                todo!()
+                let mut args = call.args;
+                // we need to reverse the arguments so we can pop them off the end (which when reversed is the front)
+                args.reverse();
+                let call_eval = if let Some(arg) = args.pop() {
+                    let evaled_thing = self.eval_expr(arg)?;
+
+                    match evaled_thing.expr {
+                        ExprType::Literal(lit) => Ok(Expr::new_literal(expr.info, lit)),
+
+                        ExprType::Lambda(_) => {
+                            error(expr.info, "lambda expressions cannot be called without new")
+                        }
+                        ExprType::Identifier(ident) => {
+                            match ident.ident_type {
+                                IdentType::Builtin(builtin) => {
+                                    self.eval_builtin(builtin, &mut args, call.info)
+                                }
+                                IdentType::Var(var) => {
+                                    let var =
+                                        self.scope.get_var(&var.changed(VarType::Var), call.info);
+                                    let x = self.eval_expr(var.borrow().clone());
+                                    x
+                                }
+                                IdentType::FnIdent(fn_ident) => {
+                                    error(
+                                        call.info,
+                                        format!(
+                                            "user defined functions like `{}` cannot be called without new",
+                                            fn_ident.main
+                                        ),
+                                    );
+                                }
+                                // same as var
+                                IdentType::FnParam(fn_param) => {
+                                    let var = self
+                                        .scope
+                                        .get_var(&fn_param.changed(VarType::FnArg), call.info);
+                                    let x = self.eval_expr(var.borrow().clone());
+                                    x
+                                }
+                            }
+                        }
+                        // if its a cons then we need to evaluate the arguments and then apply them to the cons
+                        ExprType::Cons(cons) => {
+                            // use temporary variables to avoid borrowing issues
+                            let car = self.eval_expr(cons.car().clone())?;
+                            let cdr = self.eval_expr(cons.cdr().clone())?;
+                            Ok(Expr::new_cons(expr.info, Cons::new(cons.info, car, cdr)))
+                        }
+                        ExprType::Module(_)
+                        | ExprType::Fn(_)
+                        | ExprType::Call(_)
+                        | ExprType::If(_)
+                        | ExprType::Loop(_)
+                        | ExprType::Var(_) => unreachable!("should be evaluated before this point"),
+                        ExprType::Return(_) | ExprType::Break(_) | ExprType::Continue => {
+                            unreachable!("return, break and continue should be handled via stopper")
+                        }
+                    }
+                } else {
+                    // if there are no arguments then we just return hempty
+                    return Ok(Expr::new_literal(call.info, Lit::new_hempty(call.info)));
+                };
+                if !args.is_empty() {
+                    error(
+                        call.info,
+                        format!(
+                            "too many arguments to function, expected 1 found {args}",
+                            args = args.len() + 1
+                        ),
+                    );
+                }
+                return print_and_pass(call_eval, call.print_type);
             }
             // if statements and loops are not lazily evaluated
             ExprType::If(if_statement) => {
                 self.in_if = true;
                 let cond_info = if_statement.condition.info;
                 let exprs = match self.eval_expr(if_statement.condition) {
-                    Ok(ExprAccess::Normal(Expr {
+                    Ok(Expr {
                         expr:
                             ExprType::Literal(Lit {
                                 value: LitType::Boolean(true),
                                 ..
                             }),
                         ..
-                    })) => if_statement.then,
-                    Ok(ExprAccess::Normal(Expr {
+                    }) => if_statement.then,
+                    Ok(Expr {
                         expr:
                             ExprType::Literal(Lit {
                                 value: LitType::Boolean(false),
                                 ..
                             }),
                         ..
-                    })) => if_statement.otherwise,
+                    }) => if_statement.otherwise,
                     Err(e) => return Err(e),
                     Ok(expr) => error(
                         cond_info,
@@ -512,12 +542,12 @@ impl<'a> Eval<'a> {
                 let evaled = self.find_variables(other_exprs);
                 self.in_if = false;
                 match evaled {
-                    Some(Stopper::End(expr)) => Ok(ExprAccess::Normal(expr)),
+                    Some(Stopper::End(expr)) => Ok(expr),
                     Some(stopper) => Err(stopper),
-                    None => Ok(ExprAccess::Normal(Expr::new_literal(
+                    None => Ok(Expr::new_literal(
                         if_statement.info,
                         Lit::new_hempty(if_statement.info),
-                    ))),
+                    )),
                 }
             }
             ExprType::Loop(loop_statement) => {
@@ -528,63 +558,63 @@ impl<'a> Eval<'a> {
                     let evaled = self.find_variables(loop_exprs.clone());
                     self.in_loop = false;
                     match evaled {
-                        Some(Stopper::Break(expr)) => return Ok(ExprAccess::Normal(expr)),
+                        Some(Stopper::Break(expr)) => return Ok(expr),
                         Some(Stopper::End(_)) => unreachable!(),
                         None | Some(Stopper::Continue) => continue,
                         Some(e) => return Err(e),
                     }
                 }
             }
-            ExprType::Fn(fndef) => Ok(ExprAccess::Normal(self.add_function(fndef))),
-            ExprType::Module(module) => Ok(ExprAccess::Normal(self.add_module(&module))),
+            ExprType::Fn(fndef) => Ok(self.add_function(fndef)),
+            ExprType::Module(module) => Ok(self.add_module(&module)),
         }
     }
 
     fn eval_lambda(
         &mut self,
         lambda: Lambda<'a>,
-        args: VecDeque<ExprAccess<'a>>,
-        call: &Box<crate::parser::rules::FnCall<'a>>,
-    ) -> Result<ExprAccess<'a>, Stopper<'a>> {
+        given_args: &mut Vec<Expr<'a>>,
+        info: Info<'a>,
+    ) -> Result<Expr<'a>, Stopper<'a>> {
         arg_error(
             lambda.param_count,
-            args.len() as u64,
+            given_args.len() as u64,
             "lambda",
             lambda.extra_params,
-            call.info,
+            info,
         );
+        let args = given_args.clone();
+        given_args.clear();
         // eval rest of arguments
         // if there are extra arguments then add them to the scope
         self.scope.from_parent();
         // add the extra arguments to the scope as fn params
         self.in_function = true;
-        let body = self.find_functions(lambda.body().clone());
+        let body = self.find_functions(lambda.body());
         self.in_function = false;
         for (i, arg) in args.into_iter().enumerate() {
             self.scope.set_var(
                 &Interlaced::new(VarType::FnArg(i as u64), vec![]),
                 arg,
                 false,
-                call.info,
+                info,
             );
         }
 
         let res = self.find_variables(body);
         match res {
-            Some(Stopper::Return(expr) | Stopper::End(expr)) => {
-                return Ok(ExprAccess::Normal(expr));
-            }
+            Some(Stopper::Return(expr) | Stopper::End(expr)) => Ok(expr),
             Some(res) => Err(res),
             None => unreachable!(),
         }
     }
 
     fn eval_builtin(
-        &self,
+        &mut self,
         builtin_function: BuiltinFunction,
-        args: VecDeque<ExprAccess<'a>>,
-        call: &FnCall<'a>,
-    ) -> Result<ExprAccess<'a>, Stopper<'a>> {
+        args: &mut Vec<Expr<'a>>,
+        call: Info<'a>,
+    ) -> Result<Expr<'a>, Stopper<'a>> {
         match builtin_function {
             BuiltinFunction::StrToNum => todo!(),
             BuiltinFunction::StrToBool => todo!(),
@@ -617,7 +647,44 @@ impl<'a> Eval<'a> {
             BuiltinFunction::And => todo!(),
             BuiltinFunction::Or => todo!(),
             BuiltinFunction::Not => todo!(),
-            BuiltinFunction::New => todo!("eval lambda"),
+            BuiltinFunction::New => {
+                if let Some(expr) = args.pop() {
+                    match self.eval_expr(expr)?.expr {
+                        ExprType::Lambda(lambda) => self.eval_lambda(lambda, args, call),
+                        ExprType::Identifier(Ident {
+                            ident_type: IdentType::FnIdent(value),
+                            ..
+                        }) => {
+                            if let Some(lambda) = self.scope.get_function(&value) {
+                                self.eval_lambda(lambda, args, call)
+                            } else {
+                                error(
+                                    call,
+                                    // TODO: show full path of function
+                                    format!("function {} not found", value.main),
+                                );
+                            }
+                        }
+                        // builtin function this allows for new to be used as a constructor for builtin types
+                        // so that higher order functions can be used with builtin types as well as user defined types
+                        // if not for this you would accept a builtin type or a user defined type but not both
+                        // but also allows for (new new ...) ie you could have infinite news
+                        ExprType::Identifier(Ident {
+                            ident_type: IdentType::Builtin(value),
+                            ..
+                        }) => self.eval_builtin(value, args, call),
+                        expr => error(
+                            call,
+                            format!("first argument of new must be a lambda function found {expr}"),
+                        ),
+                    }
+                } else {
+                    error(
+                        call,
+                        "first argument of new must be a lambda function".to_string(),
+                    );
+                }
+            }
             BuiltinFunction::Set => todo!(),
             BuiltinFunction::AddWith => todo!(),
             BuiltinFunction::SubtractWith => todo!(),
@@ -634,11 +701,20 @@ impl fmt::Debug for Eval<'_> {
     }
 }
 
-fn print_and_pass<'b>(e: ExprAccess<'b>, print_type: &PrintType) -> ExprAccess<'b> {
-    match print_type {
-        PrintType::Newline => println!("{e}"),
-        PrintType::NoNewline => print!("{e}"),
-        PrintType::None => {}
+fn print_and_pass<'b>(
+    e: Result<Expr<'b>, Stopper<'b>>,
+    print_type: PrintType,
+) -> Result<Expr<'b>, Stopper<'b>> {
+    match e {
+        Ok(expr) => {
+            match print_type {
+                PrintType::Newline => println!("{expr}"),
+                PrintType::NoNewline => print!("{expr}"),
+                PrintType::None => (),
+            }
+            Ok(expr)
+        }
+
+        Err(e) => Err(e),
     }
-    e
 }
