@@ -3,9 +3,18 @@
 !    (potato 1 ⧼⧽ ()>)<
 !1    return (1 )<
 !⧽
-list b with [2 6]
-list a with [2 list [2 6]]
+!list b with [2 6]
+!list a with [2 list [2 6]]
 
-(multiply `d` 9 8 (plus 0 5)<)>
+!(multiply `d` 9 8 (plus 0 5)<)>
 
-(a.cdr.cdr)>
+!(a.cdr.cdr)>
+
+!potato 🍕 2* ⧼
+potato 🍕 ⧼
+    return potato ⧼ return ident ⧽
+⧽
+
+create ident with `hi`
+
+(new (🍕)<)>

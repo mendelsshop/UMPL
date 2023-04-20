@@ -143,6 +143,10 @@ impl<'a> Expr<'a> {
             expr: ExprType::Module(value),
         }
     }
+
+    pub const fn reduceable(&self) -> bool {
+        !matches!(self.expr, ExprType::Literal(_) | ExprType::Lambda(_))
+    }
 }
 
 impl<'a> Display for ExprType<'a> {
@@ -235,7 +239,7 @@ impl fmt::Display for LitType<'_> {
             Self::String(s) | Self::File(s) => write!(f, "{s}"),
             Self::Number(n) => write!(f, "{n}"),
             Self::Boolean(b) => write!(f, "{b}"),
-            Self::Hempty => write!(f, "hemty"),
+            Self::Hempty => write!(f, "hempty"),
         }
     }
 }
