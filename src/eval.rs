@@ -1,11 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    fmt,
-    fs::File,
-    mem::swap,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, fmt, fs::File, mem::swap, rc::Rc};
 
 use crate::{
     error::{arg_error, error},
@@ -52,7 +45,6 @@ impl<'a> Scope<'a> {
             functions: HashMap::new(),
             parent_scope: None,
             files: HashMap::new(),
-            // fn_params: HashMap::new(),
         }
     }
     pub fn new_with_parent(parent: Box<Self>) -> Self {
@@ -180,9 +172,11 @@ impl<'a> Scope<'a> {
             |func| Some(func.clone()),
         )
     }
-    //     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
-    //         self.vars.remove(name)
-    //     }
+    pub fn delete_var(&mut self, ident: VarType<'a>) -> Option<Expr<'a>> {
+        self.vars
+            .remove(&ident)
+            .map(|var_val| Rc::try_unwrap(var_val).expect(&format!("failed to retrieve value when deleting {ident}")).into_inner())
+    }
     pub fn has_var(&self, name: VarType<'_>, recurse: bool) -> bool {
         if !recurse {
             return self.vars.contains_key(&name);
