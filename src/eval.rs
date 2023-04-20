@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt::{self},
+    fmt,
     fs::File,
     mem::swap,
     rc::Rc,
@@ -720,15 +720,11 @@ impl<'a> Eval<'a> {
                     )
                 }
             }
-            // two or more args returns bool
-            BuiltinFunction::Equal | BuiltinFunction::NotEqual => todo!(),
             // two args returns bool
             BuiltinFunction::GreaterEqual
             | BuiltinFunction::LessEqual
             | BuiltinFunction::GreaterThan
             | BuiltinFunction::LessThan => todo!(),
-            // 2 or more args (booleans only) returns bool
-            BuiltinFunction::And | BuiltinFunction::Or => todo!(),
             BuiltinFunction::Not => {
                 let mut args = self.eval_args(args, true)?;
                 // arg_error(num_args, given_args, function, at_least, info)
@@ -745,6 +741,28 @@ impl<'a> Eval<'a> {
                     ),
                 }
             }
+            // 2 or more args (booleans only) returns bool
+            // two or more args returns bool
+            // short circuting
+            BuiltinFunction::Equal | BuiltinFunction::NotEqual => todo!(),
+            BuiltinFunction::And | BuiltinFunction::Or => {
+                arg_error(2, args.len() as u64, "not", false, call);
+                let args = args.drain(..).collect::<Vec<_>>();
+                for arg in args {
+                    let bool_val = self.get_bool(arg)?;
+                    if bool_val {
+                        return Ok(Expr::new_literal(call, Lit::new_boolean(call, true)));
+                    } else {
+                        if builtin_function == BuiltinFunction::And {
+                            return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+                unreachable!()
+            }
+
             BuiltinFunction::New => {
                 if let Some(expr) = args.pop() {
                     match self.eval_expr(expr, true)?.expr {
@@ -802,7 +820,6 @@ impl<'a> Eval<'a> {
                 let mut args = self.eval_args(args, true)?;
                 args.push(var.clone());
                 let value = self.eval_builtin(builtin_function, &mut args, call)?;
-                // self.scope.set_var(var, value.clone(), true, call);\
                 let var = match var.expr {
                     ExprType::Identifier(Ident {
                         ident_type: IdentType::Var(value),
@@ -843,6 +860,17 @@ impl<'a> Eval<'a> {
                 info,
                 format!("expected variable or parameter but found {var}"),
             ),
+        }
+    }
+
+    fn get_bool(&mut self, expr: Expr<'a>) -> Result<bool, Stopper<'a>> {
+        let info = expr.info;
+        match self.eval_expr(expr, true)?.expr {
+            ExprType::Literal(Lit {
+                value: LitType::Boolean(bool),
+                ..
+            }) => Ok(bool),
+            e => error(info, format!("expected boolean value found {e}")),
         }
     }
 
