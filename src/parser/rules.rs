@@ -1,17 +1,25 @@
+// used so that clippy odesn't warn about derivitive macro see https://github.com/mcarton/rust-derivative/issues/102
+#![allow(clippy::let_underscore_untyped)]
+
 use std::{
     cell::{Ref, RefCell},
     fmt::{self, Debug, Display},
     rc::Rc,
 };
 
+use derivative::Derivative;
+
 use crate::{
     error::error,
     token::{BuiltinFunction, Info},
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Expr<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
+
     pub expr: ExprType<'a>,
 }
 
@@ -175,8 +183,10 @@ impl<'a> Display for Expr<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Lit<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub value: LitType<'a>,
 }
@@ -244,8 +254,10 @@ impl fmt::Display for LitType<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Cons<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub car: Rc<RefCell<Expr<'a>>>,
     pub cdr: Rc<RefCell<Expr<'a>>>,
@@ -286,8 +298,11 @@ impl<'a> Display for Cons<'a> {
         )
     }
 }
-#[derive(Debug, Clone, PartialEq)]
+
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Lambda<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub param_count: u64,
     pub extra_params: bool,
@@ -328,8 +343,10 @@ impl<'a> Display for Lambda<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct FnDef<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub name: char,
     pub modules: Vec<char>,
@@ -365,8 +382,10 @@ pub enum PrintType {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct FnCall<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub args: Vec<Expr<'a>>,
     pub print_type: PrintType,
@@ -386,7 +405,7 @@ impl<'a> Display for FnCall<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "fn call with {} {}",
+            "fn call with {} args {}",
             self.args
                 .iter()
                 .map(std::string::ToString::to_string)
@@ -396,8 +415,10 @@ impl<'a> Display for FnCall<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct If<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub condition: Expr<'a>,
     pub then: Vec<Expr<'a>>,
@@ -433,8 +454,10 @@ impl<'a> Display for If<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Loop<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub body: Vec<Expr<'a>>,
 }
@@ -450,9 +473,10 @@ impl<'a> Display for Loop<'a> {
         write!(f, "loop {} [{}]", to_string(&self.body), self.info)
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Var<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub name: &'a str,
     pub value: Expr<'a>,
@@ -562,9 +586,10 @@ impl Display for IdentType<'_> {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Ident<'a> {
+    #[derivative(PartialEq = "ignore")]
     pub info: Info<'a>,
     pub ident_type: IdentType<'a>,
 }
@@ -581,8 +606,10 @@ impl<'a> Display for Ident<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Module<'a> {
+    #[derivative(PartialEq = "ignore")]
     info: Info<'a>,
     name: char,
     mod_type: ModuleType<'a>,

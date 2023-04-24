@@ -5,7 +5,7 @@ use crate::{
     lexer::Lexer,
     parser::{
         rules::{
-            Accesor, Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit,
+            Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit,
             LitType, Module, ModuleType, PrintType, Var,
         },
         Parser,
@@ -53,108 +53,28 @@ impl<'a> Scope<'a> {
             ..Default::default()
         }
     }
-    pub fn set_var(
-        &mut self,
-        name: &Interlaced<VarType<'a>, Accesor>,
-        value: Expr<'a>,
-        recurse: bool,
-        info: Info<'_>,
-    ) {
-        // if we are setting the car or cdr of a list
-        if !name.is_empty() {
-            if recurse {
-                todo!("set var in parent scope");
+    pub fn set_var(&mut self, name: VarType<'a>, value: Expr<'a>, recurse: bool, info: Info<'_>) {
+        if recurse {
+            if self.has_var(&name, false) {
+                self.vars.insert(name, Rc::new(RefCell::new(value)));
             } else {
-                // check if the var exists because we are attempting to change it
-                if self.has_var(name.main, false) {
-                    // get the var
-                    let var = self.get_var(name, info);
-                    var.replace(value);
-                } else {
-                    // if the var does not exist then we error
-                    error(info, format!("variable {} does not exist", name.main));
-                }
+                self.parent_scope.as_mut().map_or_else(
+                    || error(info, format!("variable not found {name}")),
+                    |parent| parent.set_var(name, value, recurse, info),
+                );
             }
-        } else if recurse {
-            todo!("set var in parent scope");
         } else {
-            self.vars.insert(name.main, Rc::new(RefCell::new(value)));
+            // if were are creating a new variable
+            self.vars.insert(name, Rc::new(RefCell::new(value)));
         }
     }
 
     // TODO: possibly make this _mut and have another get_var that doesn't return a mutable reference
-    pub fn get_var(
-        &mut self,
-        name: &Interlaced<VarType<'_>, Accesor>,
-        info: Info<'_>,
-    ) -> Rc<RefCell<Expr<'a>>> {
-        match self.vars.get(&name.main) {
-            Some(v) => {
-                match (v, name.len()) {
-                    // match the type of the variable and accesor length
-                    // if the accesor length is 0 then it can be any type
-                    // if the accesor length is > 0 then it must be a list
-                    (v, 0) => Rc::clone(v),
-                    (v, _)
-                        if matches!(
-                            match v.try_borrow() {
-                                Ok(val) => val,
-                                Err(err) => error(info, format!("refcell borrow error: {err}")),
-                            }
-                            .expr,
-                            ExprType::Cons(_)
-                        ) =>
-                    {
-                        // TODO potenially eval expr here for example: a = [1 2] b = [3 4] c = [a b]
-                        // because c is a list of lists once we access c.car (a) we need to eval it
-                        let mut expr = Rc::clone(v);
-                        let mut old_expr;
-                        for (_, accesor) in name.interlaced.iter().enumerate() {
-                            old_expr = Rc::clone(&expr);
-                            if let ExprType::Cons(ref list) = match old_expr.try_borrow() {
-                                Ok(val) => val,
-                                Err(err) => error(info, format!("refcell borrow error: {err}")),
-                            }
-                            .expr
-                            {
-                                match accesor {
-                                    Accesor::Car => {
-                                        expr = Rc::clone(&list.car);
-                                    }
-                                    Accesor::Cdr => {
-                                        expr = Rc::clone(&list.cdr);
-                                    }
-                                }
-                            } else {
-                                error(
-                                    info,
-                                    format!(
-                                        "only lists can be accessed with car and cdr, got {}",
-                                        match expr.try_borrow() {
-                                            Ok(val) => val,
-                                            Err(err) =>
-                                                error(info, format!("refcell borrow error: {err}")),
-                                        }
-                                    ),
-                                );
-                            }
-                        }
-                        expr
-                    }
-                    (expr, _) => error(
-                        info,
-                        format!(
-                            "only lists can be accessed with car and cdr, got {}",
-                            match expr.try_borrow() {
-                                Ok(val) => val,
-                                Err(err) => error(info, format!("refcell borrow error: {err}")),
-                            }
-                        ),
-                    ),
-                }
-            }
+    pub fn get_var(&mut self, name: &VarType<'_>, info: Info<'_>) -> Rc<RefCell<Expr<'a>>> {
+        match self.vars.get(name) {
+            Some(v) => v.clone(),
             None => self.parent_scope.as_mut().map_or_else(
-                || error(info, format!("variable not found {}", name.main)),
+                || error(info, format!("variable not found {name}")),
                 |parent| parent.get_var(name, info),
             ),
         }
@@ -172,16 +92,23 @@ impl<'a> Scope<'a> {
             |func| Some(func.clone()),
         )
     }
-    pub fn delete_var(&mut self, ident: VarType<'a>) -> Option<Expr<'a>> {
-        self.vars
-            .remove(&ident)
-            .map(|var_val| Rc::try_unwrap(var_val).expect(&format!("failed to retrieve value when deleting {ident}")).into_inner())
+    pub fn delete_var(&mut self, ident: VarType<'a>, info: Info<'a>) -> Option<Expr<'a>> {
+        self.vars.remove(&ident).map(|var_val| {
+            Rc::try_unwrap(var_val)
+                .unwrap_or_else(|_| {
+                    error(
+                        info,
+                        format!("failed to retrieve value when deleting {ident}"),
+                    )
+                })
+                .into_inner()
+        })
     }
-    pub fn has_var(&self, name: VarType<'_>, recurse: bool) -> bool {
+    pub fn has_var(&self, name: &VarType<'_>, recurse: bool) -> bool {
         if !recurse {
-            return self.vars.contains_key(&name);
+            return self.vars.contains_key(name);
         }
-        if self.vars.contains_key(&name) {
+        if self.vars.contains_key(name) {
             true
         } else {
             self.parent_scope
@@ -202,9 +129,9 @@ impl<'a> Scope<'a> {
         swap(&mut temp_scope, self);
         *self = Self::new_with_parent(Box::new(temp_scope));
     }
-    //     pub fn has_function(&self, name: &str) -> bool {
-    //         self.function.contains_key(name)
-    //     }
+    pub fn has_function(&self, fn_name: &Interlaced<char, char>) -> bool {
+        self.functions.contains_key(fn_name)
+    }
 }
 
 impl fmt::Display for Scope<'_> {
@@ -250,6 +177,24 @@ pub enum Stopper<'a> {
     End(Expr<'a>),
 }
 
+macro_rules! get_literal {
+    ($self:ident, $expr:ident, $lit_type:ident, $func:ident, $ret_type:ty) => {
+        fn $func(&mut self, $expr: Expr<'a>) -> Result<$ret_type, Stopper<'a>> {
+            let info = $expr.info;
+            match self.eval_expr($expr, true)?.expr {
+                ExprType::Literal(Lit {
+                    value: LitType::$lit_type(lit),
+                    ..
+                }) => Ok(lit),
+                e => error(
+                    info,
+                    format!("expected {} value found {e}", stringify!($lit_type)),
+                ),
+            }
+        }
+    };
+}
+
 pub struct Eval<'a> {
     pub scope: Scope<'a>,
     pub in_function: bool,
@@ -261,6 +206,10 @@ pub struct Eval<'a> {
 }
 
 impl<'a> Eval<'a> {
+    get_literal!(self, expr, Boolean, get_bool, bool);
+    get_literal!(self, expr, Number, get_num, f64);
+    get_literal!(self, expr, String, get_str, &'a str);
+    get_literal!(self, expr, File, get_file, &'a str);
     pub fn new(mut body: Vec<Expr<'a>>) -> Self {
         let mut self_ = Self {
             scope: Scope::new(),
@@ -328,7 +277,6 @@ impl<'a> Eval<'a> {
                 // implicit return should be checked before any other expression kind
                 _ if idx == len - 1 && (self.in_function || self.in_if) => {
                     // if the last expression is not a return statement then we return the last expression
-                    println!("implicit return");
                     return Some(Stopper::End(match self.eval_expr(expr, true) {
                         Ok(value) => value,
                         Err(stopper) => return Some(stopper),
@@ -391,7 +339,7 @@ impl<'a> Eval<'a> {
 
     pub fn add_variable(&mut self, variable: Var<'a>) -> Result<Expr<'a>, Stopper<'a>> {
         self.scope.set_var(
-            &Interlaced::new(VarType::Var(variable.name), vec![]),
+            VarType::Var(variable.name),
             variable.value,
             false,
             variable.info,
@@ -496,19 +444,17 @@ impl<'a> Eval<'a> {
                     Ok(Expr {
                         expr:
                             ExprType::Literal(Lit {
-                                value: LitType::Boolean(true),
+                                value: LitType::Boolean(val),
                                 ..
                             }),
                         ..
-                    }) => if_statement.then,
-                    Ok(Expr {
-                        expr:
-                            ExprType::Literal(Lit {
-                                value: LitType::Boolean(false),
-                                ..
-                            }),
-                        ..
-                    }) => if_statement.otherwise,
+                    }) => {
+                        if val {
+                            if_statement.then
+                        } else {
+                            if_statement.otherwise
+                        }
+                    }
                     Err(e) => return Err(e),
                     Ok(expr) => error(
                         cond_info,
@@ -570,13 +516,10 @@ impl<'a> Eval<'a> {
         self.in_function = true;
         let body = self.find_functions(lambda.body());
         for (i, arg) in args.into_iter().enumerate() {
-            self.scope.set_var(
-                &Interlaced::new(VarType::FnArg(i as u64), vec![]),
-                arg,
-                false,
-                info,
-            );
+            self.scope
+                .set_var(VarType::FnArg(i as u64), arg, false, info);
         }
+
         let res = self.find_variables(body);
         self.in_function = false;
         match res {
@@ -637,25 +580,16 @@ impl<'a> Eval<'a> {
                             if args.is_empty() && builtin_function == BuiltinFunction::Minus {
                                 num = -num;
                             } else {
-                                num = args.iter().fold(num, |acc, expr| match expr.expr {
-                                    ExprType::Literal(Lit {
-                                        value: LitType::Number(num),
-                                        ..
-                                    }) => match builtin_function {
-                                        BuiltinFunction::Plus => acc + num,
-                                        BuiltinFunction::Minus => acc - num,
-                                        BuiltinFunction::Divide => acc / num,
-                                        BuiltinFunction::Multiply => acc * num,
+                                num = args.into_iter().try_fold(num, |acc, expr| {
+                                    let val = self.get_num(expr)?;
+                                    match builtin_function {
+                                        BuiltinFunction::Plus => Ok(acc + val),
+                                        BuiltinFunction::Minus => Ok(acc - val),
+                                        BuiltinFunction::Divide => Ok(acc / val),
+                                        BuiltinFunction::Multiply => Ok(acc * val),
                                         _ => unreachable!(),
-                                    },
-                                    _ => error(
-                                        expr.info,
-                                        format!(
-                                            "expected number for {builtin_function} but found {}",
-                                            expr.expr
-                                        ),
-                                    ),
-                                });
+                                    }
+                                })?;
                             }
                             Ok(Expr::new_literal(call, Lit::new_number(call, num)))
                         }
@@ -675,20 +609,21 @@ impl<'a> Eval<'a> {
                                 let boxed = Box::new(string_modified);
                                 string = Box::leak(boxed);
                             } else if builtin_function == BuiltinFunction::Multiply {
-                                let mult = args.iter().fold(1, |acc, expr| match expr.expr {
-                                    ExprType::Literal(Lit {
-                                        value: LitType::Number(num),
-                                        ..
-                                    }) => acc * num as usize,
-                                    _ => error(
-                                        expr.info,
-                                        format!(
-                                            "expected number for {builtin_function} but found {}",
-                                            expr.expr
-                                        ),
-                                    ),
-                                });
-                                let string_modified = string.repeat(mult);
+                                let mult = args.into_iter().try_fold(1, |acc, expr| ({
+                                    // make sure its a non float number
+                                    let info = expr.info;
+                                    let val = self.get_num(expr)?;
+                                    if val.round() != val {
+                                        error(
+                                            info,
+                                            format!(
+                                                "expected integer for {builtin_function} but found float {val}"
+                                            ),
+                                        );
+                                    }
+                                    Ok(acc * val as usize)
+                            }));
+                                let string_modified = string.repeat(mult?);
                                 let boxed = Box::new(string_modified);
                                 string = Box::leak(boxed);
                             } else {
@@ -722,7 +657,7 @@ impl<'a> Eval<'a> {
             BuiltinFunction::Not => {
                 let mut args = self.eval_args(args, true)?;
                 // arg_error(num_args, given_args, function, at_least, info)
-                arg_error(1, args.len() as u64, "not", false, call);
+                arg_error(1, args.len() as u64, builtin_function, false, call);
                 let expr = args.pop().unwrap();
                 match expr.expr {
                     ExprType::Literal(Lit {
@@ -738,23 +673,34 @@ impl<'a> Eval<'a> {
             // 2 or more args (booleans only) returns bool
             // two or more args returns bool
             // short circuting
-            BuiltinFunction::Equal | BuiltinFunction::NotEqual => todo!(),
+            BuiltinFunction::Equal | BuiltinFunction::NotEqual => {
+                let op = match builtin_function {
+                    BuiltinFunction::Equal => |a, b| a == &b,
+                    BuiltinFunction::NotEqual => |a, b| a != &b,
+                    _ => unreachable!(),
+                };
+                arg_error(2, args.len() as u64, builtin_function, true, call);
+                let expr = args.pop().unwrap();
+                let first_expr = self.eval_expr(expr, true)?;
+                let args = args.drain(..).collect::<Vec<_>>();
+                for arg in args {
+                    let expr = self.eval_expr(arg, true)?;
+                    if !op(&first_expr, expr) {
+                        return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
+                    }
+                }
+                Ok(Expr::new_literal(call, Lit::new_boolean(call, true)))
+            }
             BuiltinFunction::And | BuiltinFunction::Or => {
-                arg_error(2, args.len() as u64, "not", false, call);
+                arg_error(2, args.len() as u64, builtin_function, true, call);
                 let args = args.drain(..).collect::<Vec<_>>();
                 for arg in args {
                     let bool_val = self.get_bool(arg)?;
-                    if bool_val {
-                        return Ok(Expr::new_literal(call, Lit::new_boolean(call, true)));
-                    } else {
-                        if builtin_function == BuiltinFunction::And {
-                            return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
-                        } else {
-                            continue;
-                        }
+                    if !bool_val && builtin_function == BuiltinFunction::And {
+                        return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
                     }
                 }
-                unreachable!()
+                Ok(Expr::new_literal(call, Lit::new_boolean(call, true)))
             }
 
             BuiltinFunction::New => {
@@ -785,7 +731,22 @@ impl<'a> Eval<'a> {
             BuiltinFunction::Delete => todo!(),
             // takes variable name and value and sets it
             // returns value
-            BuiltinFunction::Set => todo!(),
+            BuiltinFunction::Set => {
+                arg_error(2, args.len() as u64, builtin_function, false, call);
+                let var = match args.pop().expect("should not be empty").expr {
+                    ExprType::Identifier(ident) => {
+                        // if its a variable or parameter we first need to get the value
+                        ident
+                    }
+                    expr => {
+                        error(call, format!("expected variable or parameter for {builtin_function} but found {expr}"));
+                    }
+                };
+                let value = args.pop().expect("should not be empty");
+                let value = self.eval_expr(value, true)?;
+                self.set_var(var, value.clone(), call, true);
+                Ok(value)
+            }
             // follow same rules as regular math operators (from above)
             // but the first argument is the variable to set
             // returns new value
@@ -793,78 +754,55 @@ impl<'a> Eval<'a> {
             | BuiltinFunction::SubtractWith
             | BuiltinFunction::DivideWith
             | BuiltinFunction::MultiplyWith => {
-                arg_error(2, args.len() as u64, "set", true, call);
+                arg_error(2, args.len() as u64, builtin_function, true, call);
                 let var = args.pop().unwrap();
-                // if its a variable or parameter we first need to get the value
-                if !matches!(
-                    var.expr,
-                    ExprType::Identifier(Ident {
-                        ident_type: IdentType::Var(_) | IdentType::FnParam(_),
-                        ..
-                    })
-                ) {
-                    error(
-                        var.info,
-                        format!(
-                            "expected variable or parameter for {builtin_function} but found {}",
-                            var.expr
-                        ),
-                    );
-                }
                 let mut args = self.eval_args(args, true)?;
                 args.push(var.clone());
-                let value = self.eval_builtin(builtin_function, &mut args, call)?;
-                let var = match var.expr {
-                    ExprType::Identifier(Ident {
-                        ident_type: IdentType::Var(value),
-                        ..
-                    }) => value.changed(VarType::Var),
-                    ExprType::Identifier(Ident {
-                        ident_type: IdentType::FnParam(value),
-                        ..
-                    }) => value.changed(VarType::FnArg),
+                let builtin_function = match builtin_function {
+                    BuiltinFunction::AddWith => BuiltinFunction::Plus,
+                    BuiltinFunction::SubtractWith => BuiltinFunction::Minus,
+                    BuiltinFunction::DivideWith => BuiltinFunction::Divide,
+                    BuiltinFunction::MultiplyWith => BuiltinFunction::Multiply,
                     _ => unreachable!(),
                 };
-                self.scope.set_var(&var, value.clone(), true, call);
+                let value = self.eval_builtin(builtin_function, &mut args, call)?;
+                let var = match var.expr {
+                    ExprType::Identifier(ident) => {
+                        // if its a variable or parameter we first need to get the value
+                        ident
+                    }
+                    _ => {
+                        error(call, format!("expected variable or parameter for {builtin_function} but found {var}"));
+                    }
+                };
+                self.set_var(var, value.clone(), call, true);
                 Ok(value)
             }
         }
     }
 
     fn get_var(&mut self, var: Ident<'a>, info: Info<'_>) -> Result<Expr<'a>, Stopper<'a>> {
-        // TODO: macrobitize this
-        match var.ident_type {
-            IdentType::Var(value) => {
-                let expr = self
-                    .scope
-                    .get_var(&value.changed(VarType::Var), info)
-                    .borrow()
-                    .clone();
-                self.eval_expr(expr, true)
-            }
-            IdentType::FnParam(value) => {
-                let expr = self
-                    .scope
-                    .get_var(&value.changed(VarType::FnArg), info)
-                    .borrow()
-                    .clone();
-                self.eval_expr(expr, true)
-            }
-            _ => error(
-                info,
-                format!("expected variable or parameter but found {var}"),
-            ),
-        }
+        let expr = self.get_var_inner(var, info).borrow().clone();
+        let var = self.eval_expr(expr, true)?;
+
+        // TODO: use get car/cdrs if needed
+        Ok(var)
     }
 
-    fn get_bool(&mut self, expr: Expr<'a>) -> Result<bool, Stopper<'a>> {
-        let info = expr.info;
-        match self.eval_expr(expr, true)?.expr {
-            ExprType::Literal(Lit {
-                value: LitType::Boolean(bool),
-                ..
-            }) => Ok(bool),
-            e => error(info, format!("expected boolean value found {e}")),
+    fn get_var_inner(&mut self, var: Ident<'_>, info: Info<'_>) -> Rc<RefCell<Expr<'a>>> {
+        let var_name = into_var(var, info);
+        self.scope.get_var(&var_name, info)
+    }
+
+    fn set_var(&mut self, var: Ident<'a>, value: Expr<'a>, info: Info<'_>, new: bool) {
+        if new {
+            self.scope
+                .vars
+                .insert(into_var(var, info), Rc::new(RefCell::new(value.clone())));
+        } else {
+            let prev = self.get_var_inner(var, info);
+            // TODO: use get car/cdrs if needed
+            prev.borrow_mut().expr = value.expr;
         }
     }
 
@@ -879,6 +817,18 @@ impl<'a> Eval<'a> {
             .map(|arg| self.eval_expr(arg, force))
             .collect()
     }
+}
+
+fn into_var<'a>(var: Ident<'a>, info: Info<'_>) -> VarType<'a> {
+    let var_name = match var.ident_type {
+        IdentType::Var(value) => VarType::Var(value.main),
+        IdentType::FnParam(value) => VarType::FnArg(value.main),
+        _ => error(
+            info,
+            format!("expected variable or parameter but found {var}"),
+        ),
+    };
+    var_name
 }
 
 impl fmt::Debug for Eval<'_> {
