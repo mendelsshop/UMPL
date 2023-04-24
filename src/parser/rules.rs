@@ -15,9 +15,10 @@ use crate::{
 };
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Expr<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
 
     pub expr: ExprType<'a>,
@@ -40,7 +41,7 @@ pub fn to_string(code: &[Expr<'_>]) -> String {
     to_return
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ExprType<'a> {
     Literal(Lit<'a>),
     /// function definition
@@ -184,9 +185,10 @@ impl<'a> Display for Expr<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Lit<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub value: LitType<'a>,
 }
@@ -234,7 +236,7 @@ impl<'a> Display for Lit<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum LitType<'a> {
     String(&'a str),
     Number(f64),
@@ -255,9 +257,10 @@ impl fmt::Display for LitType<'_> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Cons<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub car: Rc<RefCell<Expr<'a>>>,
     pub cdr: Rc<RefCell<Expr<'a>>>,
@@ -300,9 +303,10 @@ impl<'a> Display for Cons<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Lambda<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub param_count: u64,
     pub extra_params: bool,
@@ -344,9 +348,10 @@ impl<'a> Display for Lambda<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct FnDef<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub name: char,
     pub modules: Vec<char>,
@@ -375,7 +380,7 @@ impl<'a> Display for FnDef<'a> {
         write!(f, "{} {}: [{}]", self.name, self.inner, self.info)
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub enum PrintType {
     Newline,
     NoNewline,
@@ -383,9 +388,10 @@ pub enum PrintType {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct FnCall<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub args: Vec<Expr<'a>>,
     pub print_type: PrintType,
@@ -416,9 +422,10 @@ impl<'a> Display for FnCall<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct If<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub condition: Expr<'a>,
     pub then: Vec<Expr<'a>>,
@@ -455,9 +462,10 @@ impl<'a> Display for If<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Loop<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub body: Vec<Expr<'a>>,
 }
@@ -474,9 +482,10 @@ impl<'a> Display for Loop<'a> {
     }
 }
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Var<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub name: &'a str,
     pub value: Expr<'a>,
@@ -493,7 +502,7 @@ impl<'a> Display for Var<'a> {
         write!(f, "var {} value {} [{}]", self.name, self.value, self.info)
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub struct Interlaced<A: Debug + Display + Clone, B: Debug + Clone + Display> {
     pub main: A,
     pub interlaced: Vec<B>,
@@ -529,7 +538,7 @@ impl<A: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<A, B> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Accesor {
     Car,
     Cdr,
@@ -544,7 +553,7 @@ impl Display for Accesor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub enum IdentType<'a> {
     Var(Interlaced<&'a str, Accesor>),
     FnIdent(Interlaced<char, char>),
@@ -587,9 +596,10 @@ impl Display for IdentType<'_> {
     }
 }
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Ident<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub ident_type: IdentType<'a>,
 }
@@ -607,9 +617,10 @@ impl<'a> Display for Ident<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, Clone, PartialEq)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Module<'a> {
     #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
     info: Info<'a>,
     name: char,
     mod_type: ModuleType<'a>,
@@ -652,7 +663,7 @@ impl<'a> Module<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ModuleType<'a> {
     Inline(Vec<Expr<'a>>),
     File(&'a str),

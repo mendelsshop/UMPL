@@ -5,8 +5,8 @@ use crate::{
     lexer::Lexer,
     parser::{
         rules::{
-            Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit,
-            LitType, Module, ModuleType, PrintType, Var,
+            Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit, LitType,
+            Module, ModuleType, PrintType, Var,
         },
         Parser,
     },
@@ -379,100 +379,11 @@ impl<'a> Eval<'a> {
                 },
             },
             ExprType::Call(call) => {
-                // first remove and eval the first argument
-                // if its a builtin then apply it to the rest of the arguments
-                // otherwise if there are no additional done
-                // if there are more arguments then error out
-                // now check what type of print type the call want and act accordingly
-                // then return the value back to the caller
-                let mut args = call.args;
-                // we need to reverse the arguments so we can pop them off the end (which when reversed is the front)
-                args.reverse();
-                let call_eval = if let Some(arg) = args.pop() {
-                    let evaled_thing = self.eval_expr(arg, true)?;
-
-                    match evaled_thing.expr {
-                        ExprType::Literal(lit) => Ok(Expr::new_literal(expr.info, lit)),
-
-                        ExprType::Lambda(_) => {
-                            error(expr.info, "lambda expressions cannot be called without new")
-                        }
-                        ExprType::Identifier(ident) => {
-                            match ident.ident_type {
-                                IdentType::Builtin(builtin) => {
-                                    self.eval_builtin(builtin, &mut args, call.info)
-                                }
-                                IdentType::Var(_)
-                                | IdentType::FnParam(_)
-                                | IdentType::FnIdent(_) => {
-                                    unreachable!("should be evaluated before this point")
-                                } // same as var
-                            }
-                        }
-                        // if its a cons then we need to evaluate the arguments and then apply them to the cons
-                        ExprType::Cons(cons) => Ok(Expr::new_cons(expr.info, cons)),
-                        ExprType::Module(_)
-                        | ExprType::Fn(_)
-                        | ExprType::Call(_)
-                        | ExprType::If(_)
-                        | ExprType::Loop(_)
-                        | ExprType::Var(_) => unreachable!("should be evaluated before this point"),
-                        ExprType::Return(_) | ExprType::Break(_) | ExprType::Continue => {
-                            unreachable!("return, break and continue should be handled via stopper")
-                        }
-                    }
-                } else {
-                    // if there are no arguments then we just return hempty
-                    return Ok(Expr::new_literal(call.info, Lit::new_hempty(call.info)));
-                };
-                if !args.is_empty() {
-                    error(
-                        call.info,
-                        format!(
-                            "too many arguments to function, expected 1 found {args}",
-                            args = args.len() + 1
-                        ),
-                    );
-                }
-                return print_and_pass(call_eval, call.print_type);
+                self.eval_call(*call)
             }
             // if statements and loops are not lazily evaluated
             ExprType::If(if_statement) => {
-                self.in_if = true;
-                let cond_info = if_statement.condition.info;
-                let exprs = match self.eval_expr(if_statement.condition, true) {
-                    Ok(Expr {
-                        expr:
-                            ExprType::Literal(Lit {
-                                value: LitType::Boolean(val),
-                                ..
-                            }),
-                        ..
-                    }) => {
-                        if val {
-                            if_statement.then
-                        } else {
-                            if_statement.otherwise
-                        }
-                    }
-                    Err(e) => return Err(e),
-                    Ok(expr) => error(
-                        cond_info,
-                        format!("condition of expression must be true or false found {expr}"),
-                    ),
-                };
-                // TODO: create new scope
-                let other_exprs = self.find_functions(exprs);
-                let evaled = self.find_variables(other_exprs);
-                self.in_if = false;
-                match evaled {
-                    Some(Stopper::End(expr)) => Ok(expr),
-                    Some(stopper) => Err(stopper),
-                    None => Ok(Expr::new_literal(
-                        if_statement.info,
-                        Lit::new_hempty(if_statement.info),
-                    )),
-                }
+                self.eval_if(if_statement)
             }
             ExprType::Loop(loop_statement) => {
                 // create new scope
@@ -492,6 +403,103 @@ impl<'a> Eval<'a> {
             ExprType::Fn(fndef) => Ok(self.add_function(fndef)),
             ExprType::Module(module) => Ok(self.add_module(&module)),
         }
+    }
+
+    fn eval_if(&mut self, if_statement: Box<crate::parser::rules::If<'a>>) -> Result<Expr<'a>, Stopper<'a>> {
+        self.in_if = true;
+        let cond_info = if_statement.condition.info;
+        let exprs = match self.eval_expr(if_statement.condition, true) {
+            Ok(Expr {
+                expr:
+                    ExprType::Literal(Lit {
+                        value: LitType::Boolean(val),
+                        ..
+                    }),
+                ..
+            }) => {
+                if val {
+                    if_statement.then
+                } else {
+                    if_statement.otherwise
+                }
+            }
+            Err(e) => return Err(e),
+            Ok(expr) => error(
+                cond_info,
+                format!("condition of expression must be true or false found {expr}"),
+            ),
+        };
+        // TODO: create new scope
+        let other_exprs = self.find_functions(exprs);
+        let evaled = self.find_variables(other_exprs);
+        self.in_if = false;
+        match evaled {
+            Some(Stopper::End(expr)) => Ok(expr),
+            Some(stopper) => Err(stopper),
+            None => Ok(Expr::new_literal(
+                if_statement.info,
+                Lit::new_hempty(if_statement.info),
+            )),
+        }
+    }
+
+    fn eval_call(&mut self, call: crate::parser::rules::FnCall<'a>) -> Result<Expr<'a>, Stopper<'a>> {
+        // first remove and eval the first argument
+        // if its a builtin then apply it to the rest of the arguments
+        // otherwise if there are no additional done
+        // if there are more arguments then error out
+        // now check what type of print type the call want and act accordingly
+        // then return the value back to the caller
+        let mut args = call.args;
+        // we need to reverse the arguments so we can pop them off the end (which when reversed is the front)
+        args.reverse();
+        let call_eval = if let Some(arg) = args.pop() {
+            let evaled_thing = self.eval_expr(arg, true)?;
+
+            match evaled_thing.expr {
+                ExprType::Literal(lit) => Ok(Expr::new_literal(call.info, lit)),
+
+                ExprType::Lambda(_) => {
+                    error(call.info, "lambda expressions cannot be called without new")
+                }
+                ExprType::Identifier(ident) => {
+                    match ident.ident_type {
+                        IdentType::Builtin(builtin) => {
+                            self.eval_builtin(builtin, &mut args, call.info)
+                        }
+                        IdentType::Var(_)
+                        | IdentType::FnParam(_)
+                        | IdentType::FnIdent(_) => {
+                            unreachable!("should be evaluated before this point")
+                        } // same as var
+                    }
+                }
+                // if its a cons then we need to evaluate the arguments and then apply them to the cons
+                ExprType::Cons(cons) => Ok(Expr::new_cons(call.info, cons)),
+                ExprType::Module(_)
+                | ExprType::Fn(_)
+                | ExprType::Call(_)
+                | ExprType::If(_)
+                | ExprType::Loop(_)
+                | ExprType::Var(_) => unreachable!("should be evaluated before this point"),
+                ExprType::Return(_) | ExprType::Break(_) | ExprType::Continue => {
+                    unreachable!("return, break and continue should be handled via stopper")
+                }
+            }
+        } else {
+            // if there are no arguments then we just return hempty
+            Ok(Expr::new_literal(call.info, Lit::new_hempty(call.info)))
+        };
+        if !args.is_empty() {
+            error(
+                call.info,
+                format!(
+                    "too many arguments to function, expected 1 found {args}",
+                    args = args.len() + 1
+                ),
+            );
+        }
+        print_and_pass(call_eval, call.print_type)
     }
 
     fn eval_lambda(
@@ -563,7 +571,34 @@ impl<'a> Eval<'a> {
             BuiltinFunction::CreateFile => todo!(),
             BuiltinFunction::DeleteFile => todo!(),
             // returns string takes any
-            BuiltinFunction::Type => todo!(),
+            BuiltinFunction::Type => {
+                if let Some(expr) = args.pop() {
+                    Ok(Expr::new_literal(
+                        call,
+                        Lit::new_string(
+                            call,
+                            match self.eval_expr(expr, true)?.expr {
+                                ExprType::Literal(lit) => match lit.value {
+                                    LitType::String(_) => "string",
+                                    LitType::Number(_) => "number",
+                                    LitType::Boolean(_) => "boolean",
+                                    LitType::File(_) => "file",
+                                    LitType::Hempty => "hempty",
+                                },
+                                ExprType::Cons(_) => "list",
+                                ExprType::Identifier(ident) => match ident.ident_type {
+                                    IdentType::Builtin(_) => "builtin-function",
+                                    _ => unreachable!(),
+                                },
+                                ExprType::Lambda(_) => "lambda",
+                                _ => unreachable!(),
+                            },
+                        ),
+                    ))
+                } else {
+                    error(call, "Type requires at least 1 arguments")
+                }
+            }
             // returns string takes string
             BuiltinFunction::Input => todo!(),
             BuiltinFunction::Plus
@@ -649,11 +684,6 @@ impl<'a> Eval<'a> {
                     )
                 }
             }
-            // two args returns bool
-            BuiltinFunction::GreaterEqual
-            | BuiltinFunction::LessEqual
-            | BuiltinFunction::GreaterThan
-            | BuiltinFunction::LessThan => todo!(),
             BuiltinFunction::Not => {
                 let mut args = self.eval_args(args, true)?;
                 // arg_error(num_args, given_args, function, at_least, info)
@@ -673,21 +703,33 @@ impl<'a> Eval<'a> {
             // 2 or more args (booleans only) returns bool
             // two or more args returns bool
             // short circuting
-            BuiltinFunction::Equal | BuiltinFunction::NotEqual => {
+            BuiltinFunction::GreaterEqual
+            | BuiltinFunction::LessEqual
+            | BuiltinFunction::GreaterThan
+            | BuiltinFunction::LessThan
+            | BuiltinFunction::Equal
+            | BuiltinFunction::NotEqual => {
                 let op = match builtin_function {
-                    BuiltinFunction::Equal => |a, b| a == &b,
-                    BuiltinFunction::NotEqual => |a, b| a != &b,
+                    BuiltinFunction::Equal => |a, b| a == b,
+                    BuiltinFunction::NotEqual => |a, b| a != b,
+                    BuiltinFunction::GreaterEqual => |a, b| a >= b,
+                    BuiltinFunction::LessEqual => |a, b| a <= b,
+                    BuiltinFunction::GreaterThan => |a, b| a > b,
+                    BuiltinFunction::LessThan => |a, b| a < b,
                     _ => unreachable!(),
                 };
                 arg_error(2, args.len() as u64, builtin_function, true, call);
                 let expr = args.pop().unwrap();
-                let first_expr = self.eval_expr(expr, true)?;
+                let mut first_expr = self.eval_expr(expr, true)?;
                 let args = args.drain(..).collect::<Vec<_>>();
                 for arg in args {
                     let expr = self.eval_expr(arg, true)?;
-                    if !op(&first_expr, expr) {
+
+                    if !op(first_expr.clone(), expr.clone()) {
                         return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
                     }
+                    // we need to modify comparator so ordering comparisons work
+                    first_expr = expr;
                 }
                 Ok(Expr::new_literal(call, Lit::new_boolean(call, true)))
             }
@@ -702,7 +744,6 @@ impl<'a> Eval<'a> {
                 }
                 Ok(Expr::new_literal(call, Lit::new_boolean(call, true)))
             }
-
             BuiltinFunction::New => {
                 if let Some(expr) = args.pop() {
                     match self.eval_expr(expr, true)?.expr {
