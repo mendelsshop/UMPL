@@ -1,4 +1,12 @@
-use std::{cell::RefCell, collections::HashMap, fmt, fs::File, mem::swap, rc::Rc};
+use std::{
+    cell::{RefCell, RefMut},
+    collections::HashMap,
+    fmt,
+    fs::{File, OpenOptions},
+    io::{self, Read, Write},
+    mem::swap,
+    rc::Rc,
+};
 
 use crate::{
     error::{arg_error, error},
@@ -32,9 +40,7 @@ impl<'a> fmt::Display for VarType<'a> {
 #[derive(Debug, Default)]
 pub struct Scope<'a> {
     vars: HashMap<VarType<'a>, Rc<RefCell<Expr<'a>>>>,
-    // fn_params: HashMap<u64, Rc<RefCell<Expr<'a>>>>,
     functions: HashMap<Interlaced<char, char>, Lambda<'a>>,
-    files: HashMap<String, File>,
     parent_scope: Option<Box<Scope<'a>>>,
 }
 
@@ -44,7 +50,6 @@ impl<'a> Scope<'a> {
             vars: HashMap::new(),
             functions: HashMap::new(),
             parent_scope: None,
-            files: HashMap::new(),
         }
     }
     pub fn new_with_parent(parent: Box<Self>) -> Self {
@@ -177,15 +182,20 @@ pub enum Stopper<'a> {
     End(Expr<'a>),
 }
 
+// macro for getting a literal value from an expression
+// $self:ident is the eval struct
 macro_rules! get_literal {
     ($self:ident, $expr:ident, $lit_type:ident, $func:ident, $ret_type:ty) => {
         fn $func(&mut self, $expr: Expr<'a>) -> Result<$ret_type, Stopper<'a>> {
             let info = $expr.info;
+            // first force the expression to be evaluated
             match self.eval_expr($expr, true)?.expr {
+                // then with the provided literal type, get the value
                 ExprType::Literal(Lit {
                     value: LitType::$lit_type(lit),
                     ..
                 }) => Ok(lit),
+                // if the value is not the correct type, error
                 e => error(
                     info,
                     format!("expected {} value found {e}", stringify!($lit_type)),
@@ -206,10 +216,22 @@ pub struct Eval<'a> {
 }
 
 impl<'a> Eval<'a> {
-    get_literal!(self, expr, Boolean, get_bool, bool);
-    get_literal!(self, expr, Number, get_num, f64);
-    get_literal!(self, expr, String, get_str, &'a str);
-    get_literal!(self, expr, File, get_file, &'a str);
+    get_literal!(self, expr, Boolean, eval_to_bool, bool);
+    get_literal!(self, expr, Number, eval_to_num, f64);
+    get_literal!(self, expr, String, eval_to_str, &'a str);
+    get_literal!(self, expr, File, eval_to_file, &'a str);
+
+    fn eval_to_non_float(&mut self, expr: Expr<'a>) -> Result<i64, Stopper<'a>> {
+        let info = expr.info;
+        self.eval_to_num(expr).map(|num| {
+            if num.fract() == 0.0 {
+                num as i64
+            } else {
+                error(info, format!("expected non float value found {num}"))
+            }
+        })
+    }
+
     pub fn new(mut body: Vec<Expr<'a>>) -> Self {
         let mut self_ = Self {
             scope: Scope::new(),
@@ -225,9 +247,9 @@ impl<'a> Eval<'a> {
         self_
     }
 
-    //     pub fn get_file(&self, name: &str) -> Option<RefMut<'_, File>> {
-    //         self.files.get(name).map(|file| file.borrow_mut())
-    //     }
+    pub fn get_file(&self, name: &str) -> Option<RefMut<'_, File>> {
+        self.files.get(name).map(|file| file.borrow_mut())
+    }
 
     // this only finds functions defined in outermost scope, it doesn not find functions defined in calls ie in "()" parentheses
     // this means that functions defined in the most outer scope can be called from anywhere in the file even before they are defined in the file
@@ -378,13 +400,9 @@ impl<'a> Eval<'a> {
                     None => error(expr.info, "function not bound"),
                 },
             },
-            ExprType::Call(call) => {
-                self.eval_call(*call)
-            }
+            ExprType::Call(call) => self.eval_call(*call),
             // if statements and loops are not lazily evaluated
-            ExprType::If(if_statement) => {
-                self.eval_if(if_statement)
-            }
+            ExprType::If(if_statement) => self.eval_if(if_statement),
             ExprType::Loop(loop_statement) => {
                 // create new scope
                 let loop_exprs = self.find_functions(loop_statement.body);
@@ -405,7 +423,10 @@ impl<'a> Eval<'a> {
         }
     }
 
-    fn eval_if(&mut self, if_statement: Box<crate::parser::rules::If<'a>>) -> Result<Expr<'a>, Stopper<'a>> {
+    fn eval_if(
+        &mut self,
+        if_statement: Box<crate::parser::rules::If<'a>>,
+    ) -> Result<Expr<'a>, Stopper<'a>> {
         self.in_if = true;
         let cond_info = if_statement.condition.info;
         let exprs = match self.eval_expr(if_statement.condition, true) {
@@ -443,7 +464,10 @@ impl<'a> Eval<'a> {
         }
     }
 
-    fn eval_call(&mut self, call: crate::parser::rules::FnCall<'a>) -> Result<Expr<'a>, Stopper<'a>> {
+    fn eval_call(
+        &mut self,
+        call: crate::parser::rules::FnCall<'a>,
+    ) -> Result<Expr<'a>, Stopper<'a>> {
         // first remove and eval the first argument
         // if its a builtin then apply it to the rest of the arguments
         // otherwise if there are no additional done
@@ -467,9 +491,7 @@ impl<'a> Eval<'a> {
                         IdentType::Builtin(builtin) => {
                             self.eval_builtin(builtin, &mut args, call.info)
                         }
-                        IdentType::Var(_)
-                        | IdentType::FnParam(_)
-                        | IdentType::FnIdent(_) => {
+                        IdentType::Var(_) | IdentType::FnParam(_) | IdentType::FnIdent(_) => {
                             unreachable!("should be evaluated before this point")
                         } // same as var
                     }
@@ -537,6 +559,35 @@ impl<'a> Eval<'a> {
         }
     }
 
+    fn read_file(&mut self, file_name: &str, info: Info<'a>, line: Option<u32>) -> Expr<'a> {
+        self.get_file(file_name).map_or_else(
+            || {
+                error(
+                    info,
+                    format!("error reading file {file_name} was not opened"),
+                )
+            },
+            |mut file| {
+                let mut contents = String::new();
+                file.read_to_string(&mut contents).unwrap_or_else(|e| {
+                    error(info, format!("error reading file {file_name}: {e}"))
+                });
+                if let Some(line) = line {
+                    contents.lines().nth(line as usize).unwrap_or_else(|| {
+                        error(
+                            info,
+                            format!("error reading file {file_name}: line {line} does not exist",),
+                        )
+                    });
+                }
+                Expr::new_literal(
+                    info,
+                    Lit::new_string(info, Box::leak(contents.into_boxed_str())),
+                )
+            },
+        )
+    }
+
     fn eval_builtin(
         &mut self,
         builtin_function: BuiltinFunction,
@@ -544,6 +595,40 @@ impl<'a> Eval<'a> {
         call: Info<'a>,
     ) -> Result<Expr<'a>, Stopper<'a>> {
         match builtin_function {
+            // return file contents
+            BuiltinFunction::Close => todo!(),
+            // returns string takes file
+            BuiltinFunction::Read => {
+                arg_error(1, args.len() as u64, "read", false, call);
+                self.eval_to_file(args.pop().unwrap())
+                    .map(|file| self.read_file(file, call, None))
+            }
+            // also takes line number
+            BuiltinFunction::ReadLine => {
+                arg_error(2, args.len() as u64, "read", false, call);
+                let file = self.eval_to_file(args.pop().unwrap())?;
+                let line = self.eval_to_non_float(args.pop().unwrap())?;
+                Ok(self.read_file(file, call, Some(line as u32)))
+            }
+            BuiltinFunction::Exit => {
+                arg_error(1, args.len() as u64, "exit", false, call);
+                let exit_code = self.eval_to_non_float(args.pop().unwrap())?;
+                std::process::exit(exit_code as i32);
+            }
+            // takes string prints it and exits 1
+            BuiltinFunction::Error => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let error = self.eval_to_str(args.pop().unwrap())?;
+                println!("{error}");
+                std::process::exit(1);
+            }
+            // returns cons takes string
+            BuiltinFunction::SplitOn => todo!(),
+            // returns string (file contents) takes string (file name) and string (file mode)
+            BuiltinFunction::Write => todo!(),
+            // takes line to
+            BuiltinFunction::WriteLine => todo!(),
+            BuiltinFunction::DeleteFile => todo!(),
             // returns string
             // takes number
             BuiltinFunction::StrToNum => todo!(),
@@ -554,22 +639,32 @@ impl<'a> Eval<'a> {
             // returns string takes string
             BuiltinFunction::RunCommand => todo!(),
             // returns `file`
-            BuiltinFunction::Open => todo!(),
-            // return file contents
-            BuiltinFunction::Close => todo!(),
+            BuiltinFunction::Open | BuiltinFunction::CreateFile => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let file_name = self.eval_to_str(args.pop().unwrap())?;
+                let file = OpenOptions::new()
+                    .create(builtin_function == BuiltinFunction::CreateFile)
+                    .open(file_name)
+                    .unwrap_or_else(|_| error(call, format!("could not open file `{file_name}`")));
+                self.files
+                    .insert(file_name.to_string(), Rc::new(RefCell::new(file)));
+                Ok(Expr::new_literal(call, Lit::new_file(call, file_name)))
+            }
             // returns string takes string
-            BuiltinFunction::Read => todo!(),
-            BuiltinFunction::ReadLine => todo!(),
-            BuiltinFunction::Exit | BuiltinFunction::Error => todo!(),
-            // returns cons takes string
-            BuiltinFunction::SplitOn => todo!(),
-            // returns string (file contents) takes string (file name) and string (file mode)
-            BuiltinFunction::Write => todo!(),
-            // takes line to
-            BuiltinFunction::WriteLine => todo!(),
-            // returns string takes string
-            BuiltinFunction::CreateFile => todo!(),
-            BuiltinFunction::DeleteFile => todo!(),
+            BuiltinFunction::Input => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let prompt = self.eval_to_str(args.pop().unwrap())?;
+                let mut input = String::new();
+                print!("{prompt}");
+                io::stdout().flush().unwrap();
+                io::stdin().read_line(&mut input).unwrap();
+                // remove the newline
+                input.pop();
+                Ok(Expr::new_literal(
+                    call,
+                    Lit::new_string(call, Box::leak(input.into_boxed_str())),
+                ))
+            }
             // returns string takes any
             BuiltinFunction::Type => {
                 if let Some(expr) = args.pop() {
@@ -600,7 +695,6 @@ impl<'a> Eval<'a> {
                 }
             }
             // returns string takes string
-            BuiltinFunction::Input => todo!(),
             BuiltinFunction::Plus
             | BuiltinFunction::Minus
             | BuiltinFunction::Divide
@@ -616,7 +710,7 @@ impl<'a> Eval<'a> {
                                 num = -num;
                             } else {
                                 num = args.into_iter().try_fold(num, |acc, expr| {
-                                    let val = self.get_num(expr)?;
+                                    let val = self.eval_to_num(expr)?;
                                     match builtin_function {
                                         BuiltinFunction::Plus => Ok(acc + val),
                                         BuiltinFunction::Minus => Ok(acc - val),
@@ -644,20 +738,13 @@ impl<'a> Eval<'a> {
                                 let boxed = Box::new(string_modified);
                                 string = Box::leak(boxed);
                             } else if builtin_function == BuiltinFunction::Multiply {
-                                let mult = args.into_iter().try_fold(1, |acc, expr| ({
-                                    // make sure its a non float number
-                                    let info = expr.info;
-                                    let val = self.get_num(expr)?;
-                                    if val.round() != val {
-                                        error(
-                                            info,
-                                            format!(
-                                                "expected integer for {builtin_function} but found float {val}"
-                                            ),
-                                        );
+                                let mult = args.into_iter().try_fold(1, |acc, expr| {
+                                    {
+                                        // make sure its a non float number
+                                        let val = self.eval_to_non_float(expr)?;
+                                        Ok(acc * val as usize)
                                     }
-                                    Ok(acc * val as usize)
-                            }));
+                                });
                                 let string_modified = string.repeat(mult?);
                                 let boxed = Box::new(string_modified);
                                 string = Box::leak(boxed);
@@ -737,7 +824,7 @@ impl<'a> Eval<'a> {
                 arg_error(2, args.len() as u64, builtin_function, true, call);
                 let args = args.drain(..).collect::<Vec<_>>();
                 for arg in args {
-                    let bool_val = self.get_bool(arg)?;
+                    let bool_val = self.eval_to_bool(arg)?;
                     if !bool_val && builtin_function == BuiltinFunction::And {
                         return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
                     }

@@ -24,10 +24,10 @@ pub(crate) fn stackoverflow() {
 
 #[allow(clippy::module_name_repetitions)]
 pub fn arg_error<T: Display>(
-    num_args: u64,
-    given_args: u64,
-    function: T,
-    at_least: bool,
+    num_args: u64,   // Number of arguments required
+    given_args: u64, // Number of arguments provided
+    function: T,     // Name of the function
+    at_least: bool,  // Whether the function requires at least the number of arguments
     info: Info<'_>,
 ) {
     if at_least {
