@@ -266,7 +266,6 @@ pub struct Cons<'a> {
     pub cdr: Rc<RefCell<Expr<'a>>>,
 }
 
-// TODO: impl Iterator for Cons<'a, Expr>
 impl<'a> Cons<'a> {
     pub fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
         Self {

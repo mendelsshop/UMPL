@@ -588,6 +588,58 @@ impl<'a> Eval<'a> {
         )
     }
 
+    fn write_file(
+        &mut self,
+        file_name: &str,
+        mode: &str,
+        contents: &str,
+        info: Info<'a>,
+        line: Option<u32>,
+    ) {
+        let fc = self.read_file(file_name, info, None);
+        let lines = self.eval_to_str(fc).expect("unreachable").lines();
+        let contents = match mode {
+            "a" => {
+                let mut lines = lines.collect::<Vec<_>>();
+                if let Some(line) = line {
+                    lines.insert(line as usize, contents);
+                } else {
+                    lines.push(contents);
+                }
+                lines.join("\n")
+            }
+            "w" => {
+                // if line is none then we just write the contents
+                // otherwise we write the contents at the line and delete the rest of the file
+                line.map_or_else(
+                    || contents.to_string(),
+                    |line| {
+                        let mut lines = lines.collect::<Vec<_>>();
+                        lines.insert(line as usize, contents);
+                        lines.truncate(line as usize + 1);
+                        lines.join("\n")
+                    },
+                )
+            }
+            _ => {
+                error(info, format!("invalid mode {mode} for write_file"));
+            }
+        };
+        self.get_file(file_name).map_or_else(
+            || {
+                error(
+                    info,
+                    format!("error retriving file {file_name} was not opened"),
+                )
+            },
+            |mut file| {
+                file.write_all(contents.as_bytes()).unwrap_or_else(|e| {
+                    error(info, format!("error writing file {file_name}: {e}"))
+                });
+            },
+        );
+    }
+
     fn eval_builtin(
         &mut self,
         builtin_function: BuiltinFunction,
@@ -624,10 +676,27 @@ impl<'a> Eval<'a> {
             }
             // returns cons takes string
             BuiltinFunction::SplitOn => todo!(),
-            // returns string (file contents) takes string (file name) and string (file mode)
-            BuiltinFunction::Write => todo!(),
+
             // takes line to
-            BuiltinFunction::WriteLine => todo!(),
+            BuiltinFunction::WriteLine => {
+                // takes arg file (name) mode (a or w) line contents
+                arg_error(4, args.len() as u64, builtin_function, false, call);
+                let file = self.eval_to_file(args.pop().unwrap())?;
+                let mode = self.eval_to_str(args.pop().unwrap())?;
+                let line = self.eval_to_non_float(args.pop().unwrap())?;
+                let contents = self.eval_to_str(args.pop().unwrap())?;
+                self.write_file(file, mode, contents, call, Some(line as u32));
+                Ok(Expr::new_literal(call, Lit::new_hempty(call)))
+            }
+            // returns string (file contents) takes string (file name) and string (file mode)
+            BuiltinFunction::Write => {
+                arg_error(3, args.len() as u64, builtin_function, false, call);
+                let file = self.eval_to_file(args.pop().unwrap())?;
+                let mode = self.eval_to_str(args.pop().unwrap())?;
+                let contents = self.eval_to_str(args.pop().unwrap())?;
+                self.write_file(file, mode, contents, call, None);
+                Ok(Expr::new_literal(call, Lit::new_hempty(call)))
+            }
             BuiltinFunction::DeleteFile => todo!(),
             // returns string
             // takes number
@@ -643,9 +712,13 @@ impl<'a> Eval<'a> {
                 arg_error(1, args.len() as u64, builtin_function, false, call);
                 let file_name = self.eval_to_str(args.pop().unwrap())?;
                 let file = OpenOptions::new()
+                    .write(true)
                     .create(builtin_function == BuiltinFunction::CreateFile)
+                    .read(true)
                     .open(file_name)
-                    .unwrap_or_else(|_| error(call, format!("could not open file `{file_name}`")));
+                    .unwrap_or_else(|e| {
+                        error(call, format!("could not open file `{file_name}` {e}"))
+                    });
                 self.files
                     .insert(file_name.to_string(), Rc::new(RefCell::new(file)));
                 Ok(Expr::new_literal(call, Lit::new_file(call, file_name)))
