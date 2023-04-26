@@ -523,7 +523,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list_inner(&mut self) -> Cons<'a> {
+    fn parse_list_inner(&mut self) -> Cons<'a, Expr<'a>> {
         let start_line = self.token.info.begin;
         self.advance("parse list inner");
         let car = if let Some(expr) = self.parse_from_token() {

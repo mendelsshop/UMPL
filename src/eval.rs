@@ -14,7 +14,7 @@ use crate::{
     parser::{
         rules::{
             Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit, LitType,
-            Module, ModuleType, PrintType, Var, Thunk,
+            Module, ModuleType, PrintType, Thunk, Var,
         },
         Parser,
     },
