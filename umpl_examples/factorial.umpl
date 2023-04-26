@@ -4,8 +4,8 @@ potato 🍕 1 * ⧼ ! define a function that takes one argument and returns its 
         if {(eq $0 0x0)<} ⧼ ! check if the argument is zero
             break hempty ! break the loop
         ⧽ else ⧼ ! otherwise
-            ⸨setwith result (multiply result $0)>)< ! multiply the result by the argument and reassign it to result
-            (setwith $0 (minus $0 0x1)>)< ! decrement the argument by one and reassign it to $1 and remove double parentheses and add parentheses around $1 and surround setwith by double parentheses
+            ⸨setwith result (multiply result $0)<)< ! multiply the result by the argument and reassign it to result
+            (setwith $0 (minus $0 0x1)<)< ! decrement the argument by one and reassign it to $1 and remove double parentheses and add parentheses around $1 and surround setwith by double parentheses
             continue ! continue the loop
         ⧽ 
     ⧽ 

@@ -11,7 +11,7 @@ use derivative::Derivative;
 
 use crate::{
     error::error,
-    eval::Scope,
+    eval::Stopper,
     token::{BuiltinFunction, Info},
 };
 
@@ -21,17 +21,30 @@ pub struct Expr<'a> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
-
-    pub expr: ExprType<'a>,
+    pub expr: ExprType<'a, Expr<'a>>,
 }
 #[derive(Derivative)]
 #[derivative(Debug, Clone, PartialEq, PartialOrd)]
-struct Thunk<'a>(
-    Expr<'a>,
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(PartialOrd = "ignore")]
-    Scope<'a>,
+pub struct Thunk<'a>(
+    Box<dyn FnOnce() -> Result<Expr<'a>, Stopper<'a>>>,
+    // #[derivative(PartialEq = "ignore")]
+    // #[derivative(PartialOrd = "ignore")]
 );
+
+impl<'a> Thunk<'a> {
+    pub fn new<F>(f: F) -> Self
+    where
+        F: FnOnce() -> Result<Expr<'a>, Stopper<'a>> + 'a,
+    {
+        Self(Box::new(f))
+    }
+
+    fn eval(self) -> Result<Expr<'a>, Stopper<'a>> {
+        self.0()
+    }
+}
+
+
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 enum Object<'a> {
@@ -57,7 +70,7 @@ pub fn to_string(code: &[Expr<'_>]) -> String {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum ExprType<'a> {
+pub enum ExprType<'a, T> {
     Literal(Lit<'a>),
     /// function definition
     Fn(FnDef<'a>),
@@ -65,13 +78,13 @@ pub enum ExprType<'a> {
     If(Box<If<'a>>),
     Loop(Loop<'a>),
     /// variable declarations
-    Var(Box<Var<'a>>),
+    Var(Box<Var<'a, T>>),
     Lambda(Lambda<'a>),
-    Return(Box<Expr<'a>>),
-    Break(Box<Expr<'a>>),
+    Return(Box<T>),
+    Break(Box<T>),
     /// variable, function, refrences
     Identifier(Ident<'a>),
-    Cons(Cons<'a>),
+    Cons(Cons<'a, T>),
     Module(Module<'a>),
     Continue,
 }
@@ -112,7 +125,7 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn new_var(info: Info<'a>, value: Var<'a>) -> Self {
+    pub fn new_var(info: Info<'a>, value: Var<'a, Expr<'a>>) -> Self {
         Self {
             info,
             expr: ExprType::Var(Box::new(value)),
@@ -154,7 +167,7 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub const fn new_cons(info: Info<'a>, value: Cons<'a>) -> Self {
+    pub const fn new_cons(info: Info<'a>, value: Cons<'a, Expr<'a>>) -> Self {
         Self {
             info,
             expr: ExprType::Cons(value),
@@ -173,7 +186,7 @@ impl<'a> Expr<'a> {
     }
 }
 
-impl<'a> Display for ExprType<'a> {
+impl<'a, T> Display for ExprType<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             ExprType::Literal(lit) => write!(f, "{lit}"),
@@ -273,16 +286,17 @@ impl fmt::Display for LitType<'_> {
 
 #[derive(Derivative)]
 #[derivative(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Cons<'a> {
+pub struct Cons<'a, T> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
-    pub car: Rc<RefCell<Expr<'a>>>,
-    pub cdr: Rc<RefCell<Expr<'a>>>,
+    // both have to be objects
+    pub car: Rc<RefCell<T>>,
+    pub cdr: Rc<RefCell<T>>,
 }
 
-impl<'a> Cons<'a> {
-    pub fn new(info: Info<'a>, car: Expr<'a>, cdr: Expr<'a>) -> Self {
+impl<'a, T> Cons<'a, T> {
+    pub fn new(info: Info<'a>, car: T, cdr: T) -> Self {
         Self {
             info,
             car: Rc::new(RefCell::new(car)),
@@ -290,16 +304,16 @@ impl<'a> Cons<'a> {
         }
     }
 
-    pub fn car(&self) -> Ref<'_, Expr<'a>> {
+    pub fn car(&self) -> Ref<'_, T> {
         self.car.borrow()
     }
 
-    pub fn cdr(&self) -> Ref<'_, Expr<'a>> {
+    pub fn cdr(&self) -> Ref<'_, T> {
         self.cdr.borrow()
     }
 }
 
-impl<'a> Display for Cons<'a> {
+impl<'a, T> Display for Cons<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -497,21 +511,21 @@ impl<'a> Display for Loop<'a> {
 }
 #[derive(Derivative)]
 #[derivative(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Var<'a> {
+pub struct Var<'a, T> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     pub name: &'a str,
-    pub value: Expr<'a>,
+    pub value: T
 }
 
-impl<'a> Var<'a> {
-    pub const fn new(info: Info<'a>, name: &'a str, value: Expr<'a>) -> Self {
+impl<'a, T> Var<'a, T> {
+    pub const fn new(info: Info<'a>, name: &'a str, value: T) -> Self {
         Self { info, name, value }
     }
 }
 
-impl<'a> Display for Var<'a> {
+impl<'a, T> Display for Var<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "var {} value {} [{}]", self.name, self.value, self.info)
     }

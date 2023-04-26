@@ -14,7 +14,7 @@ use crate::{
     parser::{
         rules::{
             Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit, LitType,
-            Module, ModuleType, PrintType, Var,
+            Module, ModuleType, PrintType, Var, Thunk,
         },
         Parser,
     },
@@ -322,7 +322,7 @@ impl<'a> Eval<'a> {
         Expr::new_literal(info, Lit::new_string(info, "function added"))
     }
 
-    pub fn add_variable(&mut self, variable: Var<'a>) -> Result<Expr<'a>, Stopper<'a>> {
+    pub fn add_variable(&mut self, variable: Var<'a, Expr<'a>>) -> Result<Expr<'a>, Stopper<'a>> {
         self.scope.set_var(
             VarType::Var(variable.name),
             variable.value,
@@ -501,17 +501,17 @@ impl<'a> Eval<'a> {
             info,
         );
         given_args.reverse();
-        let (args, rest): (Vec<_>, Vec<_>) = given_args.drain(..).enumerate().partition(|(i, _)| {
-            *i < lambda.param_count as usize
-        });
+        let (args, rest): (Vec<_>, Vec<_>) = given_args
+            .drain(..)
+            .enumerate()
+            .partition(|(i, _)| *i < lambda.param_count as usize);
         // eval rest of arguments
         // if there are extra arguments then add them to the scope
         self.scope.from_parent();
         // add the extra arguments to the scope as fn params
         self.in_function = true;
         let body = self.find_functions(lambda.body());
-        for (i, arg) in args.into_iter() {
-            
+        for (i, arg) in args {
             self.scope
                 .set_var(VarType::FnArg(i as u64), arg, false, info);
         }
