@@ -1,8 +1,8 @@
-potato 🍕 1 ⧼ ! define a function that takes one argument and returns its factorial
+potato 🍕 1 * ⧼ ! define a function that takes one argument and returns its factorial
     create result with 0x1 ! create a variable with the initial value of 1
     loop ⧼ ! start a loop
         if {(eq $0 0x0)<} ⧼ ! check if the argument is zero
-            break null ! break the loop
+            break hempty ! break the loop
         ⧽ else ⧼ ! otherwise
             ⸨setwith result (multiply result $0)>)< ! multiply the result by the argument and reassign it to result
             (setwith $0 (minus $0 0x1)>)< ! decrement the argument by one and reassign it to $1 and remove double parentheses and add parentheses around $1 and surround setwith by double parentheses
@@ -12,4 +12,4 @@ potato 🍕 1 ⧼ ! define a function that takes one argument and returns its fa
     return (result)<! return the result without printing it
 ⧽
 
-(new 🍕 0x5)> ! call the function with a hexadecimal number and print the result
+(new 🍕 0x5 1 23 2)> ! call the function with a hexadecimal number and print the result

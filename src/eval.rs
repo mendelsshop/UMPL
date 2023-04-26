@@ -37,7 +37,7 @@ impl<'a> fmt::Display for VarType<'a> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Scope<'a> {
     vars: HashMap<VarType<'a>, Rc<RefCell<Expr<'a>>>>,
     functions: HashMap<Interlaced<char, char>, Lambda<'a>>,
@@ -97,18 +97,7 @@ impl<'a> Scope<'a> {
             |func| Some(func.clone()),
         )
     }
-    pub fn delete_var(&mut self, ident: VarType<'a>, info: Info<'a>) -> Option<Expr<'a>> {
-        self.vars.remove(&ident).map(|var_val| {
-            Rc::try_unwrap(var_val)
-                .unwrap_or_else(|_| {
-                    error(
-                        info,
-                        format!("failed to retrieve value when deleting {ident}"),
-                    )
-                })
-                .into_inner()
-        })
-    }
+
     pub fn has_var(&self, name: &VarType<'_>, recurse: bool) -> bool {
         if !recurse {
             return self.vars.contains_key(name);
@@ -121,6 +110,15 @@ impl<'a> Scope<'a> {
                 .map_or(false, |parent| parent.has_var(name, recurse))
         }
     }
+
+    fn remove_var(&mut self, var: VarType<'a>) -> Option<Rc<RefCell<Expr<'a>>>> {
+        self.vars.remove(&var).or_else(|| {
+            self.parent_scope
+                .as_mut()
+                .map(|scope| scope.remove_var(var))?
+        })
+    }
+
     pub fn drop_scope(&mut self) {
         let p_scope: Self = self
             .parent_scope
@@ -136,41 +134,6 @@ impl<'a> Scope<'a> {
     }
     pub fn has_function(&self, fn_name: &Interlaced<char, char>) -> bool {
         self.functions.contains_key(fn_name)
-    }
-}
-
-impl fmt::Display for Scope<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // display each variable : value
-        // display each function : lambda
-        write!(
-            f,
-            "Scope {{ \nvars:\n{},\nfunctions:\n{} }}",
-            self.vars
-                .iter()
-                .map(|(k, v)| format!(
-                    "{k}: {}",
-                    match v.try_borrow() {
-                        Ok(val) => val,
-                        Err(err) => error(Info::default(), format!("refcell borrow error: {err}")),
-                    }
-                ))
-                .collect::<Vec<String>>()
-                .join(",\n\n"),
-            self.functions
-                .iter()
-                .map(|(k, v)| format!(
-                    "{}{}: {}",
-                    match k.interlaced_to_string("+") {
-                        string if string.is_empty() => string,
-                        string => string + "+",
-                    },
-                    k.main,
-                    v
-                ))
-                .collect::<Vec<String>>()
-                .join(", ")
-        )
     }
 }
 
@@ -537,15 +500,18 @@ impl<'a> Eval<'a> {
             lambda.extra_params,
             info,
         );
-        let args = given_args.clone();
-        given_args.clear();
+        given_args.reverse();
+        let (args, rest): (Vec<_>, Vec<_>) = given_args.drain(..).enumerate().partition(|(i, _)| {
+            *i < lambda.param_count as usize
+        });
         // eval rest of arguments
         // if there are extra arguments then add them to the scope
         self.scope.from_parent();
         // add the extra arguments to the scope as fn params
         self.in_function = true;
         let body = self.find_functions(lambda.body());
-        for (i, arg) in args.into_iter().enumerate() {
+        for (i, arg) in args.into_iter() {
+            
             self.scope
                 .set_var(VarType::FnArg(i as u64), arg, false, info);
         }
@@ -648,7 +614,18 @@ impl<'a> Eval<'a> {
     ) -> Result<Expr<'a>, Stopper<'a>> {
         match builtin_function {
             // return file contents
-            BuiltinFunction::Close => todo!(),
+            BuiltinFunction::Close | BuiltinFunction::DeleteFile => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let file = self.eval_to_file(args.pop().unwrap())?;
+                let contents = self.read_file(file, call, None);
+                self.files.remove(file);
+                if builtin_function == BuiltinFunction::DeleteFile {
+                    std::fs::remove_file(file).unwrap_or_else(|e| {
+                        error(call, format!("error deleting file {file}: {e}"))
+                    });
+                }
+                Ok(contents)
+            }
             // returns string takes file
             BuiltinFunction::Read => {
                 arg_error(1, args.len() as u64, "read", false, call);
@@ -675,8 +652,22 @@ impl<'a> Eval<'a> {
                 std::process::exit(1);
             }
             // returns cons takes string
-            BuiltinFunction::SplitOn => todo!(),
+            BuiltinFunction::SplitOn => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let string = self.eval_to_str(args.pop().unwrap())?;
 
+                let char_iter = string.split_terminator("").skip(1);
+                todo!("lazy thunks")
+            }
+            // returns string (file contents) takes string (file name) and string (file mode)
+            BuiltinFunction::Write => {
+                arg_error(3, args.len() as u64, builtin_function, false, call);
+                let file = self.eval_to_file(args.pop().unwrap())?;
+                let mode = self.eval_to_str(args.pop().unwrap())?;
+                let contents = self.eval_to_str(args.pop().unwrap())?;
+                self.write_file(file, mode, contents, call, None);
+                Ok(Expr::new_literal(call, Lit::new_hempty(call)))
+            }
             // takes line to
             BuiltinFunction::WriteLine => {
                 // takes arg file (name) mode (a or w) line contents
@@ -688,25 +679,51 @@ impl<'a> Eval<'a> {
                 self.write_file(file, mode, contents, call, Some(line as u32));
                 Ok(Expr::new_literal(call, Lit::new_hempty(call)))
             }
-            // returns string (file contents) takes string (file name) and string (file mode)
-            BuiltinFunction::Write => {
-                arg_error(3, args.len() as u64, builtin_function, false, call);
-                let file = self.eval_to_file(args.pop().unwrap())?;
-                let mode = self.eval_to_str(args.pop().unwrap())?;
-                let contents = self.eval_to_str(args.pop().unwrap())?;
-                self.write_file(file, mode, contents, call, None);
-                Ok(Expr::new_literal(call, Lit::new_hempty(call)))
+
+            // takes string returns any
+            BuiltinFunction::StrToNum
+            | BuiltinFunction::StrToBool
+            | BuiltinFunction::StrToHempty => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let input = self.eval_to_str(args.pop().unwrap())?;
+                match builtin_function {
+                    BuiltinFunction::StrToNum => {
+                        let num = input.parse::<f64>().unwrap_or_else(|e| {
+                            error(call, format!("error parsing {input} to number: {e}"))
+                        });
+                        Ok(Expr::new_literal(call, Lit::new_number(call, num)))
+                    }
+                    BuiltinFunction::StrToBool => {
+                        let bool = input.parse::<bool>().unwrap_or_else(|e| {
+                            error(call, format!("error parsing {input} to bool: {e}"))
+                        });
+                        Ok(Expr::new_literal(call, Lit::new_boolean(call, bool)))
+                    }
+                    BuiltinFunction::StrToHempty => {
+                        let hempty = if input == "hempty" {
+                            Lit::new_hempty(call)
+                        } else {
+                            error(call, format!("error parsing {input} to hempty"))
+                        };
+                        Ok(Expr::new_literal(call, hempty))
+                    }
+                    _ => unreachable!(),
+                }
             }
-            BuiltinFunction::DeleteFile => todo!(),
-            // returns string
-            // takes number
-            BuiltinFunction::StrToNum => todo!(),
-            // takes bool
-            BuiltinFunction::StrToBool => todo!(),
-            // takes hempty
-            BuiltinFunction::StrToHempty => todo!(),
             // returns string takes string
-            BuiltinFunction::RunCommand => todo!(),
+            BuiltinFunction::RunCommand => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let cmd = self.eval_to_str(args.pop().unwrap())?;
+                let res = run_script::run_script!(cmd)
+                    .unwrap_or_else(|e| error(call, format!("error running command {cmd}: {e}")));
+                if res.0 != 0 {
+                    error(call, format!("error running command {cmd}: {}", res.2));
+                }
+                Ok(Expr::new_literal(
+                    call,
+                    Lit::new_string(call, Box::leak(res.1.into_boxed_str())),
+                ))
+            }
             // returns `file`
             BuiltinFunction::Open | BuiltinFunction::CreateFile => {
                 arg_error(1, args.len() as u64, builtin_function, false, call);
@@ -929,7 +946,35 @@ impl<'a> Eval<'a> {
                 }
             }
             // takes variable name and returns value
-            BuiltinFunction::Delete => todo!(),
+            BuiltinFunction::Delete => {
+                arg_error(1, args.len() as u64, builtin_function, false, call);
+                let var = match args.pop().expect("should not be empty").expr {
+                    ExprType::Identifier(ident) => {
+                        // if its a variable or parameter we first need to get the value
+                        ident
+                    }
+                    expr => {
+                        error(call, format!("expected variable or parameter for {builtin_function} but found {expr}"));
+                    }
+                };
+                let var = into_var(var, call);
+                // go through scope looking for var
+                Ok(
+                    Rc::try_unwrap(self.scope.remove_var(var).unwrap_or_else(|| {
+                        error(
+                            call,
+                            format!("variable {var} does not exist in current scope"),
+                        )
+                    }))
+                    .unwrap_or_else(|_| {
+                        error(
+                            call,
+                            format!("failed to retrieve value when deleting {var}"),
+                        )
+                    })
+                    .into_inner(),
+                )
+            }
             // takes variable name and value and sets it
             // returns value
             BuiltinFunction::Set => {

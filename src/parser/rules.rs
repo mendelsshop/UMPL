@@ -11,6 +11,7 @@ use derivative::Derivative;
 
 use crate::{
     error::error,
+    eval::Scope,
     token::{BuiltinFunction, Info},
 };
 
@@ -22,6 +23,20 @@ pub struct Expr<'a> {
     pub info: Info<'a>,
 
     pub expr: ExprType<'a>,
+}
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq, PartialOrd)]
+struct Thunk<'a>(
+    Expr<'a>,
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
+    Scope<'a>,
+);
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+enum Object<'a> {
+    Thunk(Thunk<'a>),
+    Normal(Expr<'a>),
 }
 
 impl<'a> Default for Expr<'a> {
