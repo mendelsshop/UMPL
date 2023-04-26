@@ -4,7 +4,7 @@ use std::{
     fmt,
     fs::{File, OpenOptions},
     io::{self, Read, Write},
-    mem::swap,
+    mem::{self, swap},
     rc::Rc,
 };
 
@@ -13,8 +13,9 @@ use crate::{
     lexer::Lexer,
     parser::{
         rules::{
-            Cons, Expr, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit, LitType,
-            Module, ModuleType, PrintType, Thunk, Var,
+            Cons, Expr, ExprState, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit,
+            LitType, Module, ModuleType, PrintType, 
+            Thunk, Var,
         },
         Parser,
     },
@@ -167,7 +168,7 @@ macro_rules! get_literal {
         }
     };
 }
-
+#[derive(Clone)]
 pub struct Eval<'a> {
     pub scope: Scope<'a>,
     pub in_function: bool,
@@ -511,7 +512,12 @@ impl<'a> Eval<'a> {
         // add the extra arguments to the scope as fn params
         self.in_function = true;
         let body = self.find_functions(lambda.body());
-        for (i, arg) in args {
+        // TODO: put them as thunks
+        for (i, mut arg) in args {
+            let cloned = self.clone();
+            arg.state = ExprState::Thunk(Thunk::new(Box::new(
+                fun_name(cloned)
+        ))).into();
             self.scope
                 .set_var(VarType::FnArg(i as u64), arg, false, info);
         }
@@ -525,6 +531,7 @@ impl<'a> Eval<'a> {
         }
     }
 
+    // can't be lazy because file can be changed this point and when go to read it it will be different
     fn read_file(&mut self, file_name: &str, info: Info<'a>, line: Option<u32>) -> Expr<'a> {
         self.get_file(file_name).map_or_else(
             || {
@@ -554,6 +561,7 @@ impl<'a> Eval<'a> {
         )
     }
 
+    // can't be lazy because file can be changed this point and when go to read it it will be different
     fn write_file(
         &mut self,
         file_name: &str,
@@ -606,6 +614,7 @@ impl<'a> Eval<'a> {
         );
     }
 
+    // never returns a Thunk
     fn eval_builtin(
         &mut self,
         builtin_function: BuiltinFunction,
@@ -656,8 +665,10 @@ impl<'a> Eval<'a> {
                 arg_error(1, args.len() as u64, builtin_function, false, call);
                 let string = self.eval_to_str(args.pop().unwrap())?;
 
-                let char_iter = string.split_terminator("").skip(1);
-                todo!("lazy thunks")
+                let char_iter = string
+                    .split_terminator("")
+                    .skip(1);
+                Ok(self.iter_to_cons(char_iter, call))
             }
             // returns string (file contents) takes string (file name) and string (file mode)
             BuiltinFunction::Write => {
@@ -990,7 +1001,7 @@ impl<'a> Eval<'a> {
                 };
                 let value = args.pop().expect("should not be empty");
                 let value = self.eval_expr(value, true)?;
-                self.set_var(var, value.clone(), call, true);
+                self.set_var(var, value, call, true);
                 Ok(value)
             }
             // follow same rules as regular math operators (from above)
@@ -1021,12 +1032,16 @@ impl<'a> Eval<'a> {
                         error(call, format!("expected variable or parameter for {builtin_function} but found {var}"));
                     }
                 };
-                self.set_var(var, value.clone(), call, true);
+                self.set_var(var, value, call, true);
                 Ok(value)
             }
         }
     }
 
+    // never returns a thunk
+    // if the value is a thunk it will be evaluated
+    // and the result will be returned
+    // and the thunk in the var hashmap will be replaced with the result
     fn get_var(&mut self, var: Ident<'a>, info: Info<'_>) -> Result<Expr<'a>, Stopper<'a>> {
         let expr = self.get_var_inner(var, info).borrow().clone();
         let var = self.eval_expr(expr, true)?;
@@ -1040,6 +1055,11 @@ impl<'a> Eval<'a> {
         self.scope.get_var(&var_name, info)
     }
 
+    // first retrive var
+    // the fully evaluate it
+    // then use accessors (car/cdr) if needed
+    // then return the value
+    // and also set the value in the var hashmap
     fn set_var(&mut self, var: Ident<'a>, value: Expr<'a>, info: Info<'_>, new: bool) {
         if new {
             self.scope
@@ -1063,6 +1083,37 @@ impl<'a> Eval<'a> {
             .map(|arg| self.eval_expr(arg, force))
             .collect()
     }
+
+    fn iter_to_cons(
+        &self,
+        mut char_iter: impl Iterator<Item = &'a str>,
+        call: Info<'a>,
+    ) -> Expr<'a> {
+        if let Some(first) = char_iter.next() {
+            let cons = Expr::new_cons(
+                call,
+                Cons::new(
+                    call,
+                    Expr::new_literal(call, Lit::new_string(call, first)),
+                    
+                     self.iter_to_cons(char_iter, call),
+                    
+                ),
+            );
+            // use fold
+            // let cons = char_iter.fold(Expr::new_cons(call, Cons::new(call, Expr::new_literal(call, Lit::new_string(call, first)),
+
+            cons
+        } else {
+            Expr::new_literal(call, Lit::new_hempty(call))
+        }
+    }
+}
+
+fn fun_name(cloned: Eval<'_>) -> impl Fn(Expr<'_>) -> Result<Expr<'_>, Stopper<'_>> +'_ {
+    move |expr: Expr<'_>| {
+    cloned.clone().eval_expr(expr, true)
+                }
 }
 
 fn into_var<'a>(var: Ident<'a>, info: Info<'_>) -> VarType<'a> {

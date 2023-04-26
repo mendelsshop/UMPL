@@ -4,7 +4,7 @@
 use std::{
     cell::{Ref, RefCell},
     fmt::{self, Debug, Display},
-    rc::Rc,
+    rc::Rc, marker::PhantomData,
 };
 
 use derivative::Derivative;
@@ -21,36 +21,53 @@ pub struct Expr<'a> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
+    #[derivative(Debug = "ignore")]
+    pub state: RefCell<ExprState<'a>>,
+
     pub expr: ExprType<'a, Expr<'a>>,
 }
 
-pub struct Thunk<'a>(Box<dyn FnOnce() -> Result<Expr<'a>, Stopper<'a>>>);
+#[derive(Derivative)]
+#[derivative(Debug, PartialEq, PartialOrd)]
+pub struct Thunk<'a, F> where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a
+{
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
+    #[derivative(Debug = "ignore")]
+    pub item: Box<F>,
+    phantom: PhantomData<&'a F>,
+    
+}
 
-impl<'a> Thunk<'a> {
-    pub fn new<F>(f: F) -> Self
+impl<'a, F> Thunk<'a, F> where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a {
+    pub fn new(f: F) -> Self
     where
-        F: FnOnce() -> Result<Expr<'a>, Stopper<'a>> + 'a + 'static,
     {
-        Self(Box::new(f))
+        Self{
+            item: Box::new(f),
+            phantom: PhantomData,}
     }
 
-    fn eval(self) -> Result<Expr<'a>, Stopper<'a>> {
-        self.0()
+    fn eval(mut self, expr: Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> {
+        (self.item)(expr)
     }
 }
 
-enum Object<'a> {
-    Thunk(Thunk<'a>),
-    Normal(Expr<'a>),
+// IMPL FOR THUNK clone
+impl<'a, F> Clone for Thunk<'a, F>  where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a {
+    fn clone(&self) -> Self {
+        panic!("tried to clone a thunk")
+    }
 }
 
-impl<'a> Object<'a> {
-    fn eval(self) -> Result<Expr<'a>, Stopper<'a>> {
-        match self {
-            Self::Thunk(thunk) => thunk.eval(),
-            Self::Normal(expr) => Ok(expr),
-        }
-    }
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum ExprState<'a> {
+    Thunk(Thunk<'a, Box<dyn FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>>>>),
+    Evaluated,
+    // not evluated but not a thunk
+    UnEvaulated,
 }
 
 impl<'a> Default for Expr<'a> {
@@ -58,6 +75,7 @@ impl<'a> Default for Expr<'a> {
         Self {
             info: Info::default(),
             expr: ExprType::Literal(Lit::new_hempty(Info::default())),
+            state: RefCell::new(ExprState::UnEvaulated),
         }
     }
 }
@@ -95,13 +113,15 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Literal(value),
+            state: RefCell::new(ExprState::Evaluated),
         }
     }
 
-    pub const fn new_fn(info: Info<'a>, value: FnDef<'a>) -> Self {
+    pub fn new_fn(info: Info<'a>, value: FnDef<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Fn(value),
+            ..Default::default()
         }
     }
 
@@ -109,6 +129,7 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Call(Box::new(value)),
+            ..Default::default()
         }
     }
 
@@ -116,13 +137,15 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::If(Box::new(value)),
+            ..Default::default()
         }
     }
 
-    pub const fn new_loop(info: Info<'a>, value: Loop<'a>) -> Self {
+    pub fn new_loop(info: Info<'a>, value: Loop<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Loop(value),
+            ..Default::default()
         }
     }
 
@@ -130,6 +153,7 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Var(Box::new(value)),
+            ..Default::default()
         }
     }
 
@@ -137,6 +161,7 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Lambda(value),
+            state: RefCell::new(ExprState::Evaluated),
         }
     }
 
@@ -144,6 +169,7 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Return(Box::new(value)),
+            ..Default::default()
         }
     }
 
@@ -151,6 +177,7 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Break(Box::new(value)),
+            ..Default::default()
         }
     }
 
@@ -158,27 +185,31 @@ impl<'a> Expr<'a> {
         Self {
             info,
             expr: ExprType::Continue,
+            state: RefCell::new(ExprState::Evaluated),
         }
     }
 
-    pub const fn new_identifier(info: Info<'a>, value: Ident<'a>) -> Self {
+    pub fn new_identifier(info: Info<'a>, value: Ident<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Identifier(value),
+            ..Default::default()
         }
     }
 
-    pub const fn new_cons(info: Info<'a>, value: Cons<'a, Expr<'a>>) -> Self {
+    pub fn new_cons(info: Info<'a>, value: Cons<'a, Expr<'a>>) -> Self {
         Self {
             info,
             expr: ExprType::Cons(value),
+            ..Default::default()
         }
     }
 
-    pub const fn new_mod(info: Info<'a>, value: Module<'a>) -> Self {
+    pub fn new_mod(info: Info<'a>, value: Module<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Module(value),
+            ..Default::default()
         }
     }
 
@@ -296,12 +327,20 @@ pub struct Cons<'a, T: Display + Debug + Clone + PartialEq + PartialOrd> {
     pub cdr: Rc<RefCell<T>>,
 }
 
-impl<'a, T: Display + Debug + Clone + PartialEq + PartialOrd> Cons<'a, T> {
+impl<'a, T: Display + Debug + Clone + PartialEq + PartialOrd + Default> Cons<'a, T> {
     pub fn new(info: Info<'a>, car: T, cdr: T) -> Self {
         Self {
             info,
             car: Rc::new(RefCell::new(car)),
             cdr: Rc::new(RefCell::new(cdr)),
+        }
+    }
+
+    pub fn new_empty(info: Info<'a>) -> Self {
+        Self {
+            info,
+            car: Rc::new(RefCell::new(T::default())),
+            cdr: Rc::new(RefCell::new(T::default())),
         }
     }
 
