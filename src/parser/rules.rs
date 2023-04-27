@@ -5,7 +5,6 @@ use std::{
     cell::{Ref, RefCell},
     fmt::{self, Debug, Display},
     fs::File,
-    marker::PhantomData,
     rc::Rc,
 };
 
@@ -26,57 +25,65 @@ pub struct Expr<'a> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     #[derivative(Debug = "ignore")]
-    pub state: RefCell<ExprState<'a>>,
+    pub state: Rc<RefCell<ExprState<'a>>>,
 
     pub expr: ExprType<'a, Expr<'a>>,
 }
 
+type ThunkFN<'a> = dyn FnOnce(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a;
+
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq, PartialOrd)]
-pub struct Thunk<'a, F>
-where
-    F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a,
-{
+#[derivative(PartialEq, PartialOrd)]
+pub struct Thunk<'a> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     #[derivative(Debug = "ignore")]
-    pub item: Box<F>,
-    phantom: PhantomData<&'a F>,
+    pub item: Box<ThunkFN<'a>>,
+    // phantom: PhantomData<&'a F>
 }
 
-impl<'a, F> Thunk<'a, F>
-where
-    F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a,
-{
-    pub fn new(f: F) -> Self
-where {
+impl Debug for Thunk<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Thunk")
+    }
+}
+
+impl<'a> Thunk<'a> {
+    pub fn new(f: impl FnOnce(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a) -> Self {
         Self {
             item: Box::new(f),
-            phantom: PhantomData,
+            // phantom: PhantomData,
         }
     }
 
-    fn eval(mut self, expr: Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> {
+    pub fn eval(self, expr: Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> {
         (self.item)(expr)
     }
 }
 
 // IMPL FOR THUNK clone
-impl<'a, F> Clone for Thunk<'a, F>
-where
-    F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a,
-{
-    fn clone(&self) -> Self {
-        panic!("tried to clone a thunk")
-    }
-}
+// impl<'a> Clone for Thunk<'a> {
+//     fn clone(&self) -> Self {
+//         println!("cloning a thunk {:?}", self);
+//         Self {
+//             item: Rc::clone(&self.item),
+//             // phantom: PhantomData,
+//         }
+//     }
+// }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum ExprState<'a> {
-    Thunk(Thunk<'a, Box<dyn FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>>>>),
+    Thunk(Thunk<'a>),
     Evaluated,
     // not evluated but not a thunk
     UnEvaulated,
+}
+
+impl<'a> ExprState<'a> {
+    pub fn is_thunk(&self) -> bool {
+        matches!(self, Self::Thunk(_))
+    }
 }
 
 impl<'a> Default for Expr<'a> {
@@ -84,7 +91,7 @@ impl<'a> Default for Expr<'a> {
         Self {
             info: Info::default(),
             expr: ExprType::Literal(Lit::new_hempty(Info::default())),
-            state: RefCell::new(ExprState::UnEvaulated),
+            state: RefCell::new(ExprState::UnEvaulated).into(),
         }
     }
 }
@@ -118,11 +125,11 @@ pub enum ExprType<'a, T: Display + Debug + Clone + PartialEq + PartialOrd> {
 }
 
 impl<'a> Expr<'a> {
-    pub const fn new_literal(info: Info<'a>, value: Lit<'a>) -> Self {
+    pub fn new_literal(info: Info<'a>, value: Lit<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Literal(value),
-            state: RefCell::new(ExprState::Evaluated),
+            state: Rc::new(RefCell::new(ExprState::UnEvaulated)),
         }
     }
 
@@ -166,11 +173,11 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub const fn new_lambda(info: Info<'a>, value: Lambda<'a>) -> Self {
+    pub fn new_lambda(info: Info<'a>, value: Lambda<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Lambda(value),
-            state: RefCell::new(ExprState::Evaluated),
+            state: Rc::new(RefCell::new(ExprState::UnEvaulated)),
         }
     }
 
@@ -190,11 +197,11 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub const fn new_continue(info: Info<'a>) -> Self {
+    pub fn new_continue(info: Info<'a>) -> Self {
         Self {
             info,
             expr: ExprType::Continue,
-            state: RefCell::new(ExprState::Evaluated),
+            state: Rc::new(RefCell::new(ExprState::UnEvaulated)),
         }
     }
 
@@ -305,8 +312,8 @@ impl<'a> Display for Lit<'a> {
     }
 }
 
-#[derive(Derivative)]
-#[derivative(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Derivative, Clone)]
+#[derivative(Debug, PartialEq, PartialOrd)]
 pub struct FileWrapper<'a> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
@@ -338,7 +345,7 @@ pub enum LitType<'a> {
 impl fmt::Display for LitType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::String(s) => write!(f, "{}", s),
+            Self::String(s) => write!(f, "{s}"),
             Self::File(s) => write!(f, "{}", s.name),
             Self::Number(n) => write!(f, "{n}"),
             Self::Boolean(b) => write!(f, "{b}"),

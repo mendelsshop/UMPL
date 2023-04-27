@@ -1,10 +1,10 @@
 use std::{
-    cell::{RefCell, RefMut},
+    cell::RefCell,
     collections::HashMap,
     fmt,
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::{self, Read, Write},
-    mem::{self, swap},
+    mem::swap,
     rc::Rc,
 };
 
@@ -318,6 +318,15 @@ impl<'a> Eval<'a> {
 
     // attempts to simplify an expression to its simplest form
     pub fn eval_expr(&mut self, expr: Expr<'a>, force: bool) -> Result<Expr<'a>, Stopper<'a>> {
+        // do something like this
+        let state = expr.clone().state;
+        if let ExprState::Thunk(t) = state.replace(ExprState::Evaluated) {
+            let expr = t.eval(expr)?;
+            println!("evaluated: {expr}");
+            return Ok(expr);
+            panic!();
+        }
+
         match expr.expr {
             ExprType::Return(value) => Err(Stopper::Return(self.eval_expr(*value, true)?)),
             ExprType::Var(var) => self.add_variable(*var),
@@ -478,7 +487,7 @@ impl<'a> Eval<'a> {
             info,
         );
         given_args.reverse();
-        let (args, rest): (Vec<_>, Vec<_>) = given_args
+        let (args, _rest): (Vec<_>, Vec<_>) = given_args
             .drain(..)
             .enumerate()
             .partition(|(i, _)| *i < lambda.param_count as usize);
@@ -486,11 +495,20 @@ impl<'a> Eval<'a> {
         // if there are extra arguments then add them to the scope
         self.scope.from_parent();
         // add the extra arguments to the scope as fn params
+        let mut cloned = self.clone();
+        Thunk::new(move |expr: Expr<'a>| -> Result<Expr<'a>, Stopper<'a>> {
+            cloned.eval_expr(expr, true)
+        });
         let body = self.find_functions(lambda.body());
         // TODO: put them as thunks
         for (i, mut arg) in args {
-            let cloned = self.clone();
-            arg.state = ExprState::Thunk(Thunk::new(Box::new(fun_name(cloned)))).into();
+            let mut cloned = self.clone();
+            arg.state = Rc::new(RefCell::new(ExprState::Thunk(Thunk::new(
+                move |expr: Expr<'a>| -> Result<Expr<'a>, Stopper<'a>> {
+                    cloned.eval_expr(expr, true)
+                },
+            ))));
+
             self.scope
                 .set_var(VarType::FnArg(i as u64), arg, false, info);
         }
@@ -506,7 +524,7 @@ impl<'a> Eval<'a> {
     // can't be lazy because file can be changed this point and when go to read it it will be different
     fn read_file(
         &mut self,
-        file_name: FileWrapper<'a>,
+        file_name: &FileWrapper<'a>,
         info: Info<'a>,
         line: Option<u32>,
     ) -> Expr<'a> {
@@ -539,7 +557,7 @@ impl<'a> Eval<'a> {
         info: Info<'a>,
         line: Option<u32>,
     ) {
-        let fc = self.read_file(file_name, info, None);
+        let fc = self.read_file(&file_name, info, None);
         let lines = self.eval_to_str(fc).expect("unreachable").lines();
         let contents = match mode {
             "a" => {
@@ -587,7 +605,7 @@ impl<'a> Eval<'a> {
             BuiltinFunction::Close | BuiltinFunction::DeleteFile => {
                 arg_error(1, args.len() as u64, builtin_function, false, call);
                 let file = self.eval_to_file(args.pop().unwrap())?;
-                let contents = self.read_file(file, call, None);
+                let contents = self.read_file(&file, call, None);
                 // self.files.remove(file);
                 if builtin_function == BuiltinFunction::DeleteFile {
                     std::fs::remove_file(file.name).unwrap_or_else(|e| {
@@ -600,14 +618,14 @@ impl<'a> Eval<'a> {
             BuiltinFunction::Read => {
                 arg_error(1, args.len() as u64, "read", false, call);
                 self.eval_to_file(args.pop().unwrap())
-                    .map(|file| self.read_file(file, call, None))
+                    .map(|file| self.read_file(&file, call, None))
             }
             // also takes line number
             BuiltinFunction::ReadLine => {
                 arg_error(2, args.len() as u64, "read", false, call);
                 let file = self.eval_to_file(args.pop().unwrap())?;
                 let line = self.eval_to_non_float(args.pop().unwrap())?;
-                Ok(self.read_file(file, call, Some(line as u32)))
+                Ok(self.read_file(&file, call, Some(line as u32)))
             }
             BuiltinFunction::Exit => {
                 arg_error(1, args.len() as u64, "exit", false, call);
@@ -627,7 +645,7 @@ impl<'a> Eval<'a> {
                 let string = self.eval_to_str(args.pop().unwrap())?;
 
                 let char_iter = string.split_terminator("").skip(1);
-                Ok(self.iter_to_cons(char_iter, call))
+                Ok(iter_to_cons(char_iter, call))
             }
             // returns string (file contents) takes string (file name) and string (file mode)
             BuiltinFunction::Write => {
@@ -966,7 +984,7 @@ impl<'a> Eval<'a> {
                 };
                 let value = args.pop().expect("should not be empty");
                 let value = self.eval_expr(value, true)?;
-                self.set_var(var, value, call, true);
+                self.set_var(var, value.clone(), call, true);
                 Ok(value)
             }
             // follow same rules as regular math operators (from above)
@@ -997,7 +1015,7 @@ impl<'a> Eval<'a> {
                         error(call, format!("expected variable or parameter for {builtin_function} but found {var}"));
                     }
                 };
-                self.set_var(var, value, call, true);
+                self.set_var(var, value.clone(), call, true);
                 Ok(value)
             }
         }
@@ -1048,33 +1066,6 @@ impl<'a> Eval<'a> {
             .map(|arg| self.eval_expr(arg, force))
             .collect()
     }
-
-    fn iter_to_cons(
-        &self,
-        mut char_iter: impl Iterator<Item = &'a str>,
-        call: Info<'a>,
-    ) -> Expr<'a> {
-        if let Some(first) = char_iter.next() {
-            let cons = Expr::new_cons(
-                call,
-                Cons::new(
-                    call,
-                    Expr::new_literal(call, Lit::new_string(call, first)),
-                    self.iter_to_cons(char_iter, call),
-                ),
-            );
-            // use fold
-            // let cons = char_iter.fold(Expr::new_cons(call, Cons::new(call, Expr::new_literal(call, Lit::new_string(call, first)),
-
-            cons
-        } else {
-            Expr::new_literal(call, Lit::new_hempty(call))
-        }
-    }
-}
-
-fn fun_name(cloned: Eval<'_>) -> impl Fn(Expr<'_>) -> Result<Expr<'_>, Stopper<'_>> + '_ {
-    move |expr: Expr<'_>| cloned.clone().eval_expr(expr, true)
 }
 
 fn into_var<'a>(var: Ident<'a>, info: Info<'_>) -> VarType<'a> {
@@ -1087,6 +1078,31 @@ fn into_var<'a>(var: Ident<'a>, info: Info<'_>) -> VarType<'a> {
         ),
     };
     var_name
+}
+fn iter_to_cons<'b>(
+    mut char_iter: (impl Iterator<Item = &'b str> + 'b),
+    call: Info<'b>,
+) -> Expr<'b> where {
+    if let Some(first) = char_iter.next() {
+        let cons = Expr::new_cons(
+            call,
+            Cons::new(
+                call,
+                Expr::new_literal(call, Lit::new_string(call, first)),
+                Expr {
+                    info: call,
+                    state: Rc::new(RefCell::new(ExprState::Thunk(Thunk::new(move |_| {
+                        Ok(iter_to_cons(char_iter, call))
+                    })))),
+                    ..Default::default()
+                },
+            ),
+        );
+
+        cons
+    } else {
+        Expr::new_literal(call, Lit::new_hempty(call))
+    }
 }
 
 impl fmt::Debug for Eval<'_> {
