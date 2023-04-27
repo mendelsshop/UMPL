@@ -4,7 +4,9 @@
 use std::{
     cell::{Ref, RefCell},
     fmt::{self, Debug, Display},
-    rc::Rc, marker::PhantomData,
+    fs::File,
+    marker::PhantomData,
+    rc::Rc,
 };
 
 use derivative::Derivative;
@@ -31,23 +33,27 @@ pub struct Expr<'a> {
 
 #[derive(Derivative)]
 #[derivative(Debug, PartialEq, PartialOrd)]
-pub struct Thunk<'a, F> where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a
+pub struct Thunk<'a, F>
+where
+    F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a,
 {
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     #[derivative(Debug = "ignore")]
     pub item: Box<F>,
     phantom: PhantomData<&'a F>,
-    
 }
 
-impl<'a, F> Thunk<'a, F> where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a {
+impl<'a, F> Thunk<'a, F>
+where
+    F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a,
+{
     pub fn new(f: F) -> Self
-    where
-    {
-        Self{
+where {
+        Self {
             item: Box::new(f),
-            phantom: PhantomData,}
+            phantom: PhantomData,
+        }
     }
 
     fn eval(mut self, expr: Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> {
@@ -56,7 +62,10 @@ impl<'a, F> Thunk<'a, F> where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a
 }
 
 // IMPL FOR THUNK clone
-impl<'a, F> Clone for Thunk<'a, F>  where F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a {
+impl<'a, F> Clone for Thunk<'a, F>
+where
+    F: FnMut(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a,
+{
     fn clone(&self) -> Self {
         panic!("tried to clone a thunk")
     }
@@ -282,7 +291,7 @@ impl<'a> Lit<'a> {
         }
     }
 
-    pub const fn new_file(info: Info<'a>, value: &'a str) -> Self {
+    pub const fn new_file(info: Info<'a>, value: FileWrapper<'a>) -> Self {
         Self {
             info,
             value: LitType::File(value),
@@ -296,19 +305,41 @@ impl<'a> Display for Lit<'a> {
     }
 }
 
+#[derive(Derivative)]
+#[derivative(Clone, Debug, PartialEq, PartialOrd)]
+pub struct FileWrapper<'a> {
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(PartialOrd = "ignore")]
+    pub(crate) file: Rc<RefCell<File>>,
+    pub(crate) name: &'a str,
+}
+
+impl<'a> FileWrapper<'a> {
+    pub fn new(file: Rc<RefCell<File>>, name: &'a str) -> Self {
+        Self { file, name }
+    }
+}
+
+impl<'a> Display for FileWrapper<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum LitType<'a> {
     String(&'a str),
     Number(f64),
     Boolean(bool),
-    File(&'a str),
+    File(FileWrapper<'a>),
     Hempty,
 }
 
 impl fmt::Display for LitType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::String(s) | Self::File(s) => write!(f, "{s}"),
+            Self::String(s) => write!(f, "{}", s),
+            Self::File(s) => write!(f, "{}", s.name),
             Self::Number(n) => write!(f, "{n}"),
             Self::Boolean(b) => write!(f, "{b}"),
             Self::Hempty => write!(f, "hempty"),

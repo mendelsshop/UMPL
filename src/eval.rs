@@ -13,9 +13,8 @@ use crate::{
     lexer::Lexer,
     parser::{
         rules::{
-            Cons, Expr, ExprState, ExprType, FnDef, Ident, IdentType, Interlaced, Lambda, Lit,
-            LitType, Module, ModuleType, PrintType, 
-            Thunk, Var,
+            Cons, Expr, ExprState, ExprType, FileWrapper, FnDef, Ident, IdentType, Interlaced,
+            Lambda, Lit, LitType, Module, ModuleType, PrintType, Thunk, Var,
         },
         Parser,
     },
@@ -171,11 +170,6 @@ macro_rules! get_literal {
 #[derive(Clone)]
 pub struct Eval<'a> {
     pub scope: Scope<'a>,
-    pub in_function: bool,
-    pub in_loop: bool,
-    pub in_if: bool,
-    pub files: HashMap<String, Rc<RefCell<File>>>,
-    pub module_name: String,
     modules: Vec<char>,
 }
 
@@ -183,7 +177,7 @@ impl<'a> Eval<'a> {
     get_literal!(self, expr, Boolean, eval_to_bool, bool);
     get_literal!(self, expr, Number, eval_to_num, f64);
     get_literal!(self, expr, String, eval_to_str, &'a str);
-    get_literal!(self, expr, File, eval_to_file, &'a str);
+    get_literal!(self, expr, File, eval_to_file, FileWrapper<'a>);
 
     fn eval_to_non_float(&mut self, expr: Expr<'a>) -> Result<i64, Stopper<'a>> {
         let info = expr.info;
@@ -199,20 +193,11 @@ impl<'a> Eval<'a> {
     pub fn new(mut body: Vec<Expr<'a>>) -> Self {
         let mut self_ = Self {
             scope: Scope::new(),
-            in_function: false,
-            in_loop: false,
-            in_if: false,
-            files: HashMap::new(),
-            module_name: String::new(),
             modules: Vec::new(),
         };
         body = self_.find_functions(body);
-        self_.find_variables(body);
+        self_.find_variables(body, false);
         self_
-    }
-
-    pub fn get_file(&self, name: &str) -> Option<RefMut<'_, File>> {
-        self.files.get(name).map(|file| file.borrow_mut())
     }
 
     // this only finds functions defined in outermost scope, it doesn not find functions defined in calls ie in "()" parentheses
@@ -236,32 +221,27 @@ impl<'a> Eval<'a> {
         self.find_imports(body)
     }
 
-    pub fn find_variables(&mut self, body: Vec<Expr<'a>>) -> Option<Stopper<'a>> {
+    pub fn find_variables(
+        &mut self,
+        body: Vec<Expr<'a>>,
+        implicit_return: bool,
+    ) -> Option<Stopper<'a>> {
         let len = body.len();
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-        let in_if = self.in_if;
-        let in_function = self.in_function;
-        let in_loop = self.in_loop;
         for (idx, expr) in body.into_iter().enumerate() {
-            self.in_if = in_if;
-            self.in_loop = in_loop;
-            self.in_function = in_function;
             match expr.expr {
                 // we explicity match the return statement so that if we are on the last expression of a function
                 // that we dont end up falling into the implicit return and returning a return statement
                 ExprType::Return(value) => {
-                    if self.in_function {
-                        return Some(Stopper::Return(match self.eval_expr(*value, true) {
-                            Ok(value) => value,
-                            Err(stopper) => return Some(stopper),
-                        }));
-                    }
-                    error(expr.info, "return statement outside of function");
+                    return Some(Stopper::Return(match self.eval_expr(*value, true) {
+                        Ok(value) => value,
+                        Err(stopper) => return Some(stopper),
+                    }));
                 }
                 // implicit return should be checked before any other expression kind
-                _ if idx == len - 1 && (self.in_function || self.in_if) => {
+                _ if idx == len - 1 && implicit_return => {
                     // if the last expression is not a return statement then we return the last expression
                     return Some(Stopper::End(match self.eval_expr(expr, true) {
                         Ok(value) => value,
@@ -371,9 +351,7 @@ impl<'a> Eval<'a> {
                 // create new scope
                 let loop_exprs = self.find_functions(loop_statement.body);
                 loop {
-                    self.in_loop = true;
-                    let evaled = self.find_variables(loop_exprs.clone());
-                    self.in_loop = false;
+                    let evaled = self.find_variables(loop_exprs.clone(), false);
                     match evaled {
                         Some(Stopper::Break(expr)) => return Ok(expr),
                         Some(Stopper::End(_)) => unreachable!(),
@@ -391,7 +369,6 @@ impl<'a> Eval<'a> {
         &mut self,
         if_statement: Box<crate::parser::rules::If<'a>>,
     ) -> Result<Expr<'a>, Stopper<'a>> {
-        self.in_if = true;
         let cond_info = if_statement.condition.info;
         let exprs = match self.eval_expr(if_statement.condition, true) {
             Ok(Expr {
@@ -416,8 +393,7 @@ impl<'a> Eval<'a> {
         };
         // TODO: create new scope
         let other_exprs = self.find_functions(exprs);
-        let evaled = self.find_variables(other_exprs);
-        self.in_if = false;
+        let evaled = self.find_variables(other_exprs, true);
         match evaled {
             Some(Stopper::End(expr)) => Ok(expr),
             Some(stopper) => Err(stopper),
@@ -510,20 +486,16 @@ impl<'a> Eval<'a> {
         // if there are extra arguments then add them to the scope
         self.scope.from_parent();
         // add the extra arguments to the scope as fn params
-        self.in_function = true;
         let body = self.find_functions(lambda.body());
         // TODO: put them as thunks
         for (i, mut arg) in args {
             let cloned = self.clone();
-            arg.state = ExprState::Thunk(Thunk::new(Box::new(
-                fun_name(cloned)
-        ))).into();
+            arg.state = ExprState::Thunk(Thunk::new(Box::new(fun_name(cloned)))).into();
             self.scope
                 .set_var(VarType::FnArg(i as u64), arg, false, info);
         }
 
-        let res = self.find_variables(body);
-        self.in_function = false;
+        let res = self.find_variables(body, true);
         match res {
             Some(Stopper::Return(expr) | Stopper::End(expr)) => Ok(expr),
             Some(res) => Err(res),
@@ -532,39 +504,36 @@ impl<'a> Eval<'a> {
     }
 
     // can't be lazy because file can be changed this point and when go to read it it will be different
-    fn read_file(&mut self, file_name: &str, info: Info<'a>, line: Option<u32>) -> Expr<'a> {
-        self.get_file(file_name).map_or_else(
-            || {
+    fn read_file(
+        &mut self,
+        file_name: FileWrapper<'a>,
+        info: Info<'a>,
+        line: Option<u32>,
+    ) -> Expr<'a> {
+        let mut contents = String::new();
+        file_name
+            .file
+            .borrow_mut()
+            .read_to_string(&mut contents)
+            .unwrap_or_else(|e| error(info, format!("error reading file {file_name}: {e}")));
+        if let Some(line) = line {
+            contents.lines().nth(line as usize).unwrap_or_else(|| {
                 error(
                     info,
-                    format!("error reading file {file_name} was not opened"),
+                    format!("error reading file {file_name}: line {line} does not exist",),
                 )
-            },
-            |mut file| {
-                let mut contents = String::new();
-                file.read_to_string(&mut contents).unwrap_or_else(|e| {
-                    error(info, format!("error reading file {file_name}: {e}"))
-                });
-                if let Some(line) = line {
-                    contents.lines().nth(line as usize).unwrap_or_else(|| {
-                        error(
-                            info,
-                            format!("error reading file {file_name}: line {line} does not exist",),
-                        )
-                    });
-                }
-                Expr::new_literal(
-                    info,
-                    Lit::new_string(info, Box::leak(contents.into_boxed_str())),
-                )
-            },
+            });
+        }
+        Expr::new_literal(
+            info,
+            Lit::new_string(info, Box::leak(contents.into_boxed_str())),
         )
     }
 
     // can't be lazy because file can be changed this point and when go to read it it will be different
     fn write_file(
         &mut self,
-        file_name: &str,
+        file_name: FileWrapper<'a>,
         mode: &str,
         contents: &str,
         info: Info<'a>,
@@ -599,19 +568,11 @@ impl<'a> Eval<'a> {
                 error(info, format!("invalid mode {mode} for write_file"));
             }
         };
-        self.get_file(file_name).map_or_else(
-            || {
-                error(
-                    info,
-                    format!("error retriving file {file_name} was not opened"),
-                )
-            },
-            |mut file| {
-                file.write_all(contents.as_bytes()).unwrap_or_else(|e| {
-                    error(info, format!("error writing file {file_name}: {e}"))
-                });
-            },
-        );
+        file_name
+            .file
+            .borrow_mut()
+            .write_all(contents.as_bytes())
+            .unwrap_or_else(|e| error(info, format!("error writing file {file_name}: {e}")));
     }
 
     // never returns a Thunk
@@ -627,9 +588,9 @@ impl<'a> Eval<'a> {
                 arg_error(1, args.len() as u64, builtin_function, false, call);
                 let file = self.eval_to_file(args.pop().unwrap())?;
                 let contents = self.read_file(file, call, None);
-                self.files.remove(file);
+                // self.files.remove(file);
                 if builtin_function == BuiltinFunction::DeleteFile {
-                    std::fs::remove_file(file).unwrap_or_else(|e| {
+                    std::fs::remove_file(file.name).unwrap_or_else(|e| {
                         error(call, format!("error deleting file {file}: {e}"))
                     });
                 }
@@ -665,9 +626,7 @@ impl<'a> Eval<'a> {
                 arg_error(1, args.len() as u64, builtin_function, false, call);
                 let string = self.eval_to_str(args.pop().unwrap())?;
 
-                let char_iter = string
-                    .split_terminator("")
-                    .skip(1);
+                let char_iter = string.split_terminator("").skip(1);
                 Ok(self.iter_to_cons(char_iter, call))
             }
             // returns string (file contents) takes string (file name) and string (file mode)
@@ -747,9 +706,15 @@ impl<'a> Eval<'a> {
                     .unwrap_or_else(|e| {
                         error(call, format!("could not open file `{file_name}` {e}"))
                     });
-                self.files
-                    .insert(file_name.to_string(), Rc::new(RefCell::new(file)));
-                Ok(Expr::new_literal(call, Lit::new_file(call, file_name)))
+                // self.files
+                //     .insert(file_name.to_string(), Rc::new(RefCell::new(file)));
+                Ok(Expr::new_literal(
+                    call,
+                    Lit::new_file(
+                        call,
+                        FileWrapper::new(Rc::new(RefCell::new(file)), file_name),
+                    ),
+                ))
             }
             // returns string takes string
             BuiltinFunction::Input => {
@@ -1095,9 +1060,7 @@ impl<'a> Eval<'a> {
                 Cons::new(
                     call,
                     Expr::new_literal(call, Lit::new_string(call, first)),
-                    
-                     self.iter_to_cons(char_iter, call),
-                    
+                    self.iter_to_cons(char_iter, call),
                 ),
             );
             // use fold
@@ -1110,10 +1073,8 @@ impl<'a> Eval<'a> {
     }
 }
 
-fn fun_name(cloned: Eval<'_>) -> impl Fn(Expr<'_>) -> Result<Expr<'_>, Stopper<'_>> +'_ {
-    move |expr: Expr<'_>| {
-    cloned.clone().eval_expr(expr, true)
-                }
+fn fun_name(cloned: Eval<'_>) -> impl Fn(Expr<'_>) -> Result<Expr<'_>, Stopper<'_>> + '_ {
+    move |expr: Expr<'_>| cloned.clone().eval_expr(expr, true)
 }
 
 fn into_var<'a>(var: Ident<'a>, info: Info<'_>) -> VarType<'a> {
