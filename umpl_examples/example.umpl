@@ -21,7 +21,7 @@ potato 😂3 ⧼ ! to create a function we use the potato keyword, functions mus
 ⧽
 (new 😂 10 1 0x1A)> ! we use the new keyword to call a function followed by function names, prints 32, when the first digit of number is a letre prefix with 0x
 
-list it with [(not true)> 0] ! creates a list with the values  1,2 (in hex), list can only have two elements and you cant declare recursive lists like: [0 [1 1]], but if you have an identiifer (d) that points to a list you can do: [9 d]
+list it with [(not true)> 0 1] ! creates a list with the values  1,2 (in hex), list can only have two elements and you cant declare recursive lists like: [0 [1 1]], but if you have an identiifer (d) that points to a list you can do: [9 d]
 (setwith it.car 2)<! sets the first element of the it list to 2, we can also use something like addwith mulitply with  which will add  or multiple by the variable to/by the value
 (setwith it.cdr 4)< ! sets the second element of the it list to 4 and print its
 

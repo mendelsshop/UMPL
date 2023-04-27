@@ -79,6 +79,7 @@ pub enum TokenType<'a> {
     List,
     Car,
     Cdr,
+    Cgr,
     Return,
     Break,
     Continue,

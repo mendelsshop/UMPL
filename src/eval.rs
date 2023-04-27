@@ -319,14 +319,25 @@ impl<'a> Eval<'a> {
     // attempts to simplify an expression to its simplest form
     pub fn eval_expr(&mut self, expr: Expr<'a>, force: bool) -> Result<Expr<'a>, Stopper<'a>> {
         // do something like this
-        let state = expr.clone().state;
-        if let ExprState::Thunk(t) = state.replace(ExprState::Evaluated) {
+        if let ExprState::Thunk(t) = expr.state.replace(ExprState::Evaluated) {
             let expr = t.eval(expr)?;
             println!("evaluated: {expr}");
             return Ok(expr);
-            panic!();
         }
-
+        if matches!(
+            expr.expr,
+            ExprType::Literal(_)
+                | ExprType::Lambda(_)
+                | ExprType::Identifier(Ident {
+                    ident_type: IdentType::Builtin(_),
+                    ..
+                })
+        ) {
+            return Ok(expr);
+        }
+        if matches!(expr.expr, ExprType::Cons(_) | ExprType::Identifier(_)) && !force {
+            return Ok(expr);
+        }
         match expr.expr {
             ExprType::Return(value) => Err(Stopper::Return(self.eval_expr(*value, true)?)),
             ExprType::Var(var) => self.add_variable(*var),
@@ -338,12 +349,16 @@ impl<'a> Eval<'a> {
                 ..
             })
             | ExprType::Literal(_)
-            | ExprType::Lambda(_) => Ok(expr.clone()),
-            ExprType::Cons(_) | ExprType::Identifier(_) if !force => Ok(expr.clone()),
+            | ExprType::Lambda(_) => unreachable!(),
+            ExprType::Cons(_) | ExprType::Identifier(_) if !force => unreachable!(),
             ExprType::Cons(cons) => {
                 let car = self.eval_expr(cons.car().clone(), true)?;
                 let cdr = self.eval_expr(cons.cdr().clone(), true)?;
-                Ok(Expr::new_cons(expr.info, Cons::new(cons.info, car, cdr)))
+                let cgr = self.eval_expr(cons.cgr().clone(), true)?;
+                Ok(Expr::new_cons(
+                    expr.info,
+                    Cons::new(cons.info, car, cdr, cgr),
+                ))
             }
             ExprType::Identifier(ident) => match &ident.ident_type {
                 IdentType::Builtin(_) => unreachable!(),
@@ -495,10 +510,6 @@ impl<'a> Eval<'a> {
         // if there are extra arguments then add them to the scope
         self.scope.from_parent();
         // add the extra arguments to the scope as fn params
-        let mut cloned = self.clone();
-        Thunk::new(move |expr: Expr<'a>| -> Result<Expr<'a>, Stopper<'a>> {
-            cloned.eval_expr(expr, true)
-        });
         let body = self.find_functions(lambda.body());
         // TODO: put them as thunks
         for (i, mut arg) in args {
@@ -895,7 +906,6 @@ impl<'a> Eval<'a> {
                 let args = args.drain(..).collect::<Vec<_>>();
                 for arg in args {
                     let expr = self.eval_expr(arg, true)?;
-
                     if !op(first_expr.clone(), expr.clone()) {
                         return Ok(Expr::new_literal(call, Lit::new_boolean(call, false)));
                     }
@@ -984,8 +994,8 @@ impl<'a> Eval<'a> {
                 };
                 let value = args.pop().expect("should not be empty");
                 let value = self.eval_expr(value, true)?;
-                self.set_var(var, value.clone(), call, true);
-                Ok(value)
+                self.set_var(var, value, call, true);
+                Ok(Expr::new_literal(call, Lit::new_hempty(call)))
             }
             // follow same rules as regular math operators (from above)
             // but the first argument is the variable to set
@@ -997,6 +1007,7 @@ impl<'a> Eval<'a> {
                 arg_error(2, args.len() as u64, builtin_function, true, call);
                 let var = args.pop().unwrap();
                 let mut args = self.eval_args(args, true)?;
+                println!("pushing var");
                 args.push(var.clone());
                 let builtin_function = match builtin_function {
                     BuiltinFunction::AddWith => BuiltinFunction::Plus,
@@ -1015,8 +1026,8 @@ impl<'a> Eval<'a> {
                         error(call, format!("expected variable or parameter for {builtin_function} but found {var}"));
                     }
                 };
-                self.set_var(var, value.clone(), call, true);
-                Ok(value)
+                self.set_var(var, value, call, true);
+                Ok(Expr::new_literal(call, Lit::new_hempty(call)))
             }
         }
     }
@@ -1026,8 +1037,14 @@ impl<'a> Eval<'a> {
     // and the result will be returned
     // and the thunk in the var hashmap will be replaced with the result
     fn get_var(&mut self, var: Ident<'a>, info: Info<'_>) -> Result<Expr<'a>, Stopper<'a>> {
-        let expr = self.get_var_inner(var, info).borrow().clone();
-        let var = self.eval_expr(expr, true)?;
+        let binding = self.get_var_inner(var, info);
+        let expr = binding.borrow();
+
+        let var = self.eval_expr(expr.clone(), true)?;
+        if var == *expr {
+            return Ok(var);
+        }
+        binding.replace(var.clone());
 
         // TODO: use get car/cdrs if needed
         Ok(var)
@@ -1047,7 +1064,7 @@ impl<'a> Eval<'a> {
         if new {
             self.scope
                 .vars
-                .insert(into_var(var, info), Rc::new(RefCell::new(value.clone())));
+                .insert(into_var(var, info), Rc::new(RefCell::new(value)));
         } else {
             let prev = self.get_var_inner(var, info);
             // TODO: use get car/cdrs if needed
@@ -1089,6 +1106,11 @@ fn iter_to_cons<'b>(
             Cons::new(
                 call,
                 Expr::new_literal(call, Lit::new_string(call, first)),
+                if let Some(rest) = char_iter.next() {
+                    Expr::new_literal(call, Lit::new_string(call, rest))
+                } else {
+                    Expr::new_literal(call, Lit::new_hempty(call))
+                },
                 Expr {
                     info: call,
                     state: Rc::new(RefCell::new(ExprState::Thunk(Thunk::new(move |_| {

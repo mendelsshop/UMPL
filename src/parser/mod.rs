@@ -537,6 +537,11 @@ impl<'a> Parser<'a> {
         } else {
             error(self.token.info, "expected expression in list")
         };
+        let cgr = if let Some(expr) = self.parse_from_token() {
+            expr
+        } else {
+            error(self.token.info, "expected expression in list")
+        };
         self.check_next(
             "expected ] after list item",
             &TokenType::RightBracket,
@@ -546,6 +551,7 @@ impl<'a> Parser<'a> {
             Info::new(self.file_path, start_line, self.token.info.end),
             car,
             cdr,
+            cgr,
         );
     }
 

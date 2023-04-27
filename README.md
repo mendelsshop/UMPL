@@ -117,7 +117,7 @@ File is a path to a file.
 | name | description | usage | special keywords | special variables | example(s) |
 |:---:|:---:|:---:|:---:|:---:|:---|
 | create | creates a variable | create var-name with literal or expression| N/A | N/A| ```create num-var with 5``` <br>  ```create str-var with ((input `>> `))>``` <br> ```create var with str-var```|
-| list | creates a list | list var-name with [literal or expression literal or expression]| N/A | N/A| ```list num-list with [1 3]```<br> ```list str-list with [8, ((input `>> `))]```|
+| list | creates a list | list var-name with [literal or expression literal or expression]| N/A | N/A| ```list num-list with [1 3 1]```<br> ```list str-list with [8 ((input `>> `)) 1]```|
 | potato | declares a function | potato emoji-name num-of-arguments ⧼code⧽| return literal-or-expression| for each argument you get `$argument-number` i.e. `$1` for the first one etc. | ```potato 😀 2 ⧼return ((plus $1 $2))>⧽```|
 
 ## Control-Flow

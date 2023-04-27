@@ -26,7 +26,6 @@ pub struct Expr<'a> {
     #[derivative(PartialOrd = "ignore")]
     #[derivative(Debug = "ignore")]
     pub state: Rc<RefCell<ExprState<'a>>>,
-
     pub expr: ExprType<'a, Expr<'a>>,
 }
 
@@ -50,6 +49,7 @@ impl Debug for Thunk<'_> {
 
 impl<'a> Thunk<'a> {
     pub fn new(f: impl FnOnce(Expr<'a>) -> Result<Expr<'a>, Stopper<'a>> + 'a) -> Self {
+        println!("creating a new thunk");
         Self {
             item: Box::new(f),
             // phantom: PhantomData,
@@ -60,17 +60,6 @@ impl<'a> Thunk<'a> {
         (self.item)(expr)
     }
 }
-
-// IMPL FOR THUNK clone
-// impl<'a> Clone for Thunk<'a> {
-//     fn clone(&self) -> Self {
-//         println!("cloning a thunk {:?}", self);
-//         Self {
-//             item: Rc::clone(&self.item),
-//             // phantom: PhantomData,
-//         }
-//     }
-// }
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum ExprState<'a> {
@@ -357,20 +346,23 @@ impl fmt::Display for LitType<'_> {
 #[derive(Derivative)]
 #[derivative(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Cons<'a, T: Display + Debug + Clone + PartialEq + PartialOrd> {
+    // 3 elements
     #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     pub info: Info<'a>,
     // both have to be objects
     pub car: Rc<RefCell<T>>,
     pub cdr: Rc<RefCell<T>>,
+    pub cgr: Rc<RefCell<T>>,
 }
 
 impl<'a, T: Display + Debug + Clone + PartialEq + PartialOrd + Default> Cons<'a, T> {
-    pub fn new(info: Info<'a>, car: T, cdr: T) -> Self {
+    pub fn new(info: Info<'a>, car: T, cdr: T, cgr: T) -> Self {
         Self {
             info,
             car: Rc::new(RefCell::new(car)),
             cdr: Rc::new(RefCell::new(cdr)),
+            cgr: Rc::new(RefCell::new(cgr)),
         }
     }
 
@@ -379,6 +371,7 @@ impl<'a, T: Display + Debug + Clone + PartialEq + PartialOrd + Default> Cons<'a,
             info,
             car: Rc::new(RefCell::new(T::default())),
             cdr: Rc::new(RefCell::new(T::default())),
+            cgr: Rc::new(RefCell::new(T::default())),
         }
     }
 
@@ -389,18 +382,26 @@ impl<'a, T: Display + Debug + Clone + PartialEq + PartialOrd + Default> Cons<'a,
     pub fn cdr(&self) -> Ref<'_, T> {
         self.cdr.borrow()
     }
+
+    pub fn cgr(&self) -> Ref<'_, T> {
+        self.cgr.borrow()
+    }
 }
 
 impl<'a, T: Display + Debug + Clone + PartialEq + PartialOrd> Display for Cons<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "({} . {})",
+            "({} . {} . {})",
             match self.car.try_borrow() {
                 Ok(value) => value,
                 Err(err) => error(self.info, format!("refcell borrow error: {err}")),
             },
             match self.cdr.try_borrow() {
+                Ok(value) => value,
+                Err(err) => error(self.info, format!("refcell borrow error: {err}")),
+            },
+            match self.cgr.try_borrow() {
                 Ok(value) => value,
                 Err(err) => error(self.info, format!("refcell borrow error: {err}")),
             }
@@ -648,6 +649,7 @@ impl<A: Debug + Clone + Display, B: Debug + Clone + Display> Interlaced<A, B> {
 pub enum Accesor {
     Car,
     Cdr,
+    Cgr,
 }
 
 impl Display for Accesor {
@@ -655,6 +657,7 @@ impl Display for Accesor {
         match self {
             Self::Car => write!(f, "car"),
             Self::Cdr => write!(f, "cdr"),
+            Self::Cgr => write!(f, "cgr"),
         }
     }
 }

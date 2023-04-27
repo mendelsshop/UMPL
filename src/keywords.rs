@@ -33,6 +33,7 @@ impl Keyword<'_> {
         keywords.insert(toggle_case("list"), TokenType::List);
         keywords.insert(toggle_case("car"), TokenType::Car);
         keywords.insert(toggle_case("cdr"), TokenType::Cdr);
+        keywords.insert(toggle_case("cgr"), TokenType::Cgr);
         keywords.insert(toggle_case("return"), TokenType::Return);
         keywords.insert(toggle_case("break"), TokenType::Break);
         keywords.insert(toggle_case("continue"), TokenType::Continue);
