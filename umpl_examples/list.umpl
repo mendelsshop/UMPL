@@ -1,0 +1,5 @@
+! lists have 3 elements (car, cdr, cgr)
+
+list m with [1 3 5]
+! gets the third element of the list (5)
+(m.cgr)>

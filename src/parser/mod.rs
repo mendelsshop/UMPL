@@ -23,6 +23,9 @@ macro_rules! parse_car_cdr {
                 TokenType::Cdr => {
                     cars_and_cdrs.push(Accesor::Cdr);
                 }
+                TokenType::Cgr => {
+                    cars_and_cdrs.push(Accesor::Cgr);
+                }
                 tt => {
                     error(
                         $self.token.info,
@@ -529,18 +532,19 @@ impl<'a> Parser<'a> {
         let car = if let Some(expr) = self.parse_from_token() {
             expr
         } else {
-            error(self.token.info, "expected expression in list")
+            error(self.token.info, "expected car expression in list")
         };
         self.advance("parse list inner");
         let cdr = if let Some(expr) = self.parse_from_token() {
             expr
         } else {
-            error(self.token.info, "expected expression in list")
+            error(self.token.info, "expected cdr expression in list")
         };
+        self.advance("parse list inner");
         let cgr = if let Some(expr) = self.parse_from_token() {
             expr
         } else {
-            error(self.token.info, "expected expression in list")
+            error(self.token.info, "expected cgr expression in list")
         };
         self.check_next(
             "expected ] after list item",

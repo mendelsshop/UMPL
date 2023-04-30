@@ -1037,17 +1037,26 @@ impl<'a> Eval<'a> {
     // and the result will be returned
     // and the thunk in the var hashmap will be replaced with the result
     fn get_var(&mut self, var: Ident<'a>, info: Info<'_>) -> Result<Expr<'a>, Stopper<'a>> {
-        let binding = self.get_var_inner(var, info);
+        let binding = self.get_var_inner(var.clone(), info);
         let expr = binding.borrow();
 
-        let var = self.eval_expr(expr.clone(), true)?;
-        if var == *expr {
-            return Ok(var);
+        let var_val = self.eval_expr(expr.clone(), true)?;
+        if var_val != *expr {
+        binding.replace(var_val.clone());
         }
-        binding.replace(var.clone());
 
-        // TODO: use get car/cdrs if needed
-        Ok(var)
+        // TODO: use get car/cdr/cgrs if needed
+        let acces = match var.ident_type {
+            IdentType::Var(v) => v.interlaced,
+            IdentType::FnIdent(_) => todo!(),
+            IdentType::Builtin(_) => todo!(),
+            IdentType::FnParam(f) => f.interlaced,
+        };
+        // let var_val = Rc::new(RefCell::new(var_val));
+        // for accesor in acces {
+        //     if let ExprType::Cons(cons) = 
+
+        Ok(var_val)
     }
 
     fn get_var_inner(&mut self, var: Ident<'_>, info: Info<'_>) -> Rc<RefCell<Expr<'a>>> {
@@ -1057,7 +1066,7 @@ impl<'a> Eval<'a> {
 
     // first retrive var
     // the fully evaluate it
-    // then use accessors (car/cdr) if needed
+    // then use accessors (car/cdr/cgr) if needed
     // then return the value
     // and also set the value in the var hashmap
     fn set_var(&mut self, var: Ident<'a>, value: Expr<'a>, info: Info<'_>, new: bool) {
