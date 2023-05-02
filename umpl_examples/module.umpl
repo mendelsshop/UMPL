@@ -1,2 +1,0 @@
-((module `m` `umpl_examples/factorial.umpl`))<
-((new m$🍕 4))>
