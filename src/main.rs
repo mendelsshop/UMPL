@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt,
     ops::{Add, Div, Mul, Sub},
-    rc::Rc, f32::consts::E,
+    rc::Rc,
 };
 
 // pub struct eval {
@@ -17,7 +17,7 @@ use std::{
 //         }
 //     }
 
-//     pub fn eval<'a>(&mut self, ast: Vec<Ast>) -> Vec<Expr<'a>> {
+//     pub fn eval(&mut self, ast: Vec<Ast>) -> Vec<Expr> {
 //         let mut result = Vec::new();
 //         for expr in ast {
 //             result.push(eval_expr(expr, Rc::new(RefCell::new(self.vars.clone())), 0));
@@ -27,269 +27,191 @@ use std::{
 //     }
 // }
 
-fn eval_expr<'a>(epr: Expr<'a>, vars: Rc<RefCell<HashMap<String, Expr<'a>>>>, ident: usize) -> Expr<'a> {
-    println!("eval_expr");
-    println!("epr: {:?}", epr);
-    let indent = (0..ident).map(|_| " ").collect::<String>();
-    
-    let var1 = vars.clone();
-   
-    match epr.expr {
-        // ExprType::Symbol(s) => self.vars.get(&s).unwrap(),
-        // ExprType::Var(s, i) => self.vars.insert(s, i),
-        // ExprType::Add(e1, e2) => || eval_expr(e1) + eval_expr(e2),
-        // ExprType::Sub(e1, e2) => || eval_expr(e1) - eval_expr(e2),
-        // ExprType::Mul(e1, e2) => || eval_expr(e1) * eval_expr(e2),
-        // ExprType::Div(e1, e2) => || eval_expr(e1) / eval_expr(e2),
-        ExprKind::Nil | ExprKind::Word(_) | ExprKind::Number(_) | ExprKind::Bool(_) => epr,
-        ExprKind::Symbol(s) => {
-            
-            
-           
-            let borrow = &vars.borrow();
-            
-            
-           println!("{indent}(symbol {s}", s = s);
-        //    println!("{indent}(symbol {s} {:?})", borrow);
-            let v = Box::leak(Box::new(borrow.get(&s).unwrap().clone()));
-            println!("{indent}(symbol {s} {v})", s = s, v = v);
-            (*v).clone().eval()
+#[derive(Debug, Clone)]
+pub struct Env {
+    scope: Rc<RefCell<HashMap<String, Expr>>>,
+    pub parent: Option<Box<Env>>,
+}
+
+impl  Env {
+    pub fn new() -> Env {
+        Env {
+            scope: Rc::new(RefCell::new(HashMap::new())),
+            parent: None,
         }
+    }
+
+    pub fn insert(&self, key: String, val: Expr) {
+        self.scope.borrow_mut().insert(key, val);
+    }
+
+    pub fn get(&self, key: &String) -> Option<Expr> {
+        self.scope.borrow().get(key).map(|e| e.clone())
+    }
+
+    pub fn borrow(&self) -> std::cell::Ref<'_, std::collections::HashMap<std::string::String, Expr>> {
+        self.scope.borrow()
+    }
+
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, std::collections::HashMap<std::string::String, Expr>> {
+        self.scope.borrow_mut()
+    }
+
+    pub fn new_child(&self) -> Env {
+        Env {
+            scope: Rc::new(RefCell::new(HashMap::new())),
+            parent: Some(Box::new(self.clone())),
+        }
+    }
+    
+}
+
+
+
+fn eval_expr(
+    epr: Expr,
+    vars: Env,
+    ident: usize,
+) -> Expr {
+    match epr.expr {
+        // case: self-evaluating
+        ExprKind::Nil | ExprKind::Word(_) | ExprKind::Number(_) | ExprKind::Bool(_) => epr,
+        // case: lookup
+        ExprKind::Symbol(s) => {
+            let borrow = &vars.borrow();
+
+            // println!("{indent}(symbol {s}", s = s);
+            //    println!("{indent}(symbol {s} {:?})", borrow);
+            let expr = borrow.get(&s).unwrap();
+            // println!("{indent}(symbol {s} {expr:?})", s = s, expr = expr);
+            expr.clone()
+        }
+        // case: define variable
         ExprKind::Var(s, i) => {
-            vars.borrow_mut().insert(s, *i.clone());
-                  Expr {
-                    expr: ExprKind::Nil,
-                    state: State::Evaluated,
-                    file: "main.rs",
+            vars.borrow_mut().insert(s, *i);
+            Expr {
+                expr: ExprKind::Nil,
+                state: State::Evaluated,
+                file: "main.rs".to_string(),
             }
         }
-        // Ast::Add(e1, e2) =>
-        //     {
-        //         println!("{indent}(thunk +");
-        //         let e1 = eval_expr(*e1, vars.clone(), ident + 1);
-        //         let e2 = eval_expr(*e2, vars.clone(), ident + 1);
-        //         println!("{indent})");
-        //         e1 + e2
-                
-        //     },
-        //     // state: State::Thunk(Box::new(|ident| {
-        //     //     let indent = Box::leak(indent.into_boxed_str());
-        //     //     println!("{indent}(thunk +");
-        //     //     let expr1 = Expr::eval(eval_expr(*e1, vars, ident + 1));
-        //     //     let expr2 = Expr::eval(eval_expr(*e2, var1, ident + 1));
-        //     //     println!("{indent})");
-        //     //     expr1 + expr2
-        //     // }), ident),
-           
-        // // },
-        // Ast::Sub(e1, e2) =>  {
-        //     println!("{indent}(thunk -");
-        //     let e1 = eval_expr(*e1, vars.clone(), ident + 1);
-        //     let e2 = eval_expr(*e2, vars.clone(), ident + 1);
-        //     println!("{indent})");
-        //     e1 - e2
-        // },
-        // // Expr {
-        // //     expr: ExprKind::Nil,
-        // //     state: State::Thunk(Box::new(|ident| {
-        // //         let indent = Box::leak(indent.into_boxed_str());
-        // //         println!("{indent}(thunk -");
-        // //         let expr1 = Expr::eval(eval_expr(*e1, vars, ident + 1));
-        // //         let expr2 = Expr::eval(eval_expr(*e2, var1, ident + 1));
-        // //         println!("{indent})");
-        // //         expr1 - expr2
-        // //     }), ident),
-        // //     file: "main.rs",
-        // // },
-        // Ast::Mul(e1, e2) => {
-        //     println!("{indent}(thunk *");
-        //     let e1 = eval_expr(*e1, vars.clone(), ident + 1);
-        //     let e2 = eval_expr(*e2, vars.clone(), ident + 1);
-        //     println!("{indent})");
-        //     e1 * e2
-        // },
-        // //  Expr {
-        // //     expr:  ExprKind::Nil,
-        // //     state: State::Thunk(Box::new(|ident| {
-        // //         let indent = Box::leak(indent.into_boxed_str());
-        // //         println!("{indent}(thunk *");
-        // //         let expr1 = Expr::eval(eval_expr(*e1, vars, ident + 1));
-        // //         let expr2 = Expr::eval(eval_expr(*e2, var1, ident + 1));
-        // //         println!("{indent})");
-        // //         expr1 * expr2
-        // //     }), ident),
-        // //     file: "main.rs",
-        // // },
-        // Ast::Div(e1, e2) =>  {
-        //     println!("{indent}(thunk /");
-        //     let e1 = eval_expr(*e1, vars.clone(), ident + 1);
-        //     let e2 = eval_expr(*e2, vars.clone(), ident + 1);
-        //     println!("{indent})");
-        //     e1 / e2
-        // },
-        // // Expr {
-        // //     expr: ExprKind::Nil,
-        // //     state: State::Thunk(Box::new(|ident| {
-        // //         let indent = Box::leak(indent.into_boxed_str());
-
-        // //         println!("{indent}(thunk ");
-        // //         let expr1 = Expr::eval(eval_expr(*e1, vars, ident + 1));
-        // //         let expr2 = Expr::eval(eval_expr(*e2, var1, ident + 1));
-        // //         println!("{indent})");
-        // //         expr1 / expr2
-        // //     }), ident),
-        // //     file: "main.rs",
-        // // },
-        // Ast::Exp(e1) => {
-        //     println!("{indent}(thunk **");
-        //     eval_expr(Ast::Mul(e1.clone(), e1), vars, ident + 1)
-        // }
-        // Ast::Display(e1) => {
-        //     // Expr {
-        //     //     expr: ExprKind::Nil,
-        //     //     state: State::Thunk(Box::new(|ident| {
-        //     //         let indent = Box::leak(indent.into_boxed_str());
-    
-        //     //         println!("{indent}(thunk display");
-        //     //         let expr1 = Expr::eval(eval_expr(*e1, vars, ident + 1));
-        //     //         println!("{indent})");
-        //     //         expr1
-        //     //     }), ident),
-        //     //     file: "main.rs",
-        //     // }
-        //     println!("{}", eval_expr(*e1, vars, ident + 1));
-        //     Expr {
-        //             expr: ExprKind::Nil,
-        //             state: State::Evaluated,
-        //             file: "main.rs",
-        //     }
-
-        // }
         ExprKind::Begin(exprs) => {
             let mut final_val = Expr {
                 expr: ExprKind::Nil,
                 state: State::Evaluated,
-                file: "main.rs",
+                file: "main.rs".to_string(),
             };
             for expr in exprs {
                 final_val = eval_expr(expr, vars.clone(), ident);
             }
             final_val
         }
-        ExprKind::Lambda(params, body) => Expr {
-            expr: ExprKind::Lambda(params, body),
+        ExprKind::Lambda(proc, params) => Expr {
+            expr: ExprKind::Lambda(proc, params),
             state: State::Evaluated,
-            file: "main.rs",
+            file: "main.rs".to_string(),
         },
-     ExprKind::Apply(func, args) => {
-            println!("{indent}(thunk apply");
-            let params;
-            let body;
-            let func = eval_expr(*func, vars.clone(), ident);
-            match func.expr {
-                ExprKind::Lambda(p, b) => {
-                    params = p;
-                    body = b;
-                }
-                e => panic!("Not a lambda: {:?}", e),
-            }
-            let vars = vars.clone();
-            for (param, arg) in params.iter().zip(args.iter()) {
-                vars.borrow_mut().insert(param.clone(), Expr {expr: ExprKind::Lambda(vec![], Box::new(arg.clone())), state: State::Thunk(vars.clone()), file: "main.rs" }
-            );
-            }
-            eval_expr(*body, vars, ident)
-        }
         ExprKind::Def(name, lambda) => {
-            if let ExprKind::Lambda(params, body) = lambda.expr {
-                vars.borrow_mut().insert(name, Expr {expr: ExprKind::Lambda(params, body), state: State::Evaluated, file: "main.rs" });
+            if let ExprKind::Lambda(proc, params) = lambda.expr {
+                vars.borrow_mut().insert(
+                    name,
+                    Expr {
+                        expr: ExprKind::Lambda(proc, params),
+                        state: State::Evaluated,
+                        file: "main.rs".to_string(),
+                    },
+                );
             } else {
                 panic!("Not a lambda");
             }
             Expr {
                 expr: ExprKind::Nil,
                 state: State::Evaluated,
-                file: "main.rs",
+                file: "main.rs".to_string(),
+            }
+        }
+
+        ExprKind::Apply(func, args) => {
+            // println!("{indent}(thunk apply {func:?}");
+
+            let func = eval_expr(*func, vars.clone(), ident);
+            // let (body, params) =
+            let s = match func.expr {
+                ExprKind::Lambda(p, params) => {
+                    let args = args
+                        .into_iter()
+                        .map(|epr| eval_expr(epr, vars.clone(), ident))
+                        .collect();
+                    p(args, vars.clone())
+                }
+                e => panic!("Not a lambda: {:?}", e),
+            };
+            if let ExprKind::Lambda(_, _) = s.expr {
+                s
+            } else {
+                eval_expr(s, vars.clone(), ident)
             }
         }
     }
-
 }
 #[derive(Clone, Debug)]
-pub enum State <'a>
-// <'a, F: FnOnce(usize) -> Expr<'a>> 
+pub enum State
+// <'a, F: FnOnce(usize) -> Expr>
 {
     // Thunk(Ast, usize, F),
-    Thunk(Rc<RefCell<HashMap<String, Expr<'a>>>>),
+    Thunk(Env),
     Evaluated,
 }
-#[derive(Clone, Debug)]
-pub struct Expr<'a> {
-    pub expr: ExprKind<'a>,
-    pub state: State<'a>,
-    file: &'a str,
-}
-pub struct Thunk<'a, F: ?Sized + Fn() -> Expr<'a>> {
-    pub expr: Expr<'a>,
-    pub state: State<'a>,
-    pub file: &'a str,
-    pub f: F,
-}
-
-pub struct ExprThunk <'a> {
-    pub f: Thunk<'a, dyn Fn() -> Expr<'a> + 'a>,
-}
-
-impl <'a> ExprThunk <'a> {
-
-    pub fn new(f: &Thunk<'a, dyn Fn() -> Expr<'a> + 'a>) ->Self {
-        ExprThunk {
-            f
-        }
-    }
-    pub fn eval(&self) -> Expr<'a> {
-        let f = &self.f;
-        let expr = (f.f)();
-        expr
-    }
-}
-
-fn other() {
-    ExprThunk {
-        f: Thunk {
-            expr: Expr {
-                expr: ExprKind::Nil,
-                state: State::Evaluated,
-                file: "main.rs",
-            },
-            state: State::Evaluated,
-            file: "main.rs",
-            f: || Expr {
-                expr: ExprKind::Nil,
-                state: State::Evaluated,
-                file: "main.rs",
-            },
-        },
-    };
-}
 #[derive(Debug, Clone)]
-pub enum ExprKind <'a> {
+pub struct Expr {
+    pub expr: ExprKind,
+    pub state: State,
+    file: String,
+}
+#[derive(Clone)]
+pub enum ExprKind {
     Number(i32),
     Word(String),
     Bool(bool),
     Nil,
     // use real lambda takes nothing return expr (hypothetically)
 
-    // Lambda(Box<dyn FnOnce() -> Expr<'a>>),
-    Lambda(Vec<String>, Box<Expr<'a>>),
-    Def(String, Box<Expr<'a>>),
-    Begin(Vec<Expr<'a>>),
-    Apply(Box<Expr<'a>>, Vec<Expr<'a>>),
+    // Lambda(Box<dyn FnOnce() -> Expr>),
+    Lambda(
+        fn(Vec<Expr>, Env) -> Expr,
+        Vec<String>,
+    ),
+    Def(String, Box<Expr>),
+    Begin(Vec<Expr>),
+    Apply(Box<Expr>, Vec<Expr>),
     Symbol(String),
-    Var(String, Box<Expr<'a>>),
+    Var(String, Box<Expr>),
 }
 
-impl<'a> ExprKind<'a> {
+impl  fmt::Debug for ExprKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExprKind::Number(n) => write!(f, "{}", n),
+            ExprKind::Word(s) => write!(f, "{}", s),
+            ExprKind::Bool(b) => write!(f, "{}", b),
+            ExprKind::Nil => write!(f, "nil"),
+            ExprKind::Lambda(proc, params) => {
+                write!(f, "(lambda)  of {:?}", params)
+            }
+            ExprKind::Def(name, lambda) => write!(f, "(def {} {:#?})", name, lambda),
+            ExprKind::Begin(exprs) => {
+                write!(f, "(begin {:#?})", exprs)
+            }
+            ExprKind::Apply(func, args) => {
+                write!(f, "(apply {:#?} to {:#?})", func, args)
+            }
+            ExprKind::Symbol(s) => write!(f, "(symbol {})", s),
+            ExprKind::Var(s, i) => write!(f, "(var {} {})", s, i),
+        }
+    }
+}
+
+impl ExprKind {
     pub fn get_number(&self) -> i32 {
         match self {
             ExprKind::Number(n) => *n,
@@ -298,14 +220,16 @@ impl<'a> ExprKind<'a> {
     }
 }
 
-impl fmt::Display for ExprKind<'_> {
+impl fmt::Display for ExprKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExprKind::Number(n) => write!(f, "{}", n),
             ExprKind::Word(s) => write!(f, "{}", s),
             ExprKind::Bool(b) => write!(f, "{}", b),
             ExprKind::Nil => write!(f, "nil"),
-            ExprKind::Lambda(params, body) => write!(f, "(lambda ({}) {:#?})", params.join(" "), body),
+            ExprKind::Lambda(proc, params) => {
+                write!(f, "(lambda of {params:?}")
+            }
             ExprKind::Def(name, lambda) => write!(f, "(def {} {:#?})", name, lambda),
             ExprKind::Begin(exprs) => write!(f, "(begin {:#?})", exprs),
             ExprKind::Apply(func, args) => write!(f, "(apply {:#?} {:#?})", func, args),
@@ -315,41 +239,34 @@ impl fmt::Display for ExprKind<'_> {
     }
 }
 
-impl<'a> Expr<'a> {
-    pub fn new(expr: i32) -> Expr<'a> {
+impl Expr {
+    pub fn new(expr: i32) -> Expr {
         Expr {
             expr: ExprKind::Number(expr),
             state: State::Evaluated,
-            file: "main.rs",
+            file: "main.rs".to_string(),
         }
     }
 
     pub fn eval(self) -> Self {
         let val = match self.state {
             State::Thunk(vars) => {
-                let thunk = self.expr;
-                let thunk = match thunk {
-                    ExprKind::Lambda(params, body) => {
-                        println!("(thunk lambda");
-                        if params.len() > 0 {
-                            panic!("expected 0 params, got {}", params.len());
-                            
-                        }
-                        let app = Expr {
-                            expr: ExprKind::Apply(body, vec![]),
-                            state: State::Thunk(vars.clone()),
-                            file: "main.rs",
-                        };
-                        eval_expr(app, vars, 0)
-                    }
-                    _ => panic!("Not a thunk"),
-                };
-                Expr {
-                    expr: thunk.expr,
-                    state: State::Evaluated,
-                    file: "main.rs",
-                }
-            } 
+                // let thunk = self.expr;
+                // let thunk = match thunk {
+                //     ExprKind::Lambda(params, ) => {
+                //         println!("(thunk lambda");
+
+                //         eval_expr(params(vec![]), vars, 0)
+                //     }
+                //     _ => panic!("Not a thunk"),
+                // };
+                // Expr {
+                //     expr: thunk.expr,
+                //     state: State::Evaluated,
+                //     file: "main.rs".to_string(),
+                // }
+                todo!()
+            }
             State::Evaluated => self,
         };
         val
@@ -363,10 +280,10 @@ impl<'a> Expr<'a> {
     }
 }
 
-impl<'a> Add for Expr<'a> {
-    type Output = Expr<'a>;
+impl Add for Expr {
+    type Output = Expr;
 
-    fn add(self, other: Expr<'a>) -> Expr<'a> {
+    fn add(self, other: Expr) -> Expr {
         // get the value of the first expression
         let expr1 = Expr::eval(self).get_number();
         // get the value of the second expression
@@ -375,16 +292,15 @@ impl<'a> Add for Expr<'a> {
         Expr {
             expr: ExprKind::Number(expr1 + expr2),
             state: State::Evaluated,
-            file: "main.rs",
+            file: "main.rs".to_string(),
         }
     }
 }
 
+impl Sub for Expr {
+    type Output = Expr;
 
-impl<'a> Sub for Expr<'a> {
-    type Output = Expr<'a>;
-
-    fn sub(self, other: Expr<'a>) -> Expr<'a> {
+    fn sub(self, other: Expr) -> Expr {
         // get the value of the first expression
         let expr1 = Expr::eval(self).get_number();
         // get the value of the second expression
@@ -393,15 +309,15 @@ impl<'a> Sub for Expr<'a> {
         Expr {
             expr: ExprKind::Number(expr1 - expr2),
             state: State::Evaluated,
-            file: "main.rs",
+            file: "main.rs".to_string(),
         }
     }
 }
 
-impl<'a> Mul for Expr<'a> {
-    type Output = Expr<'a>;
+impl Mul for Expr {
+    type Output = Expr;
 
-    fn mul(self, other: Expr<'a>) -> Expr<'a> {
+    fn mul(self, other: Expr) -> Expr {
         // get the value of the first expression
         let expr1 = Expr::eval(self).get_number();
         // get the value of the second expression
@@ -410,16 +326,15 @@ impl<'a> Mul for Expr<'a> {
         Expr {
             expr: ExprKind::Number(expr1 * expr2),
             state: State::Evaluated,
-            file: "main.rs",
+            file: "main.rs".to_string(),
         }
     }
 }
 
+impl Div for Expr {
+    type Output = Expr;
 
-impl<'a> Div for Expr<'a> {
-    type Output = Expr<'a>;
-
-    fn div(self, other: Expr<'a>) -> Expr<'a> {
+    fn div(self, other: Expr) -> Expr {
         // get the value of the first expression
         let expr1 = Expr::eval(self).get_number();
         // get the value of the second expression
@@ -428,18 +343,12 @@ impl<'a> Div for Expr<'a> {
         Expr {
             expr: ExprKind::Number(expr1 / expr2),
             state: State::Evaluated,
-            file: "main.rs",
+            file: "main.rs".to_string(),
         }
     }
 }
 
-
-
-
-
-
-
-impl<'a> fmt::Display for Expr<'a> {
+impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.state {
             State::Thunk(_) => write!(f, "Expr: {}, file: {}", self.expr, self.file),
@@ -447,74 +356,367 @@ impl<'a> fmt::Display for Expr<'a> {
         }
     }
 }
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum Ast<> {
-//     Add(Box<Ast>, Box<Ast>),
-//     Sub(Box<Ast>, Box<Ast>),
-//     Mul(Box<Ast>, Box<Ast>),
-//     Div(Box<Ast>, Box<Ast>),
-//     Exp(Box<Ast>),
-//     Display(Box<Ast>),
-
-// }
-
-// env.borrow_mut().insert("+".to_string(),  Expr {
-//     expr: ExprKind::Lambda(vec!["x".to_string(), "y".to_string()], Box::new({
-//         let x = eval_expr(Expr { expr: ExprKind::Symbol("x".to_string()), state: State::Evaluated, file: "main.rs" }, env.clone(), 0);
-//         let y = eval_expr(Expr { expr: ExprKind::Symbol("y".to_string()), state: State::Evaluated, file: "main.rs" }, env.clone(), 0);
-//         x + y
-
-//     })),
-//     state: State::Evaluated,
-//     file: "main.rs",
-// });
 
 macro_rules! add_math_fn {
     ($symbol:literal, $op:tt, $env:expr) => {
         {
+            let v = vec![String::from("x"), String::from("y")];
             let e = Expr {
-                expr: ExprKind::Lambda(vec!["x".to_string(), "y".to_string()], Box::new({
-                    // get this to be evaluated later, maybe my theoery is wrong about using ekprtype lambda to implement lazy evaluation
-                    let x = eval_expr(Expr { expr: ExprKind::Symbol("x".to_string()), state: State::Evaluated, file: "main.rs" }, $env.clone(), 0);
-                    let y = eval_expr(Expr { expr: ExprKind::Symbol("y".to_string()), state: State::Evaluated, file: "main.rs" }, $env.clone(), 0);
-                    x $op y
-    
-                })),
+                expr: ExprKind::Lambda(|args, _env|
+                    if args.len() != 2 {
+                        panic!()
+                    } else {
+
+                        args[0].clone() $op args[1].clone()
+                    }
+             ,v),
                 state: State::Evaluated,
-                file: "main.rs",
+                file: "main.rs".to_string(),
             };
             $env.borrow_mut().insert($symbol.to_string(),  e);
         }
-        
+
     };
 }
 fn main() {
-    let ast = vec![
-        Expr {
-            expr: ExprKind::Number(1),
-            state: State::Evaluated,
-            file: "main.rs",
-        },
-    ];
-    let env = Rc::new(RefCell::new(HashMap::new()));
+    // let ast = vec![
+    //     Expr {
+    //         expr: ExprKind::Var("x".to_string(), Box::new(Expr {
+    //             expr: ExprKind::Number(1),
+    //             state: State::Evaluated,
+    //             file: "main.rs".to_string(),
+    //         }),),
+    //         state: State::Evaluated,
+    //         file: "main.rs".to_string(),
+    //     },
+    //     Expr {
+    //     expr: ExprKind::Apply(
+    //         Box::new(Expr {
+    //             expr: ExprKind::Symbol("+".to_string()),
+    //             state: State::Evaluated,
+    //             file: "main.rs".to_string(),
+    //         }),
+    //         vec![
+    //             Expr {
+    //                 expr: ExprKind::Apply(
+    //                     Box::new(Expr {
+    //                         expr: ExprKind::Symbol("/".to_string()),
+    //                         state: State::Evaluated,
+    //                         file: "main.rs".to_string(),
+    //                     }),
+    //                     vec![
+    //                         Expr {
+    //                             expr: ExprKind::Symbol("x".to_string()),
+    //                             state: State::Evaluated,
+    //                             file: "main.rs".to_string(),
+    //                         },
+    //                         Expr {
+    //                             expr: ExprKind::Number(1),
+    //                             state: State::Evaluated,
+    //                             file: "main.rs".to_string(),
+    //                         },
+    //                     ],
+    //                 ),
+    //                 state: State::Evaluated,
+    //                 file: "main.rs".to_string(),
+    //             },
+    //             Expr {
+    //                 expr: ExprKind::Number(2),
+    //                 state: State::Evaluated,
+    //                 file: "main.rs".to_string(),
+    //             },
+    //         ],
+    //     ),
+    //     state: State::Evaluated,
+    //     file: "main.rs".to_string(),
+    // }];
+    let env = Env::new();
 
     add_math_fn!("+", +, env);
     add_math_fn!("-", -, env);
     add_math_fn!("*", *, env);
     add_math_fn!("/", /, env);
+    // add cons should be defined via a lambda ie (cons x y) = (lambda (m) (m x y))
+    //((lambda (m) (m 1 2))
+    // (define (cons x y)    (lambda (m) (m x y)))
+    // (define cons (lambda (x y) (lambda (m) (m x y)))
+    let v = vec![String::from("x"), String::from("y")];
+    // tip you might want to use Env::from to create a new env from an existing one
+    // so that we can emulate lexical scoping and closures
+    // without using actual closures from rust ie FnOnce FnMut Fn
+    let e = Expr {
+        expr: ExprKind::Lambda(
+            |args, env| {
+                if args.len() != 2 {
+                    panic!()
+                } else {
+                    let mut new_env = Env::from(env);
+                    new_env.insert("x".to_string(), args[0].clone());
+                    new_env.insert("y".to_string(), args[1].clone());
+                    Expr {
+                        expr: ExprKind::Lambda(
+                            |args, env| {
+                                if args.len() != 1 {
+                                    panic!()
+                                } else {
+                                    let mut new_env = Env::from(env);
+                                    new_env.insert("m".to_string(), args[0].clone());
+                                    Expr {
+                                        expr: ExprKind::Apply(
+                                            Box::new(new_env.get(&"m".to_string()).unwrap().clone()),
+                                            vec![
+                                                new_env.get(&"x".to_string()).unwrap().clone(),
+                                                new_env.get(&"y".to_string()).unwrap().clone(),
+                                            ],
+                                        ),
+                                        state: State::Evaluated,
+                                        file: "main.rs".to_string(),
+                                    }
+                                }
+                            },
+                            vec!["m".to_string()],
+                        ),
+                        state: State::Evaluated,
+                        file: "main.rs".to_string(),
+                    }
+                }
+            },
+            v,
+        ),
+        state: State::Evaluated,
+        file: "main.rs".to_string(),
+    };
+    env.borrow_mut().insert("cons".to_string(), e);
 
+    // car
+    // (define (car x) (x (lambda (p q) p)))
+    let v = vec![String::from("x")];
+    let e = Expr {
+        expr: ExprKind::Lambda(
+            |args, env| {
+                if args.len() != 1 {
+                    panic!()
+                } else {
+                    let new_env = Env::from(env);
+                    new_env.insert("x".to_string(), args[0].clone());
+                    Expr {
+                        expr: ExprKind::Apply(
+                            Box::new(new_env.get(&"x".to_string()).unwrap().clone()),
+                            vec![
+                                Expr {
+                                    expr: ExprKind::Lambda(
+                                        |args, env| {
+                                            if args.len() != 2 {
+                                                panic!()
+                                            } else {
+                                                let new_env = Env::from(env);
+                                                new_env.insert("p".to_string(), args[0].clone());
+                                                new_env.insert("q".to_string(), args[1].clone());
+                                                new_env.get(&"p".to_string()).unwrap().clone()
+                                            }
+                                        },
+                                        vec!["p".to_string(), "q".to_string()],
+                                    ),
+                                    state: State::Evaluated,
+                                    file: "main.rs".to_string(),
+                                },
+                            ],
+                        ),
+                        state: State::Evaluated,
+                        file: "main.rs".to_string(),
+                    }
+                }
+            },
+            v,
+        ),
+        state: State::Evaluated,
+        file: "main.rs".to_string(),
+    };
+    env.borrow_mut().insert("car".to_string(), e);
+
+    // cdr
+    // (define (cdr x) (x (lambda (p q) q)))
+    let v = vec![String::from("x")];
+    let e = Expr {
+        expr: ExprKind::Lambda(
+            |args, env| {
+                if args.len() != 1 {
+                    panic!()
+                } else {
+                    let new_env = Env::from(env);
+                    new_env.insert("x".to_string(), args[0].clone());
+                    Expr {
+                        expr: ExprKind::Apply(
+                            Box::new(new_env.get(&"x".to_string()).unwrap().clone()),
+                            vec![
+                                Expr {
+                                    expr: ExprKind::Lambda(
+                                        |args, env| {
+                                            if args.len() != 2 {
+                                                panic!()
+                                            } else {
+                                                let new_env = Env::from(env);
+                                                new_env.insert("p".to_string(), args[0].clone());
+                                                new_env.insert("q".to_string(), args[1].clone());
+                                                new_env.get(&"q".to_string()).unwrap().clone()
+                                            }
+                                        },
+                                        vec!["p".to_string(), "q".to_string()],
+                                    ),
+                                    state: State::Evaluated,
+                                    file: "main.rs".to_string(),
+                                },
+                            ],
+                        ),
+                        state: State::Evaluated,
+                        file: "main.rs".to_string(),
+                    }
+                }
+            },
+            v,
+        ),
+        state: State::Evaluated,
+        file: "main.rs".to_string(),
+    };
+    env.borrow_mut().insert("cdr".to_string(), e);
+
+   
+    let ast = vec![
+        // make var (list) that has the value of (cons 1 2)
+        Expr {
+            expr: ExprKind::Var(
+                "list".to_string(),
+                Box::new(Expr {
+                    expr: ExprKind::Apply(
+                        Box::new(Expr {
+                            expr: ExprKind::Symbol("cons".to_string()),
+                            state: State::Evaluated,
+                            file: "main.rs".to_string(),
+                        }),
+                        vec![
+                            Expr {
+                                expr: ExprKind::Number(1),
+                                state: State::Evaluated,
+                                file: "main.rs".to_string(),
+                            },
+                            Expr {
+                                expr: ExprKind::Number(2),
+                                state: State::Evaluated,
+                                file: "main.rs".to_string(),
+                            },
+                        ],
+                    ),
+                    state: State::Evaluated,
+                    file: "main.rs".to_string(),
+                }),
+            ),
+            state: State::Evaluated,
+            file: "main.rs".to_string(),
+        },
+        // acces car of list
+        Expr {
+            expr: ExprKind::Apply(
+                Box::new(Expr {
+                    expr: ExprKind::Symbol("car".to_string()),
+                    state: State::Evaluated,
+                    file: "main.rs".to_string(),
+                }),
+                vec![Expr {
+                    expr: ExprKind::Symbol("list".to_string()),
+                    state: State::Evaluated,
+                    file: "main.rs".to_string(),
+                }],
+            ),
+            state: State::Evaluated,
+            file: "main.rs".to_string(),
+        },
+        // acces cdr of list
+        Expr {
+            expr: ExprKind::Apply(
+                Box::new(Expr {
+                    expr: ExprKind::Symbol("cdr".to_string()),
+                    state: State::Evaluated,
+                    file: "main.rs".to_string(),
+                }),
+                vec![Expr {
+                    expr: ExprKind::Symbol("list".to_string()),
+                    state: State::Evaluated,
+                    file: "main.rs".to_string(),
+                }],
+            ),
+            state: State::Evaluated,
+            file: "main.rs".to_string(),
+        },
+        // add car and cdr
+        Expr {
+            expr: ExprKind::Apply(
+                Box::new(Expr {
+                    expr: ExprKind::Symbol("+".to_string()),
+                    state: State::Evaluated,
+                    file: "main.rs".to_string(),
+                }),
+                vec![
+                    Expr {
+                        expr: ExprKind::Apply(
+                            Box::new(Expr {
+                                expr: ExprKind::Symbol("car".to_string()),
+                                state: State::Evaluated,
+                                file: "main.rs".to_string(),
+                            }),
+                            vec![Expr {
+                                expr: ExprKind::Symbol("list".to_string()),
+                                state: State::Evaluated,
+                                file: "main.rs".to_string(),
+                            }],
+                        ),
+                        state: State::Evaluated,
+                        file: "main.rs".to_string(),
+                    },
+                    Expr {
+                        expr: ExprKind::Apply(
+                            Box::new(Expr {
+                                expr: ExprKind::Symbol("cdr".to_string()),
+                                state: State::Evaluated,
+                                file: "main.rs".to_string(),
+                            }),
+                            vec![Expr {
+                                expr: ExprKind::Symbol("list".to_string()),
+                                state: State::Evaluated,
+                                file: "main.rs".to_string(),
+                            }],
+                        ),
+                        state: State::Evaluated,
+                        file: "main.rs".to_string(),
+                    },
+                ],
+            ),
+            state: State::Evaluated,
+            file: "main.rs".to_string(),
+        },
+        // finished ast
+    ];
 
     // expr.expr = 0
-    let mut expr = Expr {
-        expr: ExprKind::Nil,
-        state: State::Evaluated,
-        file: "main.rs",
-    };
+    let mut expr;
 
     for a in ast {
-        println!("a: {}", a);
+        // println!("a: {}", a);
+        // print_env(env.clone());
         expr = eval_expr(a, env.clone(), 0);
-    
-        println!("expr: {}", Expr::eval(expr));
+
+        println!("expr: {}", eval_expr(eval_expr(expr, env.clone(), 0), env.clone(), 0));
     }
+}
+
+// prints user defined variables/functions
+fn print_env(env: Env) {
+    println!("env:");
+    for (k, v) in env.borrow().iter() {
+        if k == "cons" || k == "car" || k == "cdr" || "+-*/".contains(k) {
+            continue;
+        }
+
+        println!("{}: {}", k, v);
+    }
+    println!("end env");
 }
