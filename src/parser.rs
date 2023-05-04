@@ -45,7 +45,6 @@ fn pare_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             None => panic!("No closing bracket"),
         }
     }
-    // TODO:
     // check for special forms
     // ie (define (f x) (+ x 1)) def
     // ie (lambda (x) (+ x 1)) lambda
@@ -54,10 +53,26 @@ fn pare_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     // otherwise apply
     // ie (+ 1 2) apply
 
-    Expr {
-        expr: ExprKind::Apply(Box::new(exprs[0].clone()), exprs[1..].to_vec()),
-        state: State::Evaluated,
-        file: String::new(),
+    if let Some(expr) = exprs.first() {
+        let expr = exprs.remove(0);
+        match expr.expr {
+            ExprKind::Symbol(sym) if "define" == sym.as_str() => {
+                parse_define(exprs)
+            }
+            ExprKind::Symbol(sym) if "lambda" == sym.as_str() => {
+                parse_lambda( exprs)
+            }
+            ExprKind::Symbol(sym) if "begin" == sym.as_str() => {
+                parse_begin(exprs)
+            }
+            _ => {
+                Expr {
+                    expr: ExprKind::Apply(Box::new(expr), exprs),
+                    state: State::Evaluated,
+                    file: String::new(),
+                }
+            }
+        }
     }
 }
 
@@ -130,6 +145,79 @@ pub fn parse_string(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     }
     Expr {
         expr: ExprKind::Word(string),
+        state: State::Evaluated,
+        file: String::new(),
+    }
+}
+
+pub fn parse_define(mut exprs: Vec<Expr>) -> Expr {
+    // if the first expr is a symbol then it is a variable assignment
+    // ie (define x 1)
+    // if the first expr is a list then it is a function definition
+    // ie (define (f x) (+ x 1))
+
+    let expr = exprs.remove(0);
+    match expr.expr {
+        ExprKind::Symbol(s) => {
+            let value = exprs.remove(0);
+            Expr {
+                expr: ExprKind::Var(s, Box::new(value)),
+                state: State::Evaluated,
+                file: String::new(),
+            }
+        }
+        ExprKind::Apply(sym, args) => {
+            let mut args = args;
+            let sym = *sym;
+            let name = match sym.expr {
+                ExprKind::Symbol(s) => s,
+                _ => panic!("Invalid function name"),
+            };
+    
+            let body = exprs.remove(0);
+            if !matches!(body.expr, ExprKind::Lambda(..)) {
+                panic!("Invalid function body");
+            }
+            Expr {
+                expr: ExprKind::Def(name, Box::new(body)),
+                state: State::Evaluated,
+                file: String::new(),
+            }
+            
+        }
+        _ => panic!("Invalid define"),
+    }    
+}
+
+pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
+    // lambda is a special form defined as
+    // Lambda(
+    //     fn(Vec<Expr>, Env) -> Expr,
+    //     Vec<String>,
+    // ),
+    // ie (lambda (x) (+ x 1))
+    // would be |exprs| exprs[0] + 1, ["x"]
+
+    let args = match exprs.remove(0).expr {
+        ExprKind::Apply(arg0 , args) => {
+            let mut args= args.iter().map(|arg| match arg.expr {
+                ExprKind::Symbol(s) => s,
+                _ => panic!("Invalid lambda"),
+            }).collect::<Vec<String>>();
+    
+            match arg0.expr {
+                ExprKind::Symbol(s) => {
+                    args.insert(0, s);
+                }
+                _ => panic!("Invalid lambda"),
+            }
+            args
+        }
+        _ => panic!("Invalid lambda"),
+    };
+    let body = exprs.remove(0);
+    Expr {
+        expr: ExprKind::Lambda(move |_, env| eval_expr(body, env, 0), args),
         state: State::Evaluated,
         file: String::new(),
     }

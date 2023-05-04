@@ -20,6 +20,10 @@ pub enum ExprKind {
     Apply(Box<Expr>, Vec<Expr>),
     Symbol(String),
     Var(String, Box<Expr>),
+    UserLambda(
+        Box<Expr>,
+        Vec<String>,
+    ),
 }
 
 #[derive(Clone, Debug)]
