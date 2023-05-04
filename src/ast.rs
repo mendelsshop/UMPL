@@ -28,11 +28,23 @@ pub enum State
     Thunk(Env),
     Evaluated,
 }
-#[derive(Debug, Clone)]
+
+#[derive(Clone, Debug)]
 pub struct Expr {
     pub expr: ExprKind,
     pub state: State,
     pub(crate) file: String,
+}
+
+impl Expr {
+    pub fn initialize(mut self, env: &Env) -> Self {
+        if let ExprKind::UserLambda(_, _, ref mut closure) = self.expr {
+            if closure.is_none() {
+                *closure = Some(env.new_child());
+            }
+        }
+        self
+    }
 }
 
 impl ExprKind {
@@ -104,14 +116,6 @@ impl fmt::Debug for ExprKind {
     }
 }
 impl Expr {
-    pub fn new(expr: i32) -> Self {
-        Self {
-            expr: ExprKind::Number(expr),
-            state: State::Evaluated,
-            file: "default.rs".to_string(),
-        }
-    }
-
     pub fn eval(self) -> Self {
         match self.state {
             State::Thunk(_vars) => {
@@ -136,10 +140,7 @@ impl Expr {
     }
 
     pub fn get_number(&self) -> i32 {
-        match &self.expr {
-            ExprKind::Number(n) => *n,
-            other => panic!("Not a number: {other:?}"),
-        }
+        self.expr.get_number()
     }
 }
 

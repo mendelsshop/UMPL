@@ -15,13 +15,17 @@ pub fn parse(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             '0'..='9' => parse_number(chars),
 
             '"' => parse_string(chars),
-            '(' => pare_list(chars),
+            '(' => parse_list(chars),
+            ' ' | '\n' | '\t' => {
+                chars.next();
+                parse(chars)
+            }
             _ => parse_symbol(chars),
         },
     )
 }
 
-fn pare_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
+fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     chars.next();
     let mut exprs = vec![];
     loop {
