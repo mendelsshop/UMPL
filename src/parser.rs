@@ -71,6 +71,7 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             ExprKind::Symbol(sym) if "define" == sym.as_str() => parse_define(exprs),
             ExprKind::Symbol(sym) if "lambda" == sym.as_str() => parse_lambda(exprs),
             ExprKind::Symbol(sym) if "begin" == sym.as_str() => parse_begin(exprs),
+            ExprKind::Symbol(sym) if "set!" == sym.as_str() => parse_set(exprs),
             _ => Expr {
                 expr: ExprKind::Apply(Box::new(expr), exprs),
                 state: State::Evaluated,
@@ -244,6 +245,20 @@ pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
     let body = parse_begin(exprs);
     Expr {
         expr: ExprKind::UserLambda(Box::new(body), args, None),
+        state: State::Evaluated,
+        file: String::new(),
+    }
+}
+
+// (set! x 1)
+// or (set! x (+ x 1))
+pub fn parse_set(mut exprs: Vec<Expr>) -> Expr {
+    // x
+    let ExprKind::Symbol(var) = exprs.remove(0).expr else { panic!("Invalid set!") };
+    // 1
+    let val = exprs.remove(0);
+    Expr {
+        expr: ExprKind::Set(var, Box::new(val)),
         state: State::Evaluated,
         file: String::new(),
     }

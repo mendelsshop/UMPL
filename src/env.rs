@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::{
     ast::{Expr, ExprKind, State},
-    eval::eval_expr,
+    eval::{apply, eval_expr},
     parser,
 };
 
@@ -113,6 +113,14 @@ impl Env {
     }
 }
 
+macro_rules! eval_to_env {
+    ($definition:literal, $env:expr) => {
+        eval_expr(
+            parser::parse(&mut $definition.chars().peekable()),
+            $env.clone(),
+        )
+    };
+}
 
 fn setup_envoirment(env: &Env) {
     add_binary_fn!("+",env,ExprKind::Number, +,Expr::get_number);
@@ -120,6 +128,10 @@ fn setup_envoirment(env: &Env) {
     add_binary_fn!("*",env,ExprKind::Number, *,Expr::get_number);
     add_binary_fn!("/",env,ExprKind::Number, /,Expr::get_number);
     add_binary_fn!("%",env,ExprKind::Number, %,Expr::get_number);
+    // the reason we have to use the |e|e is because we need to have something
+    // that when we call it, it returns the value of the expression modified so it should work with the operator
+    // but in the case of the boolean operators, we don't need to do anything to the expression
+    // so we end up with |e|e weirdness
     add_binary_fn!("=",env,ExprKind::Bool,  == , |e|e);
     add_binary_fn!("<",env,ExprKind::Bool, <, |e|e);
     add_binary_fn!(">",env,ExprKind::Bool, >, |e|e);
@@ -151,39 +163,21 @@ fn setup_envoirment(env: &Env) {
         },
         1
     );
-    let newline = Expr {
+    eval_to_env!("(define (newline) (display \"\\n\"))", env);
+    eval_to_env!("(define (cons x y) (lambda (m) (m x y)))", env);
+    eval_to_env!("(define (car z) (z (lambda (p q) p)))", env);
+    eval_to_env!("(define (cdr z) (z (lambda (p q) q)))", env);
+    eval_to_env!("(define (set-car! z x) (set! z (cons x (cdr z))))", env);
+    eval_to_env!("(define (set-cdr! z x) (set! z (cons (car z) x)))", env);
+    let apply = Expr {
         expr: ExprKind::Lambda(
-            |_args, _env| {
-                println!();
-                Expr {
-                    expr: ExprKind::Nil,
-                    state: State::Evaluated,
-                    file: "newline.rs".to_string(),
-                }
-            },
+            |args, env| apply(args[0].clone(), env, args[1..].to_vec()),
             vec![],
         ),
         state: State::Evaluated,
-        file: "newline.rs".to_string(),
+        file: "apply.rs".to_string(),
     };
-    env.insert("newline".to_string(), newline);
-    eval_expr(
-        parser::parse(
-            &mut "(define (cons x y) (lambda (m) (m x y)))"
-                .chars()
-                .peekable(),
-        ),
-        env.clone(),
-    );
-    eval_expr(
-        parser::parse(&mut "(define (car z) (z (lambda (p q) p)))".chars().peekable()),
-        env.clone(),
-    );
-    eval_expr(
-        parser::parse(&mut "(define (cdr z) (z (lambda (p q) q)))".chars().peekable()),
-        env.clone(),
-    );
-    // TODO: add set!, set-car!, set-cdr! (might have to be special forms in eval.rs)
+    env.insert("apply".to_string(), apply);
     add_literal!("nil", ExprKind::Nil, env.clone());
     add_literal!("true", ExprKind::Bool(true), env.clone());
     add_literal!("false", ExprKind::Bool(false), env.clone());

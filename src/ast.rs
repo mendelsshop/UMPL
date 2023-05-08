@@ -19,6 +19,7 @@ pub enum ExprKind {
     Symbol(String),
     Var(String, Box<Expr>),
     UserLambda(Box<Expr>, Vec<String>, Option<Env>),
+    Set(String, Box<Expr>),
 }
 
 impl PartialOrd for ExprKind {
@@ -159,6 +160,7 @@ impl fmt::Display for ExprKind {
             Self::UserLambda(body, params, _) => {
                 write!(f, "(lambda {body} of {})", params.join(", "))
             }
+            Self::Set(s, e) => write!(f, "(set {s} {e})"),
         }
     }
 }
@@ -181,6 +183,7 @@ impl fmt::Debug for ExprKind {
             Self::UserLambda(body, params, _) => {
                 write!(f, "user lambda ({body:?}, {params:?})")
             }
+            Self::Set(s, e) => write!(f, "set ({s:?}, {e:?})"),
         }
     }
 }

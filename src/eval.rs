@@ -50,13 +50,22 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
                 file: "def.rs".to_string(),
             }
         }
+        ExprKind::Set(name, expr) => {
+            let v = eval_expr(*expr, vars.clone());
+            vars.set(name, v);
+            Expr {
+                expr: ExprKind::Nil,
+                state: State::Evaluated,
+                file: "set.rs".to_string(),
+            }
+        }
         // have list of primitives, so that we will only evaluate the arguments of primitives
         // and we can have lazy evaluation for user-defined functions (and possibly some primitives)
         ExprKind::Apply(func, args) => apply(*func, vars, args),
     }
 }
 
-fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
+pub(crate) fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
     let func = eval_expr(func, vars.clone());
     match func.expr {
         ExprKind::Lambda(p, _) => {
