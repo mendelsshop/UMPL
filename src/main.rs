@@ -23,8 +23,11 @@ fn main() {
         let mut chars = input.trim().chars().peekable();
         while chars.peek().is_some() {
             let expr = parser::parse(&mut chars);
+            // we evaluate the expression but don't print the result
+            // because we want to any calls to display to print before the output prompt (=>)
+            let result = eval_expr(expr, env.clone());
             println!("=>");
-            println!("{}", eval_expr(expr, env.clone()));
+            println!("{result}");
         }
     }
 }

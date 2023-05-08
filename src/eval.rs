@@ -12,9 +12,10 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
         | ExprKind::Bool(_)
         | ExprKind::Lambda(_, _)
         | ExprKind::UserLambda(_, _, _) => epr.initialize(&vars),
-
         // case: lookup
-        ExprKind::Symbol(s) => vars.get(&s).unwrap(),
+        ExprKind::Symbol(s) => vars
+            .get(&s)
+            .unwrap_or_else(|| panic!("Symbol not found: {s}")),
         // case: define variable
         ExprKind::Var(s, i) => {
             let v = eval_expr(*i, vars.clone());
@@ -36,7 +37,6 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
             }
             final_val
         }
-
         ExprKind::Def(name, lambda) => {
             match &lambda.expr {
                 ExprKind::Lambda(_, _) | ExprKind::UserLambda(_, _, _) => {
@@ -50,6 +50,8 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
                 file: "def.rs".to_string(),
             }
         }
+        // have list of primitives, so that we will only evaluate the arguments of primitives
+        // and we can have lazy evaluation for user-defined functions (and possibly some primitives)
         ExprKind::Apply(func, args) => apply(*func, vars, args),
     }
 }

@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     fmt,
     ops::{Add, Div, Mul, Sub},
 };
@@ -20,6 +21,30 @@ pub enum ExprKind {
     UserLambda(Box<Expr>, Vec<String>, Option<Env>),
 }
 
+impl PartialOrd for ExprKind {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Self::Number(n), Self::Number(m)) => n.partial_cmp(m),
+            (Self::Word(n), Self::Word(m)) => n.partial_cmp(m),
+            (Self::Bool(n), Self::Bool(m)) => n.partial_cmp(m),
+            (Self::Nil, Self::Nil) => Some(Ordering::Equal),
+            _ => None,
+        }
+    }
+}
+
+impl PartialEq for ExprKind {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Number(n), Self::Number(m)) => n == m,
+            (Self::Word(n), Self::Word(m)) => n == m,
+            (Self::Bool(n), Self::Bool(m)) => n == m,
+            (Self::Nil, Self::Nil) => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum State
 // <'a, F: FnOnce(usize) -> Expr>
@@ -36,6 +61,19 @@ pub struct Expr {
     pub(crate) file: String,
 }
 
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.expr == other.expr
+    }
+}
+
+impl PartialOrd for Expr {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        println!("{:?}", self.expr);
+        println!("{:?}", other.expr);
+        self.expr.partial_cmp(&other.expr)
+    }
+}
 impl Expr {
     pub fn initialize(mut self, env: &Env) -> Self {
         if let ExprKind::UserLambda(_, _, ref mut closure) = self.expr {
@@ -47,13 +85,44 @@ impl Expr {
     }
 }
 
-impl ExprKind {
-    pub fn get_number(&self) -> i32 {
-        match self {
-            Self::Number(n) => *n,
-            _ => panic!("Not a number"),
+macro_rules! get_type {
+    ($self:ident, $type:ident, $ret:ty, $func:ident) => {
+        pub fn $func(&self) -> $ret {
+            match self {
+                Self::$type(n) => n.clone(),
+                other => panic!("Expected {}, got {:?}", stringify!($type), other),
+            }
         }
-    }
+    };
+}
+macro_rules! impl_op {
+    ($trait:ident, $method:ident, $op:tt) => {
+        impl $trait for Expr {
+            type Output = Expr;
+            fn $method(self, other: Self) -> Self::Output {
+                match (self.expr, other.expr) {
+                    (ExprKind::Number(n), ExprKind::Number(m)) => Expr {
+                        expr: ExprKind::Number(n $op m),
+                        state: State::Evaluated,
+                        file: String::new(),
+                    },
+                    _ => panic!("Invalid operation"),
+                }
+            }
+        }
+    };
+}
+
+impl_op!(Add, add, +);
+impl_op!(Sub, sub, -);
+impl_op!(Mul, mul, *);
+impl_op!(Div, div, /);
+
+impl ExprKind {
+    get_type!(self, Number, i32, get_number);
+    get_type!(self, Word, String, get_word);
+    get_type!(self, Bool, bool, get_bool);
+    get_type!(self, Symbol, String, get_symbol);
 }
 
 impl fmt::Display for ExprKind {
@@ -115,6 +184,19 @@ impl fmt::Debug for ExprKind {
         }
     }
 }
+
+// defines the function that calls the inner (Exprkind) function of the same name
+/// impl Expr {
+///    `call_inner!(self`, `get_number`, i32);
+/// }
+macro_rules! call_inner {
+    ($self:ident, $func:ident, $ret:ty) => {
+        pub fn $func(&self) -> $ret {
+            self.expr.$func()
+        }
+    };
+}
+
 impl Expr {
     pub fn eval(self) -> Self {
         match self.state {
@@ -139,77 +221,10 @@ impl Expr {
         }
     }
 
-    pub fn get_number(&self) -> i32 {
-        self.expr.get_number()
-    }
-}
-
-impl Add for Expr {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        // get the value of the first expression
-        let expr1 = Self::eval(self).get_number();
-        // get the value of the second expression
-        let expr2 = Self::eval(other).get_number();
-        // return the sum of the two expressions
-        Self {
-            expr: ExprKind::Number(expr1 + expr2),
-            state: State::Evaluated,
-            file: "add.rs".to_string(),
-        }
-    }
-}
-
-impl Sub for Expr {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self {
-        // get the value of the first expression
-        let expr1 = Self::eval(self).get_number();
-        // get the value of the second expression
-        let expr2 = Self::eval(other).get_number();
-        // return the sum of the two expressions
-        Self {
-            expr: ExprKind::Number(expr1 - expr2),
-            state: State::Evaluated,
-            file: "sub.rs".to_string(),
-        }
-    }
-}
-
-impl Mul for Expr {
-    type Output = Self;
-
-    fn mul(self, other: Self) -> Self {
-        // get the value of the first expression
-        let expr1 = Self::eval(self).get_number();
-        // get the value of the second expression
-        let expr2 = Self::eval(other).get_number();
-        // return the sum of the two expressions
-        Self {
-            expr: ExprKind::Number(expr1 * expr2),
-            state: State::Evaluated,
-            file: "mul.rs".to_string(),
-        }
-    }
-}
-
-impl Div for Expr {
-    type Output = Self;
-
-    fn div(self, other: Self) -> Self {
-        // get the value of the first expression
-        let expr1 = Self::eval(self).get_number();
-        // get the value of the second expression
-        let expr2 = Self::eval(other).get_number();
-        // return the sum of the two expressions
-        Self {
-            expr: ExprKind::Number(expr1 / expr2),
-            state: State::Evaluated,
-            file: "div.rs".to_string(),
-        }
-    }
+    call_inner!(self, get_number, i32);
+    call_inner!(self, get_word, String);
+    call_inner!(self, get_bool, bool);
+    call_inner!(self, get_symbol, String);
 }
 
 #[allow(clippy::match_same_arms)]

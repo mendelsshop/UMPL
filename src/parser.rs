@@ -133,6 +133,7 @@ pub fn parse_symbol(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
 }
 
 pub fn parse_string(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
+    chars.next();
     let mut string = String::new();
     // we don't need to use a loop here because we know that the string will end with a "
     // and that whatever calls this function should consume the closing " in this case
