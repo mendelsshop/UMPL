@@ -15,7 +15,7 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
         // case: lookup
         ExprKind::Symbol(s) => vars
             .get(&s)
-            .unwrap_or_else(|| panic!("Symbol not found: {s}")),
+            .unwrap_or_else(|| panic!("Symbol not found: `{s}`")),
         // case: define variable
         ExprKind::Var(s, i) => {
             let v = eval_expr(*i, vars.clone());
@@ -61,7 +61,7 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
         }
         // have list of primitives, so that we will only evaluate the arguments of primitives
         // and we can have lazy evaluation for user-defined functions (and possibly some primitives)
-        ExprKind::Apply(func, args) => apply(*func, vars, args),
+        ExprKind::List(args) => apply(args[0].clone(), vars, args[1..].to_vec()),
     }
 }
 

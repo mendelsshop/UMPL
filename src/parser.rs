@@ -4,7 +4,7 @@ use crate::ast::{Expr, ExprKind, State};
 
 // parser/lexer combination - both should happen at the same time for each expr
 // for basic scheme
-// so like (+ 1 2) -> ExprKind::Apply(Expr{ExprKind::Symbol("+"), State::Evaluated}, [Expr{ExprKind::Number(1), State::Evaluated}, Expr{ExprKind::Number(2), State::Evaluated}])
+// so like (+ 1 2) -> ExprKind::List(Expr{ExprKind::Symbol("+"), State::Evaluated}, [Expr{ExprKind::Number(1), State::Evaluated}, Expr{ExprKind::Number(2), State::Evaluated}])
 // also support for lambda and define and begin aswell as variable assignment and strings and booleans
 
 pub fn parse(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
@@ -54,14 +54,7 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
 
     if exprs.is_empty() {
         Expr {
-            expr: ExprKind::Apply(
-                Box::new(Expr {
-                    expr: ExprKind::Nil,
-                    state: State::Evaluated,
-                    file: String::new(),
-                }),
-                vec![],
-            ),
+            expr: ExprKind::List(vec![]),
             state: State::Evaluated,
             file: String::new(),
         }
@@ -73,7 +66,11 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             ExprKind::Symbol(sym) if "begin" == sym.as_str() => parse_begin(exprs),
             ExprKind::Symbol(sym) if "set!" == sym.as_str() => parse_set(exprs),
             _ => Expr {
-                expr: ExprKind::Apply(Box::new(expr), exprs),
+                expr: {
+                    let mut exprs = exprs;
+                    exprs.insert(0, expr);
+                    ExprKind::List(exprs)
+                },
                 state: State::Evaluated,
                 file: String::new(),
             },
@@ -138,7 +135,7 @@ pub fn parse_string(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     let mut string = String::new();
     // we don't need to use a loop here because we know that the string will end with a "
     // and that whatever calls this function should consume the closing " in this case
-    for c in chars {
+    for c in &mut *chars {
         if c == '"' {
             break;
         }
@@ -173,34 +170,19 @@ pub fn parse_define(mut exprs: Vec<Expr>) -> Expr {
             }
         }
         // (f x y z)
-        ExprKind::Apply(sym, mut args) => {
-            let sym = *sym;
+        ExprKind::List(mut args) => {
+            let sym = args.remove(0);
             // f
             let ExprKind::Symbol(name) = sym.expr else { panic!("Invalid function name") };
             // x y z
-            let arg = if args.is_empty() {
+            exprs.insert(
+                0,
                 Expr {
-                    expr: ExprKind::Apply(
-                        Box::new(Expr {
-                            expr: ExprKind::Nil,
-                            state: State::Evaluated,
-                            file: String::new(),
-                        }),
-                        vec![],
-                    ),
+                    expr: ExprKind::List(args),
                     state: State::Evaluated,
                     file: String::new(),
-                }
-            } else {
-                let farg = args.remove(0);
-                Expr {
-                    expr: ExprKind::Apply(Box::new(farg), args),
-                    state: State::Evaluated,
-                    file: String::new(),
-                }
-            };
-
-            exprs.insert(0, arg);
+                },
+            );
 
             Expr {
                 expr: ExprKind::Def(name, Box::new(parse_lambda(exprs))),
@@ -219,27 +201,19 @@ pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
     //     Vec<String>,
     // ),
     // ie (lambda (x) (+ x 1) (/ 1 2 3))
+    // this function is given (x) (+ x 1) (/ 1 2 3) from parse_list or parse_begin
+    // it can also be given () (+ 1 2) or (x y) (+ x y)
     // would be |exprs| exprs[0] + 1, ["x"]
     // x
     let args = match exprs.remove(0).expr {
-        ExprKind::Apply(arg0, args) => {
-            let mut args = args
-                .into_iter()
-                .map(|arg| match arg.expr {
-                    ExprKind::Symbol(s) => s,
-                    _ => panic!("Invalid lambda"),
-                })
-                .collect::<Vec<String>>();
-
-            match arg0.expr {
-                ExprKind::Symbol(s) => {
-                    args.insert(0, s);
-                }
-                _ => panic!("Invalid lambda"),
-            }
-            args
-        }
-        _ => panic!("Invalid lambda"),
+        ExprKind::List(args) => args
+            .into_iter()
+            .map(|arg| match arg.expr {
+                ExprKind::Symbol(s) => s,
+                other => panic!("Invalid lambda {other:?}"),
+            })
+            .collect::<Vec<String>>(),
+        bad => panic!("Invalid lambda {bad:?}"),
     };
     // (+ x 1) (/ 1 2 3)
     let body = parse_begin(exprs);

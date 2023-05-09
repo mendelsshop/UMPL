@@ -163,7 +163,7 @@ fn setup_envoirment(env: &Env) {
         },
         1
     );
-    eval_to_env!("(define (newline) (display \"\\n\"))", env);
+    eval_to_env!("(define (newline) (display \"\n\"))", env);
     eval_to_env!("(define (cons x y) (lambda (m) (m x y)))", env);
     eval_to_env!("(define (car z) (z (lambda (p q) p)))", env);
     eval_to_env!("(define (cdr z) (z (lambda (p q) q)))", env);

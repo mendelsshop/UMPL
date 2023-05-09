@@ -15,7 +15,7 @@ pub enum ExprKind {
     Lambda(fn(Vec<Expr>, Env) -> Expr, Vec<String>),
     Def(String, Box<Expr>),
     Begin(Vec<Expr>),
-    Apply(Box<Expr>, Vec<Expr>),
+    List(Vec<Expr>),
     Symbol(String),
     Var(String, Box<Expr>),
     UserLambda(Box<Expr>, Vec<String>, Option<Env>),
@@ -146,10 +146,9 @@ impl fmt::Display for ExprKind {
                     .collect::<Vec<String>>()
                     .join("\n")
             ),
-            Self::Apply(func, args) => write!(
+            Self::List(args) => write!(
                 f,
-                "(apply {} {})",
-                func,
+                "(list {})",
                 args.iter()
                     .map(ToString::to_string)
                     .collect::<Vec<String>>()
@@ -177,7 +176,7 @@ impl fmt::Debug for ExprKind {
             }
             Self::Def(name, lambda) => write!(f, "def ({name:?}, {lambda:?})"),
             Self::Begin(exprs) => write!(f, "begin ({exprs:?})"),
-            Self::Apply(func, args) => write!(f, "apply ({func:?}, {args:?})"),
+            Self::List(args) => write!(f, "list ({args:?})"),
             Self::Symbol(s) => write!(f, "symbol ({s:?})"),
             Self::Var(s, e) => write!(f, "var ({s:?}, {e:?})"),
             Self::UserLambda(body, params, _) => {
