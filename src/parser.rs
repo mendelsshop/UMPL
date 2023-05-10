@@ -65,6 +65,8 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             ExprKind::Symbol(sym) if "lambda" == sym.as_str() => parse_lambda(exprs),
             ExprKind::Symbol(sym) if "begin" == sym.as_str() => parse_begin(exprs),
             ExprKind::Symbol(sym) if "set!" == sym.as_str() => parse_set(exprs),
+            // (if pred consq alt)
+            ExprKind::Symbol(sym) if "if" == sym.as_str() => parse_if(exprs),
             _ => Expr {
                 expr: {
                     let mut exprs = exprs;
@@ -75,6 +77,22 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
                 file: String::new(),
             },
         }
+    }
+}
+
+fn parse_if(mut exprs: Vec<Expr>) -> Expr {
+    let predicate = exprs.remove(0);
+    let consequent = exprs.remove(0);
+    let alternative = exprs.remove(0);
+    // TODO: check that no more exprs in list or exprs
+    Expr {
+        expr: ExprKind::If(
+            Box::new(predicate),
+            Box::new(consequent),
+            Box::new(alternative),
+        ),
+        state: State::Evaluated,
+        file: String::new(),
     }
 }
 

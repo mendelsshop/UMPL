@@ -20,6 +20,7 @@ pub enum ExprKind {
     Var(String, Box<Expr>),
     UserLambda(Box<Expr>, Vec<String>, Option<Env>),
     Set(String, Box<Expr>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 impl PartialOrd for ExprKind {
@@ -38,9 +39,8 @@ impl PartialEq for ExprKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Number(n), Self::Number(m)) => n == m,
-            (Self::Word(n), Self::Word(m)) => n == m,
+            (Self::Word(n), Self::Word(m)) | (Self::Symbol(n), Self::Symbol(m))  => n == m,
             (Self::Bool(n), Self::Bool(m)) => n == m,
-            (Self::Symbol(n), Self::Symbol(m)) => n == m,
             (Self::Nil, Self::Nil) => true,
             _ => false,
         }
@@ -150,6 +150,9 @@ impl fmt::Display for ExprKind {
                 write!(f, "(lambda {body} of {})", params.join(", "))
             }
             Self::Set(s, e) => write!(f, "(set {s} {e})"),
+            Self::If(predicate, consequent, alternative) => {
+                write!(f, "if {predicate} {consequent} else {alternative}")
+            }
         }
     }
 }
@@ -173,6 +176,9 @@ impl fmt::Debug for ExprKind {
                 write!(f, "user lambda ({body:?}, {params:?})")
             }
             Self::Set(s, e) => write!(f, "set ({s:?}, {e:?})"),
+            Self::If(predicate, consequent, alternative) => {
+                write!(f, "if {predicate:?} {consequent:?} else {alternative:?}")
+            }
         }
     }
 }
@@ -192,7 +198,7 @@ macro_rules! call_inner {
 impl Expr {
     pub fn eval(&mut self) {
         if let State::Thunk(vars) = std::mem::take(&mut self.state) {
-            self.expr = actual_value(self.clone(), vars.clone()).expr
+            self.expr = actual_value(self.clone(), vars).expr
         }
     }
 

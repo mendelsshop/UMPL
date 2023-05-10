@@ -62,6 +62,13 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
         // have list of primitives, so that we will only evaluate the arguments of primitives
         // and we can have lazy evaluation for user-defined functions (and possibly some primitives)
         ExprKind::List(args) => apply(args[0].clone(), vars, args[1..].to_vec()),
+        ExprKind::If(predicate, consequent, alternative) => {
+            if actual_value(*predicate, vars.clone()).get_bool() {
+                eval_expr(*consequent, vars)
+            } else {
+                eval_expr(*alternative, vars)
+            }
+        }
     }
 }
 
