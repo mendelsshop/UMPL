@@ -39,7 +39,7 @@ impl PartialEq for ExprKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Number(n), Self::Number(m)) => n == m,
-            (Self::Word(n), Self::Word(m)) | (Self::Symbol(n), Self::Symbol(m))  => n == m,
+            (Self::Word(n), Self::Word(m)) | (Self::Symbol(n), Self::Symbol(m)) => n == m,
             (Self::Bool(n), Self::Bool(m)) => n == m,
             (Self::Nil, Self::Nil) => true,
             _ => false,
@@ -198,7 +198,7 @@ macro_rules! call_inner {
 impl Expr {
     pub fn eval(&mut self) {
         if let State::Thunk(vars) = std::mem::take(&mut self.state) {
-            self.expr = actual_value(self.clone(), vars).expr
+            self.expr = actual_value(self.clone(), vars).expr;
         }
     }
 

@@ -67,6 +67,7 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             ExprKind::Symbol(sym) if "set!" == sym.as_str() => parse_set(exprs),
             // (if pred consq alt)
             ExprKind::Symbol(sym) if "if" == sym.as_str() => parse_if(exprs),
+            ExprKind::Symbol(sym) if "cond" == sym.as_str() => parse_cons_to_if(exprs),
             _ => Expr {
                 expr: {
                     let mut exprs = exprs;
@@ -80,10 +81,54 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     }
 }
 
+fn parse_cons_to_if(mut exprs: Vec<Expr>) -> Expr {
+    // (cond
+    //  (p1 e1)
+    //  (p2 e2)
+    //  ...
+    //  ; possible end case
+    //  (else en)
+    //)
+    // given
+    //  (p1 e1)
+    //  (p2 e2)
+    //  ...
+    //  ; possible end case
+    //  (else en)
+    if exprs.is_empty() {
+        return Expr {
+            expr: ExprKind::Bool(false),
+            state: State::Evaluated,
+            file: String::new(),
+        };
+    }
+    let first = exprs.remove(0);
+    if let ExprKind::List(mut if_pred_cosq) = first.expr {
+        let remove = if_pred_cosq.remove(0);
+        match remove.expr {
+            ExprKind::Symbol(sym) if sym == "else" => {
+                assert!(exprs.is_empty());
+                if_pred_cosq.remove(0)
+            }
+            _ => {
+                let rest = parse_cons_to_if(exprs);
+                parse_if(vec![remove, if_pred_cosq.remove(0), rest])
+            }
+        }
+    } else {
+        panic!("invalid cons struct")
+    }
+}
+
 fn parse_if(mut exprs: Vec<Expr>) -> Expr {
     let predicate = exprs.remove(0);
     let consequent = exprs.remove(0);
-    let alternative = exprs.remove(0);
+    // if no alternative then default to false
+    let alternative = exprs.get(0).cloned().unwrap_or_else(|| Expr {
+        expr: ExprKind::Bool(false),
+        state: State::Evaluated,
+        file: String::new(),
+    });
     // TODO: check that no more exprs in list or exprs
     Expr {
         expr: ExprKind::If(
