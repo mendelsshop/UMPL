@@ -4,7 +4,7 @@
 
 use std::io::Write;
 
-use crate::{env::Env, eval::eval_expr};
+use crate::{env::Env, eval::actual_value};
 
 mod ast;
 mod env;
@@ -25,7 +25,8 @@ fn main() {
             let expr = parser::parse(&mut chars);
             // we evaluate the expression but don't print the result
             // because we want to any calls to display to print before the output prompt (=>)
-            let result = eval_expr(expr, env.clone());
+            // force lazy things
+            let result = actual_value(expr, env.clone());
             println!("=>");
             println!("{result}");
         }

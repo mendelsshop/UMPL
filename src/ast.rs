@@ -4,7 +4,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use crate::Env;
+use crate::{eval::actual_value, Env};
 
 #[derive(Clone)]
 pub enum ExprKind {
@@ -47,12 +47,10 @@ impl PartialEq for ExprKind {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum State
-// <'a, F: FnOnce(usize) -> Expr>
-{
-    // Thunk(Ast, usize, F),
+#[derive(Clone, Debug, Default)]
+pub enum State {
     Thunk(Env),
+    #[default]
     Evaluated,
 }
 
@@ -76,16 +74,7 @@ impl PartialOrd for Expr {
         self.expr.partial_cmp(&other.expr)
     }
 }
-impl Expr {
-    pub fn initialize(mut self, env: &Env) -> Self {
-        if let ExprKind::UserLambda(_, _, ref mut closure) = self.expr {
-            if closure.is_none() {
-                *closure = Some(env.new_child());
-            }
-        }
-        self
-    }
-}
+impl Expr {}
 
 macro_rules! get_type {
     ($self:ident, $type:ident, $ret:ty, $func:ident) => {
@@ -201,27 +190,19 @@ macro_rules! call_inner {
 }
 
 impl Expr {
-    pub fn eval(self) -> Self {
-        match self.state {
-            State::Thunk(_vars) => {
-                // let thunk = self.expr;
-                // let thunk = match thunk {
-                //     ExprKind::Lambda(params, ) => {
-                //         println!("(thunk lambda");
-
-                //         eval_expr(params(vec![]), vars, 0)
-                //     }
-                //     _ => panic!("Not a thunk"),
-                // };
-                // Expr {
-                //     expr: thunk.expr,
-                //     state: State::Evaluated,
-                //     file: "main.rs".to_string(),
-                // }
-                todo!()
-            }
-            State::Evaluated => self,
+    pub fn eval(&mut self) {
+        if let State::Thunk(vars) = std::mem::take(&mut self.state) {
+            self.expr = actual_value(self.clone(), vars.clone()).expr
         }
+    }
+
+    pub fn initialize(mut self, env: &Env) -> Self {
+        if let ExprKind::UserLambda(_, _, ref mut closure) = self.expr {
+            if closure.is_none() {
+                *closure = Some(env.new_child());
+            }
+        }
+        self
     }
 
     call_inner!(self, get_number, i32);
@@ -234,7 +215,7 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.state {
-            State::Thunk(_) => write!(f, "{}", self.expr),
+            State::Thunk(_) => write!(f, "thunk"),
             State::Evaluated => write!(f, "{}", self.expr),
         }
     }

@@ -66,34 +66,48 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
 }
 
 pub(crate) fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
-    let func = eval_expr(func, vars.clone());
-    match func.expr {
+    let mut func = eval_expr(func, vars.clone());
+    let args = match func.expr {
         // TODO: don't evaluate args - wrap in thunk
-        ExprKind::Lambda(p, _) => {
-            let args = args
-                .into_iter()
-                .map(|epr| eval_expr(epr, vars.clone()))
-                .collect();
-            p(args, vars)
-        }
-        ExprKind::UserLambda(p, params, closure) => {
-            let env = closure.unwrap_or_else(|| vars.new_child());
-            args.into_iter()
-                .map(|epr| eval_expr(epr, vars.clone()))
-                .zip(params.into_iter())
-                .for_each(|epr| {
-                    let (e, p) = epr;
-                    env.insert(p, e);
-                });
-            eval_expr(*p, env)
-        }
+        ExprKind::Lambda(_, _) | ExprKind::UserLambda(..) => args
+            .into_iter()
+            .map(|mut epr| {
+                epr.state = State::Thunk(vars.clone());
+                epr
+            })
+            .collect(),
         // if its a list of ("primitive" proc)
         // then we should evaluate the arguments
         ExprKind::List(proc) if proc[0].expr == ExprKind::Word("primitive".to_string()) => {
-            apply(proc[1].clone(), vars, args)
+            // println!("func {func_sym} primitive");
+            func = proc[1].clone();
+            args.into_iter()
+                .map(|epr| actual_value(epr, vars.clone()))
+                .collect()
         }
         // any literal or symbol should be evaluat
         e => panic!("Not a lambda: {e:?}"),
+    };
+    apply_inner(func, vars, args)
+}
 
+fn apply_inner(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
+    match func.expr {
+        ExprKind::Lambda(p, _) => p(args, vars),
+        ExprKind::UserLambda(p, params, closure) => {
+            let env = closure.unwrap_or_else(|| vars.new_child());
+            args.into_iter().zip(params.into_iter()).for_each(|epr| {
+                let (e, p) = epr;
+                env.insert(p, e);
+            });
+            eval_expr(*p, env)
+        }
+        _ => unreachable!(),
     }
+}
+
+pub(crate) fn actual_value(mut expr: Expr, vars: Env) -> Expr {
+    expr = eval_expr(expr, vars);
+    expr.eval();
+    expr
 }
