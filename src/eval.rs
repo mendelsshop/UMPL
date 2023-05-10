@@ -68,6 +68,7 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
 pub(crate) fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
     let func = eval_expr(func, vars.clone());
     match func.expr {
+        // TODO: don't evaluate args - wrap in thunk
         ExprKind::Lambda(p, _) => {
             let args = args
                 .into_iter()
@@ -86,7 +87,13 @@ pub(crate) fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
                 });
             eval_expr(*p, env)
         }
+        // if its a list of ("primitive" proc)
+        // then we should evaluate the arguments
+        ExprKind::List(proc) if proc[0].expr == ExprKind::Word("primitive".to_string()) => {
+            apply(proc[1].clone(), vars, args)
+        }
         // any literal or symbol should be evaluat
         e => panic!("Not a lambda: {e:?}"),
+
     }
 }

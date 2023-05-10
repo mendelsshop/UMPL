@@ -40,6 +40,7 @@ impl PartialEq for ExprKind {
             (Self::Number(n), Self::Number(m)) => n == m,
             (Self::Word(n), Self::Word(m)) => n == m,
             (Self::Bool(n), Self::Bool(m)) => n == m,
+            (Self::Symbol(n), Self::Symbol(m)) => n == m,
             (Self::Nil, Self::Nil) => true,
             _ => false,
         }

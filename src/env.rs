@@ -78,7 +78,9 @@ impl Env {
             parent: None,
         };
         setup_envoirment(&env);
-        env
+        // we give back a child of the env, so we can detect primitive functions
+        // because the user can't modify the "primitive" env, because it's child is returned
+        env.new_child()
     }
 
     pub fn insert(&self, key: String, val: Expr) {
@@ -99,8 +101,28 @@ impl Env {
     pub fn get(&self, key: &String) -> Option<Expr> {
         self.scope
             .borrow()
-            .get(key)
-            .cloned()
+            .get(key).map(
+                |e| // if scope has no parent, and its lambda/user lambda
+                // we return a list of "primitive" and the lambda
+                if self.parent.is_none() && matches!(e.expr, ExprKind::Lambda(_, _) | ExprKind::UserLambda(_, _, _)) {
+                    Expr {
+                        expr: ExprKind::List(
+                            vec![
+                                Expr {
+                                    expr: ExprKind::Word("primitive".to_string()),
+                                    state: State::Evaluated,
+                                    file: format!("{}.rs", "primitive"),
+                                },
+                                e.clone(),
+                            ],
+                        ),
+                        state: State::Evaluated,
+                        file: format!("{}.rs", "primitive"),
+                    }
+                } else {
+                    e.clone()
+                },
+            )
             .or_else(|| self.parent.as_ref().and_then(|p| p.get(key)))
     }
 
