@@ -16,13 +16,26 @@ pub fn parse(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
 
             '"' => parse_string(chars),
             '(' => parse_list(chars),
-            ' ' | '\n' | '\t' => {
+            c if c.is_whitespace() => {
                 chars.next();
+                parse(chars)
+            }
+            ';' => {
+                parse_comment(chars);
                 parse(chars)
             }
             _ => parse_symbol(chars),
         },
     )
+}
+
+fn parse_comment(chars: &mut Peekable<impl Iterator<Item = char>>) {
+    chars.next();
+    for c in chars.by_ref() {
+        if c == '\n' {
+            break;
+        }
+    }
 }
 
 fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
@@ -35,9 +48,13 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
                     chars.next();
                     break;
                 }
-                ' ' => {
+                c if c.is_whitespace() => {
                     chars.next();
                     continue;
+                }
+                ';' => {
+                    chars.next();
+                    parse_comment(chars);
                 }
                 _ => exprs.push(parse(chars)),
             },
@@ -67,7 +84,7 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             ExprKind::Symbol(sym) if "set!" == sym.as_str() => parse_set(exprs),
             // (if pred consq alt)
             ExprKind::Symbol(sym) if "if" == sym.as_str() => parse_if(exprs),
-            ExprKind::Symbol(sym) if "cond" == sym.as_str() => parse_cons_to_if(exprs),
+            ExprKind::Symbol(sym) if "cond" == sym.as_str() => parse_cond_to_if(exprs),
             _ => Expr {
                 expr: {
                     let mut exprs = exprs;
@@ -81,17 +98,25 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     }
 }
 
-fn parse_cons_to_if(mut exprs: Vec<Expr>) -> Expr {
+fn parse_cond_to_if(mut exprs: Vec<Expr>) -> Expr {
     // (cond
-    //  (p1 e1)
-    //  (p2 e2)
+    //  (p1 e1 .. en)
+    //  (p2 e2 .. en)
     //  ...
     //  ; possible end case
-    //  (else en)
+    //  (else en .. en))
     //)
+    // turn into
+    // (if p1
+    //  (begin e1 .. en)
+    //  (if p2
+    //      (begin e2 .. en)
+    //      ...
+    //      (begin en .. en)
+    //  )
     // given
-    //  (p1 e1)
-    //  (p2 e2)
+    //  (p1 e1 .. en)
+    //  (p2 e2 .. en)
     //  ...
     //  ; possible end case
     //  (else en)
@@ -108,15 +133,15 @@ fn parse_cons_to_if(mut exprs: Vec<Expr>) -> Expr {
         match remove.expr {
             ExprKind::Symbol(sym) if sym == "else" => {
                 assert!(exprs.is_empty());
-                if_pred_cosq.remove(0)
+                parse_begin(if_pred_cosq)
             }
             _ => {
-                let rest = parse_cons_to_if(exprs);
-                parse_if(vec![remove, if_pred_cosq.remove(0), rest])
+                let rest = parse_cond_to_if(exprs);
+                parse_if(vec![remove, parse_begin(if_pred_cosq), rest])
             }
         }
     } else {
-        panic!("invalid cons struct")
+        panic!("invalid cond struct")
     }
 }
 
@@ -158,17 +183,29 @@ pub fn parse_number(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     // with for loop the 2 will be consumed and then it will go again
     // and consume the closing bracket so when we return the expr back parse_list
     // it the iterator will be empty and we will panic because we expect a closing bracket
+    let mut found_dot = false;
     while let Some(c) = chars.peek() {
         match c {
             '0'..='9' => {
                 num.push(*c);
                 chars.next();
             }
+            '.' => {
+                // TODO: check for "1.3.4"
+                assert!(!found_dot, "invalid number");
+                found_dot = true;
+                num.push(*c);
+                chars.next();
+            }
+            ';' => {
+                chars.next();
+                parse_comment(chars);
+            }
             _ => break,
         }
     }
     Expr {
-        expr: ExprKind::Number(num.parse::<i32>().unwrap()),
+        expr: ExprKind::Number(num.parse::<f64>().unwrap()),
         state: State::Evaluated,
         file: String::new(),
     }
@@ -179,7 +216,11 @@ pub fn parse_symbol(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
     // see comment in parse_number
     while let Some(c) = chars.peek() {
         match c {
-            ' ' | ')' => break,
+            c if (c.is_whitespace() || *c == ')') => break,
+            ';' => {
+                chars.next();
+                parse_comment(chars);
+            }
             _ => {
                 sym.push(*c);
                 chars.next();
@@ -259,7 +300,7 @@ pub fn parse_define(mut exprs: Vec<Expr>) -> Expr {
 
 pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
     // lambda is a special form defined as
-    // UserLambda(
+    // Lambda(
     //     Box<Expr>, // body of the lambda which is an Expr { expr: ExprKind::Begin(..) }
     //     Vec<String>,
     // ),
@@ -268,7 +309,9 @@ pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
     // it can also be given () (+ 1 2) or (x y) (+ x y)
     // would be |exprs| exprs[0] + 1, ["x"]
     // x
-    let args = match exprs.remove(0).expr {
+    // (x . y)
+    // becomes Lambda(body, ["x"], None, Some("y"))
+    let mut args = match exprs.remove(0).expr {
         ExprKind::List(args) => args
             .into_iter()
             .map(|arg| match arg.expr {
@@ -278,10 +321,30 @@ pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
             .collect::<Vec<String>>(),
         bad => panic!("Invalid lambda {bad:?}"),
     };
+    // check for dot notation
+    // (lambda (x . y) (+ x y))
+    // becomes Lambda(body, ["x"], None, Some("y"))
+    let mut arg_iter = args.iter();
+    let mut extra_param = None;
+    while let Some(arg) = arg_iter.next() {
+        if arg == "." {
+            if let Some(name) = arg_iter.next() {
+                assert!((arg_iter.count() == 0), "Invalid lambda");
+                extra_param = Some(name.to_string());
+                break;
+            }
+            panic!("Invalid lambda")
+        }
+    }
+    if extra_param.is_some() {
+        args.pop();
+        args.pop();
+    }
+
     // (+ x 1) (/ 1 2 3)
     let body = parse_begin(exprs);
     Expr {
-        expr: ExprKind::UserLambda(Box::new(body), args, None),
+        expr: ExprKind::Lambda(Box::new(body), args, None, extra_param),
         state: State::Evaluated,
         file: String::new(),
     }

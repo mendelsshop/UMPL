@@ -10,8 +10,8 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
         | ExprKind::Word(_)
         | ExprKind::Number(_)
         | ExprKind::Bool(_)
-        | ExprKind::Lambda(_, _)
-        | ExprKind::UserLambda(_, _, _) => epr.initialize(&vars),
+        | ExprKind::PrimitiveLambda(_, _)
+        | ExprKind::Lambda(_, _, _, _) => epr.initialize(&vars),
         // case: lookup
         ExprKind::Symbol(s) => vars
             .get(&s)
@@ -38,11 +38,12 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
             final_val
         }
         ExprKind::Def(name, lambda) => {
+            let lambda = eval_expr(*lambda, vars.clone());
             match &lambda.expr {
-                ExprKind::Lambda(_, _) | ExprKind::UserLambda(_, _, _) => {
-                    vars.insert(name, (*lambda).initialize(&vars));
+                ExprKind::PrimitiveLambda(_, _) | ExprKind::Lambda(_, _, _, _) => {
+                    vars.insert(name, lambda);
                 }
-                _ => panic!("Not a lambda: {lambda:?}"),
+                _ => panic!("Not a lambda: {lambda}"),
             }
             Expr {
                 expr: ExprKind::Nil,
@@ -72,49 +73,91 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
     }
 }
 
-pub(crate) fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
-    let mut func = eval_expr(func, vars.clone());
-    let args = match func.expr {
-        // TODO: don't evaluate args - wrap in thunk
-        ExprKind::Lambda(_, _) | ExprKind::UserLambda(..) => args
-            .into_iter()
-            .map(|mut epr| {
-                epr.state = State::Thunk(vars.clone());
-                epr
-            })
-            .collect(),
-        // if its a list of ("primitive" proc)
-        // then we should evaluate the arguments
-        ExprKind::List(proc) if proc[0].expr == ExprKind::Word("primitive".to_string()) => {
-            // println!("func {func_sym} primitive");
-            func = proc[1].clone();
-            args.into_iter()
-                .map(|epr| actual_value(epr, vars.clone()))
-                .collect()
-        }
-        // any literal or symbol should be evaluat
-        e => panic!("Not a lambda: {e:?}"),
-    };
-    apply_inner(func, vars, args)
-}
-
-fn apply_inner(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
+pub fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
+    let func_name = func.to_string();
+    let func = actual_value(func, vars.clone());
     match func.expr {
-        ExprKind::Lambda(p, _) => p(args, vars),
-        ExprKind::UserLambda(p, params, closure) => {
-            let env = closure.unwrap_or_else(|| vars.new_child());
-            args.into_iter().zip(params.into_iter()).for_each(|epr| {
-                let (e, p) = epr;
-                env.insert(p, e);
-            });
+        ExprKind::Lambda(p, params, closure, mut extra_param) => {
+            let env = closure.unwrap_or_else(|| vars.clone()).new_child(&func_name);
+            let mut params = params.into_iter().peekable();
+            let mut args = args
+                .into_iter()
+                .map(|mut epr| {
+                    epr.state = State::Thunk(vars.clone());
+                    epr
+                })
+                .peekable();
+            loop {
+                match (params.peek(), args.peek()) {
+                    (None, None) => break,
+                    (None, Some(_)) => {
+                        if let Some(extra) = std::mem::take(&mut extra_param) {
+                            let val = list_to_cons(&(args.collect::<Vec<_>>()), env.clone());
+                            env.insert(extra, val);
+                            break;
+                        }
+                        panic!("to many parameter given")
+                    }
+                    (Some(_), None) => panic!("to few parameter given"),
+                    (Some(_), Some(_)) => {
+                        env.insert(params.next().unwrap(), args.next().unwrap());
+                    }
+                }
+            }
+            if let Some(extra) = extra_param {
+                env.insert(
+                    extra,
+                    Expr {
+                        expr: ExprKind::Nil,
+                        state: State::Evaluated,
+                        file: "extra_param".to_string(),
+                    },
+                );
+            }
             eval_expr(*p, env)
         }
-        _ => unreachable!(),
+        // then we should evaluate the arguments
+        ExprKind::PrimitiveLambda(p, _) => p(
+            args.into_iter()
+                .map(|epr| actual_value(epr, vars.clone()))
+                .collect(),
+            vars,
+        ),
+        // any literal or symbol should be evaluat
+        e => panic!("Not a lambda: {e} with args {args:?}"),
     }
 }
 
-pub(crate) fn actual_value(mut expr: Expr, vars: Env) -> Expr {
+pub fn actual_value(mut expr: Expr, vars: Env) -> Expr {
     expr = eval_expr(expr, vars);
     expr.eval();
     expr
+}
+
+fn list_to_cons(exprs: &[Expr], vars: Env) -> Expr {
+    if let Some((first, rest)) = exprs.split_first() {
+        // eval list of cons first and list->cons of rest
+        eval_expr(
+            Expr {
+                expr: ExprKind::List(vec![
+                    Expr {
+                        expr: ExprKind::Symbol("cons".to_string()),
+                        state: State::Evaluated,
+                        file: "list_to_cons.rs".to_string(),
+                    },
+                    first.clone(),
+                    list_to_cons(rest, vars.clone()),
+                ]),
+                state: State::Evaluated,
+                file: "list_to_cons.rs".to_string(),
+            },
+            vars,
+        )
+    } else {
+        Expr {
+            expr: ExprKind::Nil,
+            state: State::Evaluated,
+            file: "list_to_cons.rs".to_string(),
+        }
+    }
 }

@@ -14,6 +14,8 @@ mod parser;
 fn main() {
     let env = Env::new();
     let mut input = String::new();
+    //clear the screen
+    print!("\x1B[2J\x1B[1;1H");
     loop {
         input.clear();
         print!("> ");

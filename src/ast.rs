@@ -4,21 +4,47 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
+static mut DEPTH: usize = 0;
+
 use crate::{eval::actual_value, Env};
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum Args {
+    Count(i32),
+    Many,
+}
+
+impl Args {
+    pub const fn compare(self, len: usize) -> bool {
+        match self {
+            Self::Count(n) => len == n as usize,
+            Self::Many => true,
+        }
+    }
+}
+
+impl fmt::Display for Args {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Count(n) => write!(f, "{}", n),
+            Self::Many => write!(f, "many"),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum ExprKind {
-    Number(i32),
+    Number(f64),
     Word(String),
     Bool(bool),
     Nil,
-    Lambda(fn(Vec<Expr>, Env) -> Expr, Vec<String>),
+    PrimitiveLambda(fn(Vec<Expr>, Env) -> Expr, Args),
     Def(String, Box<Expr>),
     Begin(Vec<Expr>),
     List(Vec<Expr>),
     Symbol(String),
     Var(String, Box<Expr>),
-    UserLambda(Box<Expr>, Vec<String>, Option<Env>),
+    Lambda(Box<Expr>, Vec<String>, Option<Env>, Option<String>),
     Set(String, Box<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
@@ -69,8 +95,6 @@ impl PartialEq for Expr {
 
 impl PartialOrd for Expr {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        println!("{:?}", self.expr);
-        println!("{:?}", other.expr);
         self.expr.partial_cmp(&other.expr)
     }
 }
@@ -110,7 +134,7 @@ impl_op!(Mul, mul, *);
 impl_op!(Div, div, /);
 
 impl ExprKind {
-    get_type!(self, Number, i32, get_number);
+    get_type!(self, Number, f64, get_number);
     get_type!(self, Word, String, get_word);
     get_type!(self, Bool, bool, get_bool);
     get_type!(self, Symbol, String, get_symbol);
@@ -123,8 +147,8 @@ impl fmt::Display for ExprKind {
             Self::Word(s) => write!(f, "{s}"),
             Self::Bool(b) => write!(f, "{b}"),
             Self::Nil => write!(f, "nil"),
-            Self::Lambda(_, params) => {
-                write!(f, "(lambda of {})", params.join(", "))
+            Self::PrimitiveLambda(_, params) => {
+                write!(f, "(lambda of {params})")
             }
             Self::Def(name, lambda) => write!(f, "(def {name} {lambda})"),
             Self::Begin(exprs) => write!(
@@ -146,12 +170,21 @@ impl fmt::Display for ExprKind {
             ),
             Self::Symbol(s) => write!(f, "symbol: {s}"),
             Self::Var(s, e) => write!(f, "(var {s} {e})"),
-            Self::UserLambda(body, params, _) => {
-                write!(f, "(lambda {body} of {})", params.join(", "))
+            Self::Lambda(body, params, env, extra_params) => {
+                write!(
+                    f,
+                    "(lambda {body} of {}{} in <{}>)",
+                    params.join(", "),
+                    extra_params
+                        .as_ref()
+                        .map_or_else(String::new, |extra_params| format!(", {extra_params}")),
+                    env.as_ref()
+                        .map_or("<>".to_string(), |env| env.current_to_string(None)) // ""
+                )
             }
             Self::Set(s, e) => write!(f, "(set {s} {e})"),
             Self::If(predicate, consequent, alternative) => {
-                write!(f, "if {predicate} {consequent} else {alternative}")
+                write!(f, "(if {predicate} {consequent} else {alternative})")
             }
         }
     }
@@ -164,7 +197,7 @@ impl fmt::Debug for ExprKind {
             Self::Word(s) => write!(f, "word: ({s:?})"),
             Self::Bool(b) => write!(f, "bool: ({b:?})"),
             Self::Nil => write!(f, "nil"),
-            Self::Lambda(proc, params) => {
+            Self::PrimitiveLambda(proc, params) => {
                 write!(f, "lambda ({proc:?}, {params:?})")
             }
             Self::Def(name, lambda) => write!(f, "def ({name:?}, {lambda:?})"),
@@ -172,8 +205,8 @@ impl fmt::Debug for ExprKind {
             Self::List(args) => write!(f, "list ({args:?})"),
             Self::Symbol(s) => write!(f, "symbol ({s:?})"),
             Self::Var(s, e) => write!(f, "var ({s:?}, {e:?})"),
-            Self::UserLambda(body, params, _) => {
-                write!(f, "user lambda ({body:?}, {params:?})")
+            Self::Lambda(body, params, _, extra_param) => {
+                write!(f, "user lambda ({body:?}, {params:?} {extra_param:?})")
             }
             Self::Set(s, e) => write!(f, "set ({s:?}, {e:?})"),
             Self::If(predicate, consequent, alternative) => {
@@ -203,15 +236,19 @@ impl Expr {
     }
 
     pub fn initialize(mut self, env: &Env) -> Self {
-        if let ExprKind::UserLambda(_, _, ref mut closure) = self.expr {
+        if let ExprKind::Lambda(_, _, ref mut closure, _) = self.expr {
             if closure.is_none() {
-                *closure = Some(env.new_child());
+                unsafe {
+                    // updaye depth
+                    DEPTH += 1;
+                    *closure = Some(env.clone());
+                }
             }
         }
         self
     }
 
-    call_inner!(self, get_number, i32);
+    call_inner!(self, get_number, f64);
     call_inner!(self, get_word, String);
     call_inner!(self, get_bool, bool);
     call_inner!(self, get_symbol, String);
