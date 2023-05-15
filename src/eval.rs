@@ -6,16 +6,18 @@ use crate::{
 pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
     match epr.expr {
         // case: self-evaluating
+        // if its a lambda we wan't to give it the current environment
+        // so the closure properly captures the environment
         ExprKind::Nil
         | ExprKind::Word(_)
         | ExprKind::Number(_)
         | ExprKind::Bool(_)
-        | ExprKind::PrimitiveLambda(_, _)
-        | ExprKind::Lambda(_, _, _, _) => epr.initialize(&vars),
+        | ExprKind::PrimitiveLambda(..)
+        | ExprKind::Lambda(_, _, _, _, _) => epr.initialize(&vars),
         // case: lookup
         ExprKind::Symbol(s) => vars
             .get(&s)
-            .unwrap_or_else(|| panic!("Symbol not found: `{s}`")),
+            .unwrap_or_else(|| panic!("Symbol not found: `{s}` in {}", vars.backtrace())),
         // case: define variable
         ExprKind::Var(s, i) => {
             let v = eval_expr(*i, vars.clone());
@@ -38,12 +40,13 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
             final_val
         }
         ExprKind::Def(name, lambda) => {
-            let lambda = eval_expr(*lambda, vars.clone());
+            let mut lambda = eval_expr(*lambda, vars.clone());
             match &lambda.expr {
-                ExprKind::PrimitiveLambda(_, _) | ExprKind::Lambda(_, _, _, _) => {
+                ExprKind::PrimitiveLambda(..) | ExprKind::Lambda(..) => {
+                    lambda.set_name(name.clone());
                     vars.insert(name, lambda);
                 }
-                _ => panic!("Not a lambda: {lambda}"),
+                _ => panic!("Not a lambda: {lambda} in {}", vars.backtrace()),
             }
             Expr {
                 expr: ExprKind::Nil,
@@ -64,7 +67,7 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
         // and we can have lazy evaluation for user-defined functions (and possibly some primitives)
         ExprKind::List(args) => apply(args[0].clone(), vars, args[1..].to_vec()),
         ExprKind::If(predicate, consequent, alternative) => {
-            if actual_value(*predicate, vars.clone()).get_bool() {
+            if actual_value(*predicate, vars.clone()).expr != ExprKind::Bool(false) {
                 eval_expr(*consequent, vars)
             } else {
                 eval_expr(*alternative, vars)
@@ -74,11 +77,10 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
 }
 
 pub fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
-    let func_name = func.to_string();
     let func = actual_value(func, vars.clone());
     match func.expr {
-        ExprKind::Lambda(p, params, closure, mut extra_param) => {
-            let env = closure.unwrap_or_else(|| vars.clone()).new_child(&func_name);
+        ExprKind::Lambda(p, params, closure, mut extra_param, name) => {
+            let env = closure.unwrap_or_else(|| vars.clone()).new_child(name);
             let mut params = params.into_iter().peekable();
             let mut args = args
                 .into_iter()
@@ -96,9 +98,9 @@ pub fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
                             env.insert(extra, val);
                             break;
                         }
-                        panic!("to many parameter given")
+                        panic!("to many parameters given in {}", vars.backtrace())
                     }
-                    (Some(_), None) => panic!("to few parameter given"),
+                    (Some(_), None) => panic!("to few parameters given in {}", vars.backtrace()),
                     (Some(_), Some(_)) => {
                         env.insert(params.next().unwrap(), args.next().unwrap());
                     }
@@ -117,17 +119,18 @@ pub fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
             eval_expr(*p, env)
         }
         // then we should evaluate the arguments
-        ExprKind::PrimitiveLambda(p, _) => p(
+        ExprKind::PrimitiveLambda(p, _, _) => p(
             args.into_iter()
                 .map(|epr| actual_value(epr, vars.clone()))
                 .collect(),
             vars,
         ),
         // any literal or symbol should be evaluat
-        e => panic!("Not a lambda: {e} with args {args:?}"),
+        e => panic!("Not a lambda: {e} in {}", vars.backtrace()),
     }
 }
 
+// used for forcing evaluation of an expression
 pub fn actual_value(mut expr: Expr, vars: Env) -> Expr {
     expr = eval_expr(expr, vars);
     expr.eval();

@@ -4,8 +4,6 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-static mut DEPTH: usize = 0;
-
 use crate::{eval::actual_value, Env};
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -38,13 +36,19 @@ pub enum ExprKind {
     Word(String),
     Bool(bool),
     Nil,
-    PrimitiveLambda(fn(Vec<Expr>, Env) -> Expr, Args),
+    PrimitiveLambda(fn(Vec<Expr>, Env) -> Expr, Args, String),
     Def(String, Box<Expr>),
     Begin(Vec<Expr>),
     List(Vec<Expr>),
     Symbol(String),
     Var(String, Box<Expr>),
-    Lambda(Box<Expr>, Vec<String>, Option<Env>, Option<String>),
+    Lambda(
+        Box<Expr>,
+        Vec<String>,
+        Option<Env>,
+        Option<String>,
+        Option<String>,
+    ),
     Set(String, Box<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
@@ -56,6 +60,7 @@ impl PartialOrd for ExprKind {
             (Self::Word(n), Self::Word(m)) => n.partial_cmp(m),
             (Self::Bool(n), Self::Bool(m)) => n.partial_cmp(m),
             (Self::Nil, Self::Nil) => Some(Ordering::Equal),
+            (Self::List(n), Self::List(m)) => n.partial_cmp(m),
             _ => None,
         }
     }
@@ -68,6 +73,7 @@ impl PartialEq for ExprKind {
             (Self::Word(n), Self::Word(m)) | (Self::Symbol(n), Self::Symbol(m)) => n == m,
             (Self::Bool(n), Self::Bool(m)) => n == m,
             (Self::Nil, Self::Nil) => true,
+            (Self::List(n), Self::List(m)) => n == m,
             _ => false,
         }
     }
@@ -98,14 +104,22 @@ impl PartialOrd for Expr {
         self.expr.partial_cmp(&other.expr)
     }
 }
-impl Expr {}
+impl Expr {
+    pub(crate) fn set_name(&mut self, name: String) {
+        match &mut self.expr {
+            ExprKind::Lambda(_, _, _, _, n) => *n = Some(name),
+            ExprKind::PrimitiveLambda(_, _, n) => *n = name,
+            _ => panic!("Cannot set name of non-lambda"),
+        }
+    }
+}
 
 macro_rules! get_type {
     ($self:ident, $type:ident, $ret:ty, $func:ident) => {
         pub fn $func(&self) -> $ret {
             match self {
                 Self::$type(n) => n.clone(),
-                other => panic!("Expected {}, got {:?}", stringify!($type), other),
+                other => panic!("Expected {}, got {}", stringify!($type), other),
             }
         }
     };
@@ -147,8 +161,8 @@ impl fmt::Display for ExprKind {
             Self::Word(s) => write!(f, "{s}"),
             Self::Bool(b) => write!(f, "{b}"),
             Self::Nil => write!(f, "nil"),
-            Self::PrimitiveLambda(_, params) => {
-                write!(f, "(lambda of {params})")
+            Self::PrimitiveLambda(_, params, name) => {
+                write!(f, "primitive #<procedure:{name} {params}>")
             }
             Self::Def(name, lambda) => write!(f, "(def {name} {lambda})"),
             Self::Begin(exprs) => write!(
@@ -170,16 +184,16 @@ impl fmt::Display for ExprKind {
             ),
             Self::Symbol(s) => write!(f, "symbol: {s}"),
             Self::Var(s, e) => write!(f, "(var {s} {e})"),
-            Self::Lambda(body, params, env, extra_params) => {
+            Self::Lambda(body, params, _env, extra_params, name) => {
                 write!(
                     f,
-                    "(lambda {body} of {}{} in <{}>)",
+                    "(lambda {}({}{}) {body} in <procedure-env>)",
+                    name.as_ref()
+                        .map_or_else(String::new, |name| format!("{} ", name)),
                     params.join(", "),
                     extra_params
                         .as_ref()
                         .map_or_else(String::new, |extra_params| format!(", {extra_params}")),
-                    env.as_ref()
-                        .map_or("<>".to_string(), |env| env.current_to_string(None)) // ""
                 )
             }
             Self::Set(s, e) => write!(f, "(set {s} {e})"),
@@ -197,16 +211,22 @@ impl fmt::Debug for ExprKind {
             Self::Word(s) => write!(f, "word: ({s:?})"),
             Self::Bool(b) => write!(f, "bool: ({b:?})"),
             Self::Nil => write!(f, "nil"),
-            Self::PrimitiveLambda(proc, params) => {
-                write!(f, "lambda ({proc:?}, {params:?})")
+            Self::PrimitiveLambda(proc, params, name) => {
+                write!(
+                    f,
+                    "lambda {name:?} ({params:?}) (native: {proc:?}) in <procedure-env>)"
+                )
             }
             Self::Def(name, lambda) => write!(f, "def ({name:?}, {lambda:?})"),
             Self::Begin(exprs) => write!(f, "begin ({exprs:?})"),
             Self::List(args) => write!(f, "list ({args:?})"),
             Self::Symbol(s) => write!(f, "symbol ({s:?})"),
             Self::Var(s, e) => write!(f, "var ({s:?}, {e:?})"),
-            Self::Lambda(body, params, _, extra_param) => {
-                write!(f, "user lambda ({body:?}, {params:?} {extra_param:?})")
+            Self::Lambda(body, params, _, extra_param, name) => {
+                write!(
+                    f,
+                    "(lambda {name:?} ({params:?} {extra_param:?}) {body:?}) in <procedure-env>)"
+                )
             }
             Self::Set(s, e) => write!(f, "set ({s:?}, {e:?})"),
             Self::If(predicate, consequent, alternative) => {
@@ -236,13 +256,10 @@ impl Expr {
     }
 
     pub fn initialize(mut self, env: &Env) -> Self {
-        if let ExprKind::Lambda(_, _, ref mut closure, _) = self.expr {
+        if let ExprKind::Lambda(_, _, ref mut closure, _,_) = self.expr {
             if closure.is_none() {
-                unsafe {
-                    // updaye depth
-                    DEPTH += 1;
+       
                     *closure = Some(env.clone());
-                }
             }
         }
         self

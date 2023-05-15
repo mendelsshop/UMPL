@@ -12,7 +12,7 @@ macro_rules! add_binary_fn {
         add_fn!(
             $symbol,
             $env,
-            |args: Vec<Expr>| {
+            |args: Vec<Expr>, _env| {
                 Expr {
                     expr: $res(($mod(&args[0]) $op $mod(&args[1]))),
                     state: State::Evaluated,
@@ -28,17 +28,18 @@ macro_rules! add_fn {
     ($symbol:literal, $env:expr, $todo:expr, $arg_count:expr) => {{
         let e = Expr {
             expr: ExprKind::PrimitiveLambda(
-                |args, _env| {
+                |args, env| {
                     if !$arg_count.compare(args.len()) {
                         panic!("Expected {} arguments, got {}", $arg_count, args.len());
                     } else {
                         // we have to use closures as opposed to whatver macro calling the args from |args, _env|
                         // because of macro hygiene
                         #[allow(clippy::redundant_closure_call)]
-                        ($todo)(args)
+                        ($todo)(args, env)
                     }
                 },
                 $arg_count,
+                $symbol.to_string(),
             ),
             state: State::Evaluated,
             file: format!("{}.rs", $symbol),
@@ -78,7 +79,7 @@ impl Env {
         setup_envoirment(&env);
         // we give back a child of the env, so we can detect primitive functions
         // because the user can't modify the "primitive" env, because it's child is returned
-        env.new_child("main")
+        env.new_child(Some("global".to_string()))
     }
 
     pub fn insert(&self, key: String, val: Expr) -> bool {
@@ -91,27 +92,19 @@ impl Env {
         } else if let Some(parent) = &self.parent {
             parent.set(key, val);
         } else {
-            panic!("Variable {key} not found");
+            panic!("Variable {key} not found in {}", self.backtrace());
         }
     }
 
-    pub fn current_to_string(&self, key: Option<&String>) -> String {
-        self.scope
-            .borrow()
-            .keys()
-            .zip(self.scope.borrow().values())
-            .filter(|(v, e)| {
-                if !matches!(
-                    e.expr,
-                    ExprKind::Bool(_) | ExprKind::Number(_) | ExprKind::Word(_) | ExprKind::List(_)
-                ) {
-                    return false;
-                }
-                key.map_or(true, |key| *v != key)
-            })
-            .map(|(v, e)| format!("{v}: {e}"))
-            .collect::<Vec<_>>()
-            .join(" ")
+    pub fn backtrace(&self) -> String {
+        let mut s = String::new();
+        let mut env = self;
+        while let Some(parent) = &env.parent {
+            s.push_str(&format!("{} -> ", env.name));
+            env = parent;
+        }
+        s.push_str(&format!("{}", env.name));
+        s
     }
 
     #[must_use]
@@ -124,11 +117,11 @@ impl Env {
     }
 
     #[must_use]
-    pub fn new_child(&self, name: &str) -> Self {
+    pub fn new_child(&self, name: Option<String>) -> Self {
         Self {
             scope: Rc::new(RefCell::new(HashMap::new())),
             parent: Some(Box::new(self.clone())),
-            name: name.to_string(),
+            name: name.unwrap_or_else(|| "lambda".to_string()),
         }
     }
 }
@@ -147,32 +140,18 @@ fn setup_envoirment(env: &Env) {
     add_binary_fn!("mul",env,ExprKind::Number, *,Expr::get_number);
     add_binary_fn!("div",env,ExprKind::Number, /,Expr::get_number);
     add_binary_fn!("rem",env,ExprKind::Number, %,Expr::get_number);
+    // identity function:
     // the reason we have to use the |e|e is because we need to have something
     // that when we call it, it returns the value of the expression modified so it should work with the operator
     // but in the case of the boolean operators, we don't need to do anything to the expression
     // so we end up with |e|e weirdness
     add_binary_fn!("eq",env,ExprKind::Bool, ==, |e|e);
-    add_binary_fn!("nq",env,ExprKind::Bool, !=, |e|e);
     add_binary_fn!("gt",env,ExprKind::Bool, >,Expr::get_number);
     add_binary_fn!("lt",env,ExprKind::Bool, <,Expr::get_number);
-    add_binary_fn!("ge",env,ExprKind::Bool, >=,Expr::get_number);
-    add_binary_fn!("le",env,ExprKind::Bool, <=,Expr::get_number);
-    add_binary_fn!("and",env,ExprKind::Bool, &&,Expr::get_bool);
-    add_binary_fn!("or",env,ExprKind::Bool, ||,Expr::get_bool);
-    add_fn!(
-        "not",
-        env,
-        |args: Vec<Expr>| Expr {
-            expr: ExprKind::Bool(!args[0].get_bool()),
-            state: State::Evaluated,
-            file: "not.rs".to_string(),
-        },
-        Args::Count(1)
-    );
     add_fn!(
         "display",
         env,
-        |args: Vec<Expr>| {
+        |args: Vec<Expr>, _env| {
             print!("{}", args[0]);
             Expr {
                 expr: ExprKind::Nil,
@@ -186,6 +165,7 @@ fn setup_envoirment(env: &Env) {
         expr: ExprKind::PrimitiveLambda(
             |args, env| apply(args[0].clone(), env, args[1..].to_vec()),
             Args::Count(2),
+            "apply".to_string(),
         ),
         state: State::Evaluated,
         file: "apply.rs".to_string(),
@@ -202,20 +182,20 @@ fn setup_envoirment(env: &Env) {
                 }
             },
             Args::Count(1),
+            "sleep".to_string(),
         ),
         state: State::Evaluated,
         file: "sleep.rs".to_string(),
     };
     env.insert("sleep".to_string(), sleep);
-
-    // env.map_to_primitive();
     eval_to_env!("(define (null? x) (eq x nil))", env);
     eval_to_env!("(define (list . d) d)", env);
     eval_to_env!(
-        "(define (foldl-short-circuit f init args) 
+        "
+        (define (foldl-short-circuit f short init args) 
     (if (null? args) init 
-        (if (f init (car args))
-            (foldl-short-circuit f (f init (car args)) (cdr args))
+        (if (short (f init (car args)))
+            (foldl-short-circuit f short (f init (car args)) (cdr args))
             (f init (car args)))))",
         env
     );
@@ -230,6 +210,7 @@ fn setup_envoirment(env: &Env) {
                     (foldl-inner (f (car args) init) (cdr args)))))",
         env
     );
+    eval_to_env!("(define (not x) (if x false true))", env);
     eval_to_env!("(define (newline) (display \"\n\"))", env);
     eval_to_env!("(define (displayln b) (display b) (newline))", env);
     add_literal!("nil", ExprKind::Nil, env.clone());
@@ -251,19 +232,35 @@ fn setup_envoirment(env: &Env) {
     // - needs special case if only one thing for negation
     eval_to_env!("(define (- . args) (cond ((null? args) 0) ((null? (cdr args)) (sub 0 (car args))) (else (foldl-math sub (car args) (cdr args)))))", env);
     eval_to_env!("(define (* . args) (foldl-math mul 1 args))", env);
-    eval_to_env!("(define (/ . args) (fold-math div 1 args))", env);
+    eval_to_env!("(define (/ . args) (foldl-math div 1 args))", env);
     // % needs to has to know the first thing in the list or else it will always be 0
     // this is because the innermost call will be (rem 1 (car args)) which will always be 0
+    eval_to_env!("(define (identity x) x)", env);
     eval_to_env!(
         "(define (% . args) (cond ((null? args) 1) (else (foldl-math rem (car args) (cdr args)))))",
         env
     );
     eval_to_env!(
-        "(define (&& . args) (foldl-short-circuit and true args))",
+        "(define (&& . args) (foldl-short-circuit (lambda (a b) (if a b)) identity true args))",
         env
     );
     eval_to_env!(
-        "(define (|| . args) (foldl-short-circuit or false args))",
+        "(define (|| . args) (foldl-short-circuit (lambda (a b) (if a true b)) not false args))",
+        env
+    );
+    // equalities
+    // = should fold into either a the first thing or false
+    // use a pair so each iteration (return true|false, thing if not false|false)
+    eval_to_env!("(define (foldl-compare f args) (if (null? args) true (car (foldl-short-circuit (lambda (a b) (if (f (cdr a) (cdr b)) (cons true (cdr a)) (cons false false))) (lambda (val) (car val)) (cons true (car args)) (map (lambda (arg) (cons true arg)) (cdr args))))))", env);
+    eval_to_env!("(define (= . args) (foldl-compare eq args))", env);
+    eval_to_env!("(define (< . args) (foldl-compare lt args))", env);
+    eval_to_env!("(define (> . args) (foldl-compare gt args))", env);
+    eval_to_env!(
+        "(define (<= . args) (foldl-compare (lambda (a b) (not (gt a b))) args))",
+        env
+    );
+    eval_to_env!(
+        "(define (>= . args) (foldl-compare (lambda (a b) (not (lt a b))) args))",
         env
     );
     eval_to_env!("(define (cons x y) (lambda (m) (m x y)))", env);
@@ -273,7 +270,11 @@ fn setup_envoirment(env: &Env) {
     eval_to_env!("(define (set-cdr! z x) (set! z (cons (car z) x)))", env);
 
     eval_to_env!("(define (display-list c) (define (inner c) (if (null? c) (display \"]\") (begin (display (car c)) (display \" \") (inner (cdr c))))) (display \"[\") (inner c))", env);
-
+    // map
+    eval_to_env!(
+        "(define (map f args) (if (null? args) nil (cons (f (car args)) (map f (cdr args)))))",
+        env
+    );
     // length
     eval_to_env!(
         "(define (length args) (if (null? args) 0 (+ 1 (length (cdr args)))))",

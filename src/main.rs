@@ -29,7 +29,7 @@ fn main() {
             // because we want to any calls to display to print before the output prompt (=>)
             // force lazy things
             let result = actual_value(expr, env.clone());
-            println!("=>");
+            println!("\n=>");
             println!("{result}");
         }
     }

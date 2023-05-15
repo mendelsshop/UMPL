@@ -344,7 +344,7 @@ pub fn parse_lambda(mut exprs: Vec<Expr>) -> Expr {
     // (+ x 1) (/ 1 2 3)
     let body = parse_begin(exprs);
     Expr {
-        expr: ExprKind::Lambda(Box::new(body), args, None, extra_param),
+        expr: ExprKind::Lambda(Box::new(body), args, None, extra_param, None),
         state: State::Evaluated,
         file: String::new(),
     }
