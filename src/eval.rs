@@ -94,7 +94,7 @@ pub fn apply(func: Expr, vars: Env, args: Vec<Expr>) -> Expr {
                     (None, None) => break,
                     (None, Some(_)) => {
                         if let Some(extra) = std::mem::take(&mut extra_param) {
-                            let val = list_to_cons(&(args.collect::<Vec<_>>()), env.clone());
+                            let val = list_to_cons(&(args.collect::<Vec<_>>()), vars.clone());
                             env.insert(extra, val);
                             break;
                         }

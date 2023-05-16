@@ -103,7 +103,7 @@ impl Env {
             s.push_str(&format!("{} -> ", env.name));
             env = parent;
         }
-        s.push_str(&format!("{}", env.name));
+        s.push_str(&env.name.to_string());
         s
     }
 
@@ -135,59 +135,7 @@ macro_rules! eval_to_env {
 }
 
 fn setup_envoirment(env: &Env) {
-    add_binary_fn!("add",env,ExprKind::Number, +,Expr::get_number);
-    add_binary_fn!("sub",env,ExprKind::Number, -,Expr::get_number);
-    add_binary_fn!("mul",env,ExprKind::Number, *,Expr::get_number);
-    add_binary_fn!("div",env,ExprKind::Number, /,Expr::get_number);
-    add_binary_fn!("rem",env,ExprKind::Number, %,Expr::get_number);
-    // identity function:
-    // the reason we have to use the |e|e is because we need to have something
-    // that when we call it, it returns the value of the expression modified so it should work with the operator
-    // but in the case of the boolean operators, we don't need to do anything to the expression
-    // so we end up with |e|e weirdness
-    add_binary_fn!("eq",env,ExprKind::Bool, ==, |e|e);
-    add_binary_fn!("gt",env,ExprKind::Bool, >,Expr::get_number);
-    add_binary_fn!("lt",env,ExprKind::Bool, <,Expr::get_number);
-    add_fn!(
-        "display",
-        env,
-        |args: Vec<Expr>, _env| {
-            print!("{}", args[0]);
-            Expr {
-                expr: ExprKind::Nil,
-                state: State::Evaluated,
-                file: "display.rs".to_string(),
-            }
-        },
-        Args::Count(1)
-    );
-    let apply = Expr {
-        expr: ExprKind::PrimitiveLambda(
-            |args, env| apply(args[0].clone(), env, args[1..].to_vec()),
-            Args::Count(2),
-            "apply".to_string(),
-        ),
-        state: State::Evaluated,
-        file: "apply.rs".to_string(),
-    };
-    env.insert("apply".to_string(), apply);
-    let sleep = Expr {
-        expr: ExprKind::PrimitiveLambda(
-            |args, _| {
-                std::thread::sleep(std::time::Duration::from_millis(args[0].get_number() as u64));
-                Expr {
-                    expr: ExprKind::Nil,
-                    state: State::Evaluated,
-                    file: "sleep.rs".to_string(),
-                }
-            },
-            Args::Count(1),
-            "sleep".to_string(),
-        ),
-        state: State::Evaluated,
-        file: "sleep.rs".to_string(),
-    };
-    env.insert("sleep".to_string(), sleep);
+    add_primitives(env);
     eval_to_env!("(define (null? x) (eq x nil))", env);
     eval_to_env!("(define (list . d) d)", env);
     eval_to_env!(
@@ -213,9 +161,7 @@ fn setup_envoirment(env: &Env) {
     eval_to_env!("(define (not x) (if x false true))", env);
     eval_to_env!("(define (newline) (display \"\n\"))", env);
     eval_to_env!("(define (displayln b) (display b) (newline))", env);
-    add_literal!("nil", ExprKind::Nil, env.clone());
-    add_literal!("true", ExprKind::Bool(true), env.clone());
-    add_literal!("false", ExprKind::Bool(false), env.clone());
+
     // eval_to_env!("(define (foldl f init args) (if (null? args) init (foldl f (f init (car args)) (cdr args))))", env);
     // foldl doesn't work for - / % if since the most inner call (f init (car args)) with 0 or as init
     // for - the innermost thing will be the negation of the first thing
@@ -280,6 +226,65 @@ fn setup_envoirment(env: &Env) {
         "(define (length args) (if (null? args) 0 (+ 1 (length (cdr args)))))",
         env
     );
+}
+
+fn add_primitives(env: &Env) {
+    add_binary_fn!("add",env,ExprKind::Number, +,Expr::get_number);
+    add_binary_fn!("sub",env,ExprKind::Number, -,Expr::get_number);
+    add_binary_fn!("mul",env,ExprKind::Number, *,Expr::get_number);
+    add_binary_fn!("div",env,ExprKind::Number, /,Expr::get_number);
+    add_binary_fn!("rem",env,ExprKind::Number, %,Expr::get_number);
+    // identity function:
+    // the reason we have to use the |e|e is because we need to have something
+    // that when we call it, it returns the value of the expression modified so it should work with the operator
+    // but in the case of the boolean operators, we don't need to do anything to the expression
+    // so we end up with |e|e weirdness
+    add_binary_fn!("eq",env,ExprKind::Bool, ==, |e|e);
+    add_binary_fn!("gt",env,ExprKind::Bool, >,Expr::get_number);
+    add_binary_fn!("lt",env,ExprKind::Bool, <,Expr::get_number);
+    add_fn!(
+        "display",
+        env,
+        |args: Vec<Expr>, _env| {
+            print!("{}", args[0]);
+            Expr {
+                expr: ExprKind::Nil,
+                state: State::Evaluated,
+                file: "display.rs".to_string(),
+            }
+        },
+        Args::Count(1)
+    );
+    let apply = Expr {
+        expr: ExprKind::PrimitiveLambda(
+            |args, env| apply(args[0].clone(), env, args[1..].to_vec()),
+            Args::Count(2),
+            "apply".to_string(),
+        ),
+        state: State::Evaluated,
+        file: "apply.rs".to_string(),
+    };
+    env.insert("apply".to_string(), apply);
+    let sleep = Expr {
+        expr: ExprKind::PrimitiveLambda(
+            |args, _| {
+                std::thread::sleep(std::time::Duration::from_millis(args[0].get_number() as u64));
+                Expr {
+                    expr: ExprKind::Nil,
+                    state: State::Evaluated,
+                    file: "sleep.rs".to_string(),
+                }
+            },
+            Args::Count(1),
+            "sleep".to_string(),
+        ),
+        state: State::Evaluated,
+        file: "sleep.rs".to_string(),
+    };
+    env.insert("sleep".to_string(), sleep);
+    add_literal!("nil", ExprKind::Nil, env.clone());
+    add_literal!("true", ExprKind::Bool(true), env.clone());
+    add_literal!("false", ExprKind::Bool(false), env.clone());
 }
 
 impl fmt::Display for Env {

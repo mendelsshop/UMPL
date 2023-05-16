@@ -24,7 +24,7 @@ impl Args {
 impl fmt::Display for Args {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Count(n) => write!(f, "{}", n),
+            Self::Count(n) => write!(f, "{n}"),
             Self::Many => write!(f, "many"),
         }
     }
@@ -189,7 +189,7 @@ impl fmt::Display for ExprKind {
                     f,
                     "(lambda {}({}{}) {body} in <procedure-env>)",
                     name.as_ref()
-                        .map_or_else(String::new, |name| format!("{} ", name)),
+                        .map_or_else(String::new, |name| format!("{name} ")),
                     params.join(", "),
                     extra_params
                         .as_ref()
@@ -242,6 +242,7 @@ impl fmt::Debug for ExprKind {
 /// }
 macro_rules! call_inner {
     ($self:ident, $func:ident, $ret:ty) => {
+        #[allow(dead_code)]
         pub fn $func(&self) -> $ret {
             self.expr.$func()
         }
@@ -256,10 +257,9 @@ impl Expr {
     }
 
     pub fn initialize(mut self, env: &Env) -> Self {
-        if let ExprKind::Lambda(_, _, ref mut closure, _,_) = self.expr {
+        if let ExprKind::Lambda(_, _, ref mut closure, _, _) = self.expr {
             if closure.is_none() {
-       
-                    *closure = Some(env.clone());
+                *closure = Some(env.clone());
             }
         }
         self

@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::ast::{Expr, ExprKind, State};
+use crate::{ast::{Expr, ExprKind, State}};
 
 // parser/lexer combination - both should happen at the same time for each expr
 // for basic scheme
@@ -85,6 +85,7 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             // (if pred consq alt)
             ExprKind::Symbol(sym) if "if" == sym.as_str() => parse_if(exprs),
             ExprKind::Symbol(sym) if "cond" == sym.as_str() => parse_cond_to_if(exprs),
+            ExprKind::Symbol(sym) if "let" == sym.as_str() => parse_let(exprs),
             _ => Expr {
                 expr: {
                     let mut exprs = exprs;
@@ -96,6 +97,38 @@ fn parse_list(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
             },
         }
     }
+}
+
+fn parse_let(mut exprs: Vec<Expr>) -> Expr {
+    // only support let for now, not named let
+    // (let ((x 1) (y 2)) (+ x y)) -> ((lambda (x y) (+ x y)) 1 2)
+    let bindings = exprs.remove(0);
+    let body = exprs.remove(0);
+    let bindings = match bindings.expr {
+        ExprKind::List(bindings) => bindings,
+        _ => panic!("Invalid let bindings"),
+    };
+    let (vars, mut exprs): (Vec<_>, Vec<_>) = bindings.into_iter().map(|expr| match expr.expr {
+        ExprKind::List(mut binding) => {
+            let var = binding.remove(0);
+            let expr = binding.remove(0);
+            (var, expr)
+        }
+        _ => panic!("Invalid let binding"),
+    }).unzip();
+    let lambda = parse_lambda(vec![Expr {
+        expr: ExprKind::List(vars),
+        state: State::Evaluated,
+        file: String::from("let"),
+    }, body]);
+    exprs.insert(0, lambda);
+    println!("{:?}", exprs);
+    Expr {
+        expr: ExprKind::List(exprs),
+        state: State::Evaluated,
+        file: String::from("let"),
+    }
+
 }
 
 fn parse_cond_to_if(mut exprs: Vec<Expr>) -> Expr {
