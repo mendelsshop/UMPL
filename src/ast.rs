@@ -49,6 +49,7 @@ pub enum ExprKind {
         Option<String>,
         Option<String>,
     ),
+    Quote(Box<Expr>),
     Set(String, Box<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
@@ -57,7 +58,9 @@ impl PartialOrd for ExprKind {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Self::Number(n), Self::Number(m)) => n.partial_cmp(m),
-            (Self::Word(n), Self::Word(m)) => n.partial_cmp(m),
+            (Self::Word(n), Self::Word(m))
+            | (Self::Symbol(n), Self::Symbol(m))
+            | (Self::PrimitiveLambda(_, _, n), Self::PrimitiveLambda(_, _, m)) => n.partial_cmp(m),
             (Self::Bool(n), Self::Bool(m)) => n.partial_cmp(m),
             (Self::Nil, Self::Nil) => Some(Ordering::Equal),
             (Self::List(n), Self::List(m)) => n.partial_cmp(m),
@@ -70,7 +73,9 @@ impl PartialEq for ExprKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Number(n), Self::Number(m)) => n == m,
-            (Self::Word(n), Self::Word(m)) | (Self::Symbol(n), Self::Symbol(m)) => n == m,
+            (Self::Word(n), Self::Word(m))
+            | (Self::Symbol(n), Self::Symbol(m))
+            | (Self::PrimitiveLambda(_, _, n), Self::PrimitiveLambda(_, _, m)) => n == m,
             (Self::Bool(n), Self::Bool(m)) => n == m,
             (Self::Nil, Self::Nil) => true,
             (Self::List(n), Self::List(m)) => n == m,
@@ -200,6 +205,7 @@ impl fmt::Display for ExprKind {
             Self::If(predicate, consequent, alternative) => {
                 write!(f, "(if {predicate} {consequent} else {alternative})")
             }
+            Self::Quote(expr) => write!(f, "(quote {expr})"),
         }
     }
 }
@@ -232,6 +238,7 @@ impl fmt::Debug for ExprKind {
             Self::If(predicate, consequent, alternative) => {
                 write!(f, "if {predicate:?} {consequent:?} else {alternative:?}")
             }
+            Self::Quote(expr) => write!(f, "quote ({expr:?})"),
         }
     }
 }

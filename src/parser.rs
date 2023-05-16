@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::{ast::{Expr, ExprKind, State}};
+use crate::ast::{Expr, ExprKind, State};
 
 // parser/lexer combination - both should happen at the same time for each expr
 // for basic scheme
@@ -24,6 +24,7 @@ pub fn parse(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
                 parse_comment(chars);
                 parse(chars)
             }
+            '\'' => parse_quote(chars),
             _ => parse_symbol(chars),
         },
     )
@@ -104,31 +105,46 @@ fn parse_let(mut exprs: Vec<Expr>) -> Expr {
     // (let ((x 1) (y 2)) (+ x y)) -> ((lambda (x y) (+ x y)) 1 2)
     let bindings = exprs.remove(0);
     let body = exprs.remove(0);
-    let bindings = match bindings.expr {
-        ExprKind::List(bindings) => bindings,
-        _ => panic!("Invalid let bindings"),
-    };
-    let (vars, mut exprs): (Vec<_>, Vec<_>) = bindings.into_iter().map(|expr| match expr.expr {
-        ExprKind::List(mut binding) => {
-            let var = binding.remove(0);
-            let expr = binding.remove(0);
-            (var, expr)
-        }
-        _ => panic!("Invalid let binding"),
-    }).unzip();
-    let lambda = parse_lambda(vec![Expr {
-        expr: ExprKind::List(vars),
-        state: State::Evaluated,
-        file: String::from("let"),
-    }, body]);
+    let ExprKind::List(bindings) = bindings.expr else { panic!("Invalid let bindings") };
+    let (vars, mut exprs): (Vec<_>, Vec<_>) = bindings
+        .into_iter()
+        .map(|expr| match expr.expr {
+            ExprKind::List(mut binding) => {
+                let var = binding.remove(0);
+                let expr = binding.remove(0);
+                (var, expr)
+            }
+            _ => panic!("Invalid let binding"),
+        })
+        .unzip();
+    let lambda = parse_lambda(vec![
+        Expr {
+            expr: ExprKind::List(vars),
+            state: State::Evaluated,
+            file: String::from("let"),
+        },
+        body,
+    ]);
     exprs.insert(0, lambda);
-    println!("{:?}", exprs);
     Expr {
         expr: ExprKind::List(exprs),
         state: State::Evaluated,
         file: String::from("let"),
     }
+}
 
+fn parse_quote(chars: &mut Peekable<impl Iterator<Item = char>>) -> Expr {
+    chars.next();
+    let expr = parse(chars);
+    // let expr = match expr.expr {
+    //     ExprKind::List(_) => list_to_cons(expr,
+    //     _ => expr,
+    // };
+    Expr {
+        expr: ExprKind::Quote(Box::new(expr)),
+        state: State::Evaluated,
+        file: String::new(),
+    }
 }
 
 fn parse_cond_to_if(mut exprs: Vec<Expr>) -> Expr {

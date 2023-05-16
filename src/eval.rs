@@ -39,6 +39,7 @@ pub fn eval_expr(epr: Expr, vars: Env) -> Expr {
             }
             final_val
         }
+        ExprKind::Quote(expr) => *expr,
         ExprKind::Def(name, lambda) => {
             let mut lambda = eval_expr(*lambda, vars.clone());
             match &lambda.expr {
