@@ -1,4 +1,5 @@
 pub mod lexer;
+mod pc;
 
 #[cfg(feature = "multi-threaded")]
 pub mod interior_mut {
