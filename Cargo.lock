@@ -3,5 +3,14 @@
 version = 3
 
 [[package]]
+name = "hexponent"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07482eb12527cb107ba354de9717dbce361ce82ec553fe9e70a98db29fd00d3d"
+
+[[package]]
 name = "umpl-beta"
 version = "0.1.0"
+dependencies = [
+ "hexponent",
+]

@@ -73,15 +73,6 @@ pub enum Varidiac {
     AtLeast0,
 }
 
-pub enum Boolean {
-    /// &
-    True,
-    /// |
-    False,
-    /// ?
-    Maybee,
-}
-
 pub struct Token {
     tt: TokenType,
     info: Info,
@@ -125,9 +116,15 @@ pub fn digit() -> Box<Parser<usize>> {
         match input.chars().next() {
             Some(n) => match n.to_digit(10) {
                 Some(d) => Ok((d as usize, input.split_at(1).1)),
-                None => Err(ParseError {kind: ParseErrorType::NotADigit(n), input: input}),
+                None => Err(ParseError {
+                    kind: ParseErrorType::NotADigit(n),
+                    input: input,
+                }),
             },
-            None => Err(ParseError {kind: ParseErrorType::EOF, input: ""}),
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
         }
     })
 }
@@ -138,12 +135,18 @@ pub fn char(looking_for: char) -> Box<Parser<char>> {
         match input.chars().next() {
             Some(n) => {
                 if n == looking_for {
-                    Ok((n, input.split_at(1).1))
+                    Ok((n, input.split_at(n.len_utf8()).1))
                 } else {
-                    Err(ParseError {kind: ParseErrorType::Mismatch(looking_for, n), input: input})
+                    Err(ParseError {
+                        kind: ParseErrorType::Mismatch(looking_for, n),
+                        input: input,
+                    })
                 }
             }
-            None => Err(ParseError {kind: ParseErrorType::EOF, input: ""}),
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
         }
     })
 }
@@ -154,13 +157,34 @@ pub fn not_char(looking_for: char) -> Box<Parser<char>> {
         match input.chars().next() {
             Some(n) => {
                 if n != looking_for {
-                    Ok((n, input.split_at(1).1))
+                    Ok((n, input.split_at(n.len_utf8()).1))
                 } else {
-                    Err(ParseError {kind: ParseErrorType::Mismatch(looking_for, n), input: input})
+                    Err(ParseError {
+                        kind: ParseErrorType::Mismatch(looking_for, n),
+                        input: input,
+                    })
                 }
             }
-            None => Err(ParseError {kind: ParseErrorType::EOF, input: ""}),
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
         }
+    })
+}
+
+fn take() -> Box<Parser<char>> {
+    Box::new(move |input: &str| {
+        let chars = &mut input.chars();
+        chars.next().map_or_else(
+            || {
+                Err(ParseError {
+                    input: "",
+                    kind: ParseErrorType::EOF,
+                })
+            },
+            |char| Ok((char, input.split_at(char.len_utf8()).1)),
+        )
     })
 }
 
@@ -190,6 +214,18 @@ pub fn map<T: 'static, U: 'static, F: Fn(T) -> U + 'static + Clone>(
     })
 }
 
+pub fn try_map<T: 'static, U: 'static, F: Fn(T) -> Result<U, ParseError<'static>> + 'static + Clone>(
+    parser: Box<Parser<T>>,
+    map_fn: F,
+) -> Box<Parser<U>> {
+    Box::new(move |input| {
+        // println!("map s `{input}`");
+        let (ir, input) = parser(input)?;
+        // println!("map e `{input}`");
+        map_fn(ir).map(|ir|(ir,input))
+    })
+}
+
 pub fn alt<T: 'static>(parser1: Box<Parser<T>>, parser2: Box<Parser<T>>) -> Box<Parser<T>> {
     Box::new(move |input| {
         println!("alt s `{input}`");
@@ -197,11 +233,11 @@ pub fn alt<T: 'static>(parser1: Box<Parser<T>>, parser2: Box<Parser<T>>) -> Box<
             Ok((res, input)) => {
                 println!("alt m `{input}`");
                 Ok((res, input))
-            },
+            }
             Err(_) => {
                 println!("alt e `{input}`");
                 parser2(input)
-            },
+            }
         }
     })
 }
@@ -258,13 +294,21 @@ pub fn inbetween<T: 'static, U: 'static, V: 'static>(
 pub fn many1<T: 'static>(parser: Box<Parser<T>>) -> Box<Parser<Box<dyn Iterator<Item = T>>>> {
     let many = many(parser);
     Box::new(move |input| match many(input)? {
-        (None, input) => Err(ParseError {kind: ParseErrorType::NotEnoughMatches, input: input}),
+        (None, input) => Err(ParseError {
+            kind: ParseErrorType::NotEnoughMatches,
+            input: input,
+        }),
         (Some(v), input) => Ok((v, input)),
     })
 }
 
 pub fn fail<T>() -> Box<Parser<T>> {
-    Box::new(move |input| Err(ParseError {kind: ParseErrorType::Fail, input: input}))
+    Box::new(move |input| {
+        Err(ParseError {
+            kind: ParseErrorType::Fail,
+            input: input,
+        })
+    })
 }
 
 pub fn unit<T: 'static + Clone>(val: T) -> Box<Parser<T>> {
@@ -307,12 +351,11 @@ pub fn choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
             println!("choice s `{input}`");
             match parser(input) {
                 Ok(ok) => return Ok(ok),
-                Err(_) => continue
+                Err(_) => continue,
             }
         }
         fail()(input)
     })
-
 }
 
 pub fn not_choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
@@ -332,9 +375,11 @@ pub fn not_choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
             println!("choice s `{input}`");
             res = Some(parser(input)?);
         }
-        res.ok_or(ParseError{kind: ParseErrorType::NoMatchFound, input})
+        res.ok_or(ParseError {
+            kind: ParseErrorType::NoMatchFound,
+            input,
+        })
     })
-
 }
 
 pub fn any_of(chars: impl IntoIterator<Item = char>) -> Box<Parser<char>> {
@@ -344,7 +389,6 @@ pub fn any_of(chars: impl IntoIterator<Item = char>) -> Box<Parser<char>> {
 pub fn not_any_of(chars: impl IntoIterator<Item = char>) -> Box<Parser<char>> {
     not_choice(chars.into_iter().map(not_char).collect())
 }
-
 
 pub fn string(to_match: &str) -> Box<Parser<String>> {
     map(seq(to_match.chars().map(|c| char(c)).collect()), |chars| {
@@ -377,12 +421,13 @@ pub fn sep1<T: 'static, U: 'static>(
 ) -> Box<Parser<Box<dyn Iterator<Item = T>>>> {
     let sep = sep(parser, delimeter);
     Box::new(move |input| match sep(input)? {
-        (None, input) => Err(ParseError {kind: ParseErrorType::NotEnoughMatches, input: input}),
+        (None, input) => Err(ParseError {
+            kind: ParseErrorType::NotEnoughMatches,
+            input: input,
+        }),
         (Some(v), input) => Ok((v, input)),
     })
 }
-
-
 
 #[derive(Debug)]
 pub enum Op {
@@ -510,77 +555,82 @@ pub enum LispExpr {
     Number(usize),
     Symbol(String),
     List(Vec<LispExpr>),
-    If(Box<LispExpr>, Box<LispExpr>, Box<LispExpr>)
+    If(Box<LispExpr>, Box<LispExpr>, Box<LispExpr>),
 }
 
 static mut INDENT: usize = 0;
 pub fn inc_indent() {
-    unsafe { INDENT+=1 }
-} 
+    unsafe { INDENT += 1 }
+}
 pub fn dec_indent() {
-    unsafe { INDENT-=1 }
-} 
+    unsafe { INDENT -= 1 }
+}
 pub fn indent() -> String {
-    format!("{}{}",unsafe { INDENT }," ".repeat(unsafe {
-        INDENT * 4
-    }))
+    format!("{}{}", unsafe { INDENT }, " ".repeat(unsafe { INDENT * 4 }))
 }
 
 pub fn lispnumber() -> Box<Parser<LispExpr>> {
-    Box::new(|input|  {
-    println!("{}number", indent());
-    map(many1(digit()), |i| {
-        let collect = &i.map(|i| i.to_string()).collect::<String>();
-        LispExpr::Number(collect.parse().unwrap())
-    })(input)})
+    Box::new(|input| {
+        println!("{}number", indent());
+        map(many1(digit()), |i| {
+            let collect = &i.map(|i| i.to_string()).collect::<String>();
+            LispExpr::Number(collect.parse().unwrap())
+        })(input)
+    })
 }
 
 pub fn lisplist() -> Box<Parser<LispExpr>> {
-    Box::new(|input|  {
-    println!("{}list", indent());
-    inc_indent();
-    let res = 
-        inbetween(
+    Box::new(|input| {
+        println!("{}list", indent());
+        inc_indent();
+        let res = inbetween(
             keep_left(char('('), white_space()),
-            map(sep(lispexpr(), white_space()),
-            |i| LispExpr::List(i.map_or(vec![], Iterator::collect))),
+            map(sep(lispexpr(), white_space()), |i| {
+                LispExpr::List(i.map_or(vec![], Iterator::collect))
+            }),
             keep_right(white_space(), char(')')),
-    
-    )(input);
-    dec_indent();
-    res
-})
+        )(input);
+        dec_indent();
+        res
+    })
 }
 
-pub fn lispif()  -> Box<Parser<LispExpr>> {
-    map(seq(vec![keep_right(string("if"), lispexpr()),keep_right(chain(white_space(), string("then")), lispexpr()), keep_right(chain(white_space(), string("else")), lispexpr())]), 
-    |mut i|
-    {
-        LispExpr::If(Box::new(i.next().unwrap()), Box::new(i.next().unwrap()), Box::new(i.next().unwrap()))
-    }
-
-)
+pub fn lispif() -> Box<Parser<LispExpr>> {
+    map(
+        seq(vec![
+            keep_right(string("if"), lispexpr()),
+            keep_right(chain(white_space(), string("then")), lispexpr()),
+            keep_right(chain(white_space(), string("else")), lispexpr()),
+        ]),
+        |mut i| {
+            LispExpr::If(
+                Box::new(i.next().unwrap()),
+                Box::new(i.next().unwrap()),
+                Box::new(i.next().unwrap()),
+            )
+        },
+    )
 }
 
 pub fn lispsymbol() -> Box<Parser<LispExpr>> {
-    Box::new(|input|  {
-    println!("{}sybmol", indent());
-    map(many1(not_any_of(['\n', ' ', '\t', '.', '(',')'])), |i|LispExpr::Symbol(i.collect()))(input)
-})
+    Box::new(|input| {
+        println!("{}sybmol", indent());
+        map(many1(not_any_of(['\n', ' ', '\t', '.', '(', ')'])), |i| {
+            LispExpr::Symbol(i.collect())
+        })(input)
+    })
 }
 
 pub fn lispexpr() -> Box<Parser<LispExpr>> {
-    Box::new(|input|  {
+    Box::new(|input| {
         println!("{}listexpr", indent());
         inc_indent();
-        let res = keep_right(white_space(),choice([
-            lispnumber(),
-            lisplist(), 
-            lispif(),
-            lispsymbol(),
-            ].to_vec()))(input);
-            dec_indent();
-            res
+        let res = keep_right(
+            white_space(),
+            choice([lispnumber(), lisplist(), lispif(), lispsymbol()].to_vec()),
+        )(input);
+        dec_indent();
+        res
     })
 }
 
@@ -590,6 +640,109 @@ fn lisp() {
     // sym("()").unwrap();
     let p = lispexpr();
     let res = p("(t55 if t then 6 else 5)");
- 
+
     println!("{res:?}")
+}
+#[derive(Debug, Default)]
+pub enum UMPL2Expr {
+    Bool(Boolean),
+    Number(f64),
+    String(String),
+    Scope(Vec<UMPL2Expr>),
+    If(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
+    #[default]
+    Hempty,
+}
+
+#[derive(Debug)]
+pub enum Boolean {
+    /// &
+    True,
+    /// |
+    False,
+    /// ?
+    Maybee,
+}
+
+fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
+    inbetween(keep_right(white_space(),char('᚜')), map(many(p), |r| UMPL2Expr::Scope(r.map_or_else(Vec::new, Iterator::collect))), opt(keep_right(white_space(),char('᚛'))))
+}
+
+fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
+    Box::new(|input| keep_right(white_space(), choice([literal(), stmt()].to_vec()))(input))
+}
+
+fn literal() -> Box<Parser<UMPL2Expr>> {
+    choice([boolean(), hexnumber(), stringdot()].to_vec())
+}
+
+fn boolean() -> Box<Parser<UMPL2Expr>> {
+    choice(vec![
+        map(string("&"), |_| UMPL2Expr::Bool(Boolean::True)),
+        map(string("|"), |_| UMPL2Expr::Bool(Boolean::False)),
+        map(string("?"), |_| UMPL2Expr::Bool(Boolean::Maybee)),
+    ])
+}
+
+fn hexnumber() -> Box<Parser<UMPL2Expr>> {
+    let digit = any_of(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    let hex_digit = choice([digit.clone(), any_of(['a', 'b', 'c', 'd', 'e', 'f'])].to_vec());
+    let parese_num = |digit_type: Box<Parser<char>>| try_map(
+        chain(
+            many(digit_type.clone()),
+            opt(keep_right(char('%'), many1(digit_type))),
+        ),
+        |r| {
+            let number = match r {
+                (None, None) => return Err(ParseError { kind: ParseErrorType::Other("not a digit".to_string()), input:"" }),
+                (None, Some(s)) => (String::new(), s.collect()),
+                (Some(s), None) => (s.collect(), String::new()),
+                (Some(s), Some(r)) => (s.collect(), r.collect()),
+            };
+            Ok(UMPL2Expr::Number(
+                format!("0x{}.{}", number.0, number.1)
+                    .parse::<hexponent::FloatLiteral>()
+                    .unwrap()
+                    .into(),
+            ))
+        },
+    );
+    alt(
+        keep_right((string("0x")), parese_num(hex_digit)),
+        parese_num(digit)
+    )
+}
+
+fn stringdot() -> Box<Parser<UMPL2Expr>> {
+    inbetween(
+        char('.'),
+        map(many(not_char('.')), |r| {
+            UMPL2Expr::String(r.map_or_else(String::new, Iterator::collect))
+        }),
+        opt(char('.')),
+    )
+}
+
+fn stmt() -> Box<Parser<UMPL2Expr>> {
+    choice([if_stmt()].to_vec())
+}
+
+fn if_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
+    map(seq(vec![keep_right(string("if"), umpl2expr()), keep_right(keep_right(white_space(), string("do")), scope(umpl2expr())), keep_right(keep_right(white_space(), string("otherwise")), scope(umpl2expr())), ]), |mut r| {
+        let cond = r.next().unwrap_or_default();
+        let cons = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));  
+        let alt = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));  
+        UMPL2Expr::If(Box::new(cond), Box::new(cons), Box::new(alt))
+    }
+)
+}
+
+#[test]
+fn umpl() {
+    println!("{:?}", umpl2expr()("if 1 do ᚜1 2᚛ otherwise ᚜1᚛"));
+}
+
+fn print(input: String) -> String {
+    println!("{input}");
+    input
 }

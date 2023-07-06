@@ -26,19 +26,17 @@ impl<'a, T: 'a> Clone for Box<dyn 'a + ParserFn<T>> {
 
 pub type Parser<T> = dyn ParserFn<T>;
 
-
 // String parser (generator) String -> Parser(String)
 // takes as input string to match
 // return parser (function) that
 // tries to match the (start of) the input to the input given to parser generator
-// consuming? ie: String("hello")("heppo") -> 
+// consuming? ie: String("hello")("heppo") ->
 
-pub fn string(match_string: &str) -> Box<Parser<&str>> {
-    Box::new(|input|
-        
-    )
-}
+// pub fn string(match_string: &str) -> Box<Parser<&str>> {
+//     Box::new(|input|
 
+//     )
+// }
 
 // many takes input parser of A -> Parser [A]
 // never errors
@@ -59,7 +57,5 @@ pub fn string(match_string: &str) -> Box<Parser<&str>> {
 // ie (p2 (p1 input)) ..
 // consuming on  error
 
-
 // eof () -> Parser A
 // if there is nothing left ok otherwise error
-

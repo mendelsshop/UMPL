@@ -9,4 +9,4 @@ edition = "2021"
 multi-threaded = []
 
 [dependencies]
-
+hexponent = "0.3.1"
