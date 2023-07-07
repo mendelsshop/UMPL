@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use std::{
-    iter::{self, empty},
-};
+use std::iter::{self, empty};
 
 use crate::interior_mut::RC;
 
@@ -106,7 +104,6 @@ pub struct ParseError<'a> {
 /// to a list of pairs of things (T) and strings
 // type Parser<T> = dyn Fn(&str) -> Result<(T, &str), ParseError> + 'static;
 
-
 // TODO reimplement char parsing with satisfy
 
 pub fn digit() -> Box<Parser<usize>> {
@@ -151,7 +148,7 @@ pub fn char(looking_for: char) -> Box<Parser<char>> {
 }
 
 pub fn integer() -> Box<Parser<usize>> {
-    map(many1(any_of([])), |input| {
+    map(many1(any_of(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])), |input| {
         input.collect::<String>().parse().unwrap()
     })
 }
@@ -162,8 +159,10 @@ pub fn satify(checker: impl Fn(char) -> bool + 'static + Clone) -> Box<Parser<ch
         match input.chars().next() {
             Some(n) => {
                 if checker(n) {
+                    println!("found match {n}");
                     Ok((n, input.split_at(n.len_utf8()).1))
                 } else {
+                    println!("not match {n}");
                     Err(ParseError {
                         kind: ParseErrorType::SatisfyMismatch(n),
                         input,
@@ -674,12 +673,13 @@ fn lisp() {
 
     println!("{res:?}")
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub enum UMPL2Expr {
     Bool(Boolean),
     Number(f64),
     String(String),
     Scope(Vec<UMPL2Expr>),
+    Ident(String),
     If(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
     Unless(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
     Stop(Box<UMPL2Expr>),
@@ -687,12 +687,13 @@ pub enum UMPL2Expr {
     Until(Box<UMPL2Expr>, Box<UMPL2Expr>),
     GoThrough(String, Box<UMPL2Expr>, Box<UMPL2Expr>),
     ContiueDoing(Box<UMPL2Expr>),
-    FN(char, usize, Option<Varidiac>, Box<UMPL2Expr>),
+    Fanction(char, usize, Option<Varidiac>, Box<UMPL2Expr>),
+    Application(Vec<UMPL2Expr>),
     #[default]
     Hempty,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Boolean {
     /// &
     True,
@@ -702,7 +703,7 @@ pub enum Boolean {
     Maybee,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Varidiac {
     /// denotes that besides the usual arg count function will take extra args
     /// in form of tree (requires at least 1 arg)
@@ -733,7 +734,21 @@ fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
 }
 
 fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
-    Box::new(|input| keep_right(white_space(), choice([literal(), stmt()].to_vec()))(input))
+    Box::new(|input| keep_right(white_space(), choice([literal(), stmt(), ident_umpl(), application()].to_vec()))(input))
+}
+
+fn application() -> Box<dyn CloneFn<UMPL2Expr>> {
+    inbetween(
+        keep_right(white_space(), any_of(call_start().iter().copied())),
+        map(many(umpl2expr()), |r| {
+            UMPL2Expr::Application(r.map_or_else(Vec::new, Iterator::collect))
+        }),
+        opt(keep_right(white_space(), any_of(call_end().iter().copied()))),
+    )
+}
+
+pub fn parse_umpl(input: &str) -> Result<UMPL2Expr, ParseError> {
+    umpl2expr()(input).map(|res| res.0)
 }
 
 fn literal() -> Box<Parser<UMPL2Expr>> {
@@ -870,12 +885,16 @@ fn until_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
 fn go_through_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
     map(
         seq(vec![
-            keep_right(string("go-through"), umpl2expr()), // TODO: use identifier parserl, not the full blown expression parser
+            keep_right(string("go-through"), keep_right(white_space(), ident_umpl())), // TODO: use identifier parserl, not the full blown expression parser
             keep_right(keep_right(white_space(), string("of")), umpl2expr()),
             scope(umpl2expr()),
         ]),
         |mut r| {
-            let for_ident = format!("{:?}", r.next().unwrap_or_default());
+            let for_ident = match r.next().unwrap_or_default() {
+                UMPL2Expr::Ident(str) => str,
+                // TODO don't panic use try_map, or randomly create an ident string
+                _ => panic!()
+            };
             let iterable = r.next().unwrap_or_default();
             let loop_scope = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
             UMPL2Expr::GoThrough(for_ident, Box::new(iterable), Box::new(loop_scope))
@@ -905,22 +924,18 @@ fn fn_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
     // (chain (keep right "fanction" name(char)), (chain, (opt number) (chain (opt varidiac), scope))
     map(
         chain(
-            keep_right(string("fanction"), satify(unic_emoji_char::is_emoji)),
-            keep_right(
-                white_space(),
+            keep_right(string("fanction"), keep_right(white_space(),satify(unic_emoji_char::is_emoji))),
                 chain(
-                    opt(integer()),
-                    keep_right(
-                        white_space(),
+                    opt(keep_right(white_space(), integer())),
                         chain(
-                            opt(map(any_of(['*', '+']), |char|
+                            opt(keep_right(white_space(),map(any_of(['*', '+']), |char|
                             // its ok to unwrap b/c we already know that it is a correct form
-                             Varidiac::from_char(char).unwrap())),
+                             Varidiac::from_char(char).unwrap()))),
                             scope(umpl2expr()),
-                        ),
+                        
                     ),
                 ),
-            ),
+            
         ),
         |r| {
             let name = r.0;
@@ -928,22 +943,146 @@ fn fn_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
             let param_count = r.1 .0.unwrap_or_default();
             let variadic = r.1 .1 .0;
             let scope = r.1 .1 .1;
-            UMPL2Expr::FN(name, param_count, variadic, Box::new(scope))
+            UMPL2Expr::Fanction(name, param_count, variadic, Box::new(scope))
         },
     )
 }
 
-#[test]
-fn umpl() {
-    println!("{:?}", umpl2expr()("if 1 do ᚜1 unless 1 than ᚜1 2᚛ else ᚜1᚛ 2᚛ otherwise ᚜if 1 do ᚜1 2᚛ otherwise ᚜until 1 then ᚜1 2᚛᚛᚛"));
+fn ident_umpl() -> Box<dyn CloneFn<UMPL2Expr>> {
+    map(
+        many1(not_any_of(
+            call_start()
+                .iter()
+                .chain(special_char())
+                .chain(call_end())
+                .copied(),
+        )),
+        |res| UMPL2Expr::Ident(res.collect()),
+    )
 }
 
-#[test]
-fn umpl_no_end() {
-    println!("{:?}", umpl2expr()("if 1 do ᚜1 unless 1 than ᚜1 2 else ᚜1 2 otherwise ᚜if 1 do ᚜1 2 otherwise ᚜until 1 then ᚜1 2"));
+fn special_char() -> &'static [char] {
+    &[
+        '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t',
+    ]
 }
 
-fn print(input: String) -> String {
-    println!("{input}");
-    input
+fn call_start() -> &'static [char] {
+    &[
+        '(', '༺', '༼', '⁅', '⁽', '₍', '⌈', '⌊', '❨', '❪', '❬', '❮', '❰', '❲', '❴', '⟅', '⟦', '⟨',
+        '⟪', '⟬', '⟮', '⦃', '⦅', '⦇', '⦉', '⦋', '⦍', '⦏', '⦑', '⦓', '⦕', '⦗', '⧘', '⧚', '⸢', '⸤',
+        '⸦', '⸨', '\u{2e55}', '\u{2e57}', '\u{2e59}', '\u{2e5b}', '〈', '《', '「', '『', '【',
+        '〔', '〖', '〘', '〚', '﹙', '﹛', '﹝', '（', '［', '｛', '｟', '｢',
+    ]
+}
+
+fn call_end() -> &'static [char] {
+    &[
+        ')', '༻', '༽', '⁆', '⁾', '₎', '⌉', '⌋', '❩', '❫', '❭', '❯', '❱', '❳', '❵', '⟆', '⟧', '⟩',
+        '⟫', '⟭', '⟯', '⦄', '⦆', '⦈', '⦊', '⦌', '⦎', '⦐', '⦒', '⦔', '⦖', '⦘', '⧙', '⧛', '⸣', '⸥',
+        '⸧', '⸩', '\u{2e56}', '\u{2e58}', '\u{2e5a}', '\u{2e5c}', '〉', '》', '」', '』', '】',
+        '〕', '〗', '〙', '〛', '﹚', '﹜', '﹞', '）', '］', '｝', '｠', '｣',
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lexer::{parse_umpl, Boolean, UMPL2Expr, Varidiac};
+
+    #[test]
+    pub(crate) fn umpl() {
+        println!("{:?}", parse_umpl("if 1 do ᚜1 unless 1 than ᚜1 2᚛ else ᚜1᚛ 2᚛ otherwise ᚜if 1 do ᚜1 2᚛ otherwise ᚜until 1 then ᚜1 2᚛᚛᚛"));
+    }
+
+    #[test]
+    pub(crate) fn umpl_no_end() {
+        println!("{:?}", parse_umpl("if 1 do ᚜1 unless 1 than ᚜1 2 else ᚜1 2 otherwise ᚜if 1 do ᚜1 2 otherwise ᚜until 1 then ᚜1 2"));
+    }
+
+    #[test]
+    pub(crate) fn umpl_if() {
+        let test_result = parse_umpl("if ? do ᚜2 6 6᚛  otherwise ᚜4᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::Unless(
+                Box::new(UMPL2Expr::Bool(Boolean::Maybee)),
+                Box::new(UMPL2Expr::Scope(vec![
+                    UMPL2Expr::Number(2.0),
+                    UMPL2Expr::Number(6.0),
+                    UMPL2Expr::Number(6.0)
+                ])),
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Number(4.0)]))
+            )
+        )
+    }
+
+    #[test]
+    fn umpl_unless() {
+        let test_result = parse_umpl("unless & than ᚜4᚛ else ᚜.t.᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::Unless(
+                Box::new(UMPL2Expr::Bool(Boolean::True)),
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Number(4.0)])),
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("t".to_string())]))
+            )
+        )
+    }
+
+    #[test]
+    fn umpl_until() {
+        let test_result = parse_umpl("until | then ᚜ ab/᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::Until(
+                Box::new(UMPL2Expr::Bool(Boolean::False)),
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("ab/".to_string())]))
+            )
+        )
+    }
+
+
+    #[test]
+    fn umpl_go_through() {
+        let test_result = parse_umpl("go-through a of (tree 5 6 7) ᚜ .ab/.᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::GoThrough(
+                "a".to_string(),
+                Box::new(UMPL2Expr::Application(vec![UMPL2Expr::Ident("tree".to_string()), UMPL2Expr::Number(5.0), UMPL2Expr::Number(6.0), UMPL2Expr::Number(7.0)])),
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("ab/".to_string())]))
+            )
+        )
+    }
+
+    #[test]
+    fn umpl_continue_doing() {
+        let test_result = parse_umpl("continue-doing ᚜ lg` ᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::ContiueDoing(
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("lg`".to_string())]))
+            )
+        )
+    }
+
+    #[test]
+    fn umpl_fn() {
+        let test_result = parse_umpl("fanction 🚗  1 * ᚜ ^l ᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::Fanction(
+                '🚗',
+                1,
+                Some(Varidiac::AtLeast0),
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("^l".to_string())]))
+            )
+        )
+    }
 }
