@@ -33,3 +33,5 @@ booleans: & is true | is false ? is maybe (b/c were going for tree, we also shou
 casing shneigans on keywords
 
 if a condtional hits a maybe it will randomly choose to go or not
+
+should try to `help` in most interesting way (using randomnsess....)

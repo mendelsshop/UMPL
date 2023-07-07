@@ -1,4 +1,8 @@
-use std::iter::{self, empty};
+#![allow(dead_code)]
+
+use std::{
+    iter::{self, empty},
+};
 
 use crate::interior_mut::RC;
 
@@ -64,15 +68,6 @@ pub fn to_keyword(source: &str) -> Option<KeyWord> {
     }
 }
 
-pub enum Varidiac {
-    /// denotes that besides the usual arg count function will take extra args
-    /// in form of tree (requires at least 1 arg)
-    AtLeast1,
-    /// denotes that besides the usual arg count function will take extra args
-    /// in form of tree (requires at least 0 args)
-    AtLeast0,
-}
-
 pub struct Token {
     tt: TokenType,
     info: Info,
@@ -98,6 +93,7 @@ pub enum ParseErrorType {
     Fail,
     NotEnoughMatches,
     NoMatchFound,
+    SatisfyMismatch(char),
 }
 
 #[derive(Debug)]
@@ -110,6 +106,9 @@ pub struct ParseError<'a> {
 /// to a list of pairs of things (T) and strings
 // type Parser<T> = dyn Fn(&str) -> Result<(T, &str), ParseError> + 'static;
 
+
+// TODO reimplement char parsing with satisfy
+
 pub fn digit() -> Box<Parser<usize>> {
     Box::new(|input: &str| {
         println!("{}`{input:?}` -> digit", indent());
@@ -118,7 +117,7 @@ pub fn digit() -> Box<Parser<usize>> {
                 Some(d) => Ok((d as usize, input.split_at(1).1)),
                 None => Err(ParseError {
                     kind: ParseErrorType::NotADigit(n),
-                    input: input,
+                    input,
                 }),
             },
             None => Err(ParseError {
@@ -139,7 +138,35 @@ pub fn char(looking_for: char) -> Box<Parser<char>> {
                 } else {
                     Err(ParseError {
                         kind: ParseErrorType::Mismatch(looking_for, n),
-                        input: input,
+                        input,
+                    })
+                }
+            }
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
+        }
+    })
+}
+
+pub fn integer() -> Box<Parser<usize>> {
+    map(many1(any_of([])), |input| {
+        input.collect::<String>().parse().unwrap()
+    })
+}
+
+pub fn satify(checker: impl Fn(char) -> bool + 'static + Clone) -> Box<Parser<char>> {
+    Box::new(move |input: &str| {
+        // println!("{}`{input:?}` -> `{looking_for:?}`", indent());
+        match input.chars().next() {
+            Some(n) => {
+                if checker(n) {
+                    Ok((n, input.split_at(n.len_utf8()).1))
+                } else {
+                    Err(ParseError {
+                        kind: ParseErrorType::SatisfyMismatch(n),
+                        input,
                     })
                 }
             }
@@ -161,7 +188,7 @@ pub fn not_char(looking_for: char) -> Box<Parser<char>> {
                 } else {
                     Err(ParseError {
                         kind: ParseErrorType::Mismatch(looking_for, n),
-                        input: input,
+                        input,
                     })
                 }
             }
@@ -214,7 +241,11 @@ pub fn map<T: 'static, U: 'static, F: Fn(T) -> U + 'static + Clone>(
     })
 }
 
-pub fn try_map<T: 'static, U: 'static, F: Fn(T) -> Result<U, ParseError<'static>> + 'static + Clone>(
+pub fn try_map<
+    T: 'static,
+    U: 'static,
+    F: Fn(T) -> Result<U, ParseError<'static>> + 'static + Clone,
+>(
     parser: Box<Parser<T>>,
     map_fn: F,
 ) -> Box<Parser<U>> {
@@ -222,7 +253,7 @@ pub fn try_map<T: 'static, U: 'static, F: Fn(T) -> Result<U, ParseError<'static>
         // println!("map s `{input}`");
         let (ir, input) = parser(input)?;
         // println!("map e `{input}`");
-        map_fn(ir).map(|ir|(ir,input))
+        map_fn(ir).map(|ir| (ir, input))
     })
 }
 
@@ -296,7 +327,7 @@ pub fn many1<T: 'static>(parser: Box<Parser<T>>) -> Box<Parser<Box<dyn Iterator<
     Box::new(move |input| match many(input)? {
         (None, input) => Err(ParseError {
             kind: ParseErrorType::NotEnoughMatches,
-            input: input,
+            input,
         }),
         (Some(v), input) => Ok((v, input)),
     })
@@ -306,7 +337,7 @@ pub fn fail<T>() -> Box<Parser<T>> {
     Box::new(move |input| {
         Err(ParseError {
             kind: ParseErrorType::Fail,
-            input: input,
+            input,
         })
     })
 }
@@ -423,7 +454,7 @@ pub fn sep1<T: 'static, U: 'static>(
     Box::new(move |input| match sep(input)? {
         (None, input) => Err(ParseError {
             kind: ParseErrorType::NotEnoughMatches,
-            input: input,
+            input,
         }),
         (Some(v), input) => Ok((v, input)),
     })
@@ -650,6 +681,13 @@ pub enum UMPL2Expr {
     String(String),
     Scope(Vec<UMPL2Expr>),
     If(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
+    Unless(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
+    Stop(Box<UMPL2Expr>),
+    Skip,
+    Until(Box<UMPL2Expr>, Box<UMPL2Expr>),
+    GoThrough(String, Box<UMPL2Expr>, Box<UMPL2Expr>),
+    ContiueDoing(Box<UMPL2Expr>),
+    FN(char, usize, Option<Varidiac>, Box<UMPL2Expr>),
     #[default]
     Hempty,
 }
@@ -664,8 +702,34 @@ pub enum Boolean {
     Maybee,
 }
 
+#[derive(Debug)]
+pub enum Varidiac {
+    /// denotes that besides the usual arg count function will take extra args
+    /// in form of tree (requires at least 1 arg)
+    AtLeast1,
+    /// denotes that besides the usual arg count function will take extra args
+    /// in form of tree (requires at least 0 args)
+    AtLeast0,
+}
+
+impl Varidiac {
+    fn from_char(c: char) -> Option<Varidiac> {
+        match c {
+            '*' => Some(Self::AtLeast0),
+            '+' => Some(Self::AtLeast1),
+            _ => None,
+        }
+    }
+}
+
 fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
-    inbetween(keep_right(white_space(),char('᚜')), map(many(p), |r| UMPL2Expr::Scope(r.map_or_else(Vec::new, Iterator::collect))), opt(keep_right(white_space(),char('᚛'))))
+    inbetween(
+        keep_right(white_space(), char('᚜')),
+        map(many(p), |r| {
+            UMPL2Expr::Scope(r.map_or_else(Vec::new, Iterator::collect))
+        }),
+        opt(keep_right(white_space(), char('᚛'))),
+    )
 }
 
 fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
@@ -687,29 +751,36 @@ fn boolean() -> Box<Parser<UMPL2Expr>> {
 fn hexnumber() -> Box<Parser<UMPL2Expr>> {
     let digit = any_of(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
     let hex_digit = choice([digit.clone(), any_of(['a', 'b', 'c', 'd', 'e', 'f'])].to_vec());
-    let parese_num = |digit_type: Box<Parser<char>>| try_map(
-        chain(
-            many(digit_type.clone()),
-            opt(keep_right(char('%'), many1(digit_type))),
-        ),
-        |r| {
-            let number = match r {
-                (None, None) => return Err(ParseError { kind: ParseErrorType::Other("not a digit".to_string()), input:"" }),
-                (None, Some(s)) => (String::new(), s.collect()),
-                (Some(s), None) => (s.collect(), String::new()),
-                (Some(s), Some(r)) => (s.collect(), r.collect()),
-            };
-            Ok(UMPL2Expr::Number(
-                format!("0x{}.{}", number.0, number.1)
-                    .parse::<hexponent::FloatLiteral>()
-                    .unwrap()
-                    .into(),
-            ))
-        },
-    );
+    let parese_num = |digit_type: Box<Parser<char>>| {
+        try_map(
+            chain(
+                many(digit_type.clone()),
+                opt(keep_right(char('%'), many1(digit_type))),
+            ),
+            |r| {
+                let number = match r {
+                    (None, None) => {
+                        return Err(ParseError {
+                            kind: ParseErrorType::Other("not a digit".to_string()),
+                            input: "",
+                        })
+                    }
+                    (None, Some(s)) => (String::new(), s.collect()),
+                    (Some(s), None) => (s.collect(), String::new()),
+                    (Some(s), Some(r)) => (s.collect(), r.collect()),
+                };
+                Ok(UMPL2Expr::Number(
+                    format!("0x{}.{}", number.0, number.1)
+                        .parse::<hexponent::FloatLiteral>()
+                        .unwrap()
+                        .into(),
+                ))
+            },
+        )
+    };
     alt(
-        keep_right((string("0x")), parese_num(hex_digit)),
-        parese_num(digit)
+        keep_right(string("0x"), parese_num(hex_digit)),
+        parese_num(digit),
     )
 }
 
@@ -724,22 +795,152 @@ fn stringdot() -> Box<Parser<UMPL2Expr>> {
 }
 
 fn stmt() -> Box<Parser<UMPL2Expr>> {
-    choice([if_stmt()].to_vec())
+    choice(
+        [
+            if_stmt(),
+            unless_stmt(),
+            until_stmt(),
+            go_through_stmt(),
+            continue_doing_stmt(),
+            fn_stmt(),
+        ]
+        .to_vec(),
+    )
 }
 
 fn if_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
-    map(seq(vec![keep_right(string("if"), umpl2expr()), keep_right(keep_right(white_space(), string("do")), scope(umpl2expr())), keep_right(keep_right(white_space(), string("otherwise")), scope(umpl2expr())), ]), |mut r| {
-        let cond = r.next().unwrap_or_default();
-        let cons = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));  
-        let alt = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));  
-        UMPL2Expr::If(Box::new(cond), Box::new(cons), Box::new(alt))
-    }
-)
+    map(
+        seq(vec![
+            keep_right(string("if"), umpl2expr()),
+            keep_right(keep_right(white_space(), string("do")), scope(umpl2expr())),
+            keep_right(
+                keep_right(white_space(), string("otherwise")),
+                scope(umpl2expr()),
+            ),
+        ]),
+        |mut r| {
+            let cond = r.next().unwrap_or_default();
+            let cons = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            let alt = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            UMPL2Expr::If(Box::new(cond), Box::new(cons), Box::new(alt))
+        },
+    )
+}
+
+// TODO: unless maybe should follow form wher condition not in the beginning
+fn unless_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
+    map(
+        seq(vec![
+            keep_right(string("unless"), umpl2expr()),
+            keep_right(
+                keep_right(white_space(), string("than")),
+                scope(umpl2expr()),
+            ),
+            keep_right(
+                keep_right(white_space(), string("else")),
+                scope(umpl2expr()),
+            ),
+        ]),
+        |mut r| {
+            let cond = r.next().unwrap_or_default();
+            let alt = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            let cons = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            UMPL2Expr::Unless(Box::new(cond), Box::new(alt), Box::new(cons))
+        },
+    )
+}
+
+fn until_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
+    map(
+        seq(vec![
+            keep_right(string("until"), umpl2expr()),
+            keep_right(
+                keep_right(white_space(), string("then")),
+                scope(umpl2expr()),
+            ),
+        ]),
+        |mut r| {
+            let cond = r.next().unwrap_or_default();
+            let loop_scope = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            UMPL2Expr::Until(Box::new(cond), Box::new(loop_scope))
+        },
+    )
+}
+
+fn go_through_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
+    map(
+        seq(vec![
+            keep_right(string("go-through"), umpl2expr()), // TODO: use identifier parserl, not the full blown expression parser
+            keep_right(keep_right(white_space(), string("of")), umpl2expr()),
+            scope(umpl2expr()),
+        ]),
+        |mut r| {
+            let for_ident = format!("{:?}", r.next().unwrap_or_default());
+            let iterable = r.next().unwrap_or_default();
+            let loop_scope = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            UMPL2Expr::GoThrough(for_ident, Box::new(iterable), Box::new(loop_scope))
+        },
+    )
+}
+
+fn continue_doing_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
+    map(
+        seq(vec![keep_right(
+            string("continue-doing"),
+            scope(umpl2expr()),
+        )]),
+        |mut r| {
+            let loop_scope = r.next().unwrap_or_else(|| UMPL2Expr::Scope(vec![]));
+            UMPL2Expr::ContiueDoing(Box::new(loop_scope))
+        },
+    )
+}
+
+fn fn_stmt() -> Box<dyn CloneFn<UMPL2Expr>> {
+    // fanction - through away, name - keep char | umpl2expr
+    // optinal param count (base10) - keep -> optinal umpl2expr | usize
+    // optinal varidac keep scope > optional char | varidac
+    // scope keep umpl2expr
+
+    // (chain (keep right "fanction" name(char)), (chain, (opt number) (chain (opt varidiac), scope))
+    map(
+        chain(
+            keep_right(string("fanction"), satify(unic_emoji_char::is_emoji)),
+            keep_right(
+                white_space(),
+                chain(
+                    opt(integer()),
+                    keep_right(
+                        white_space(),
+                        chain(
+                            opt(map(any_of(['*', '+']), |char|
+                            // its ok to unwrap b/c we already know that it is a correct form
+                             Varidiac::from_char(char).unwrap())),
+                            scope(umpl2expr()),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        |r| {
+            let name = r.0;
+            // TODO: maybe if no count given then randomly choose a count
+            let param_count = r.1 .0.unwrap_or_default();
+            let variadic = r.1 .1 .0;
+            let scope = r.1 .1 .1;
+            UMPL2Expr::FN(name, param_count, variadic, Box::new(scope))
+        },
+    )
 }
 
 #[test]
 fn umpl() {
-    println!("{:?}", umpl2expr()("if 1 do ᚜1 2᚛ otherwise ᚜1᚛"));
+    println!("{:?}", umpl2expr()("if 1 do ᚜1 unless 1 than ᚜1 2᚛ else ᚜1᚛ 2᚛ otherwise ᚜if 1 do ᚜1 2᚛ otherwise ᚜until 1 then ᚜1 2᚛᚛᚛"));
+}
+
+#[test]
+fn umpl_no_end() {
+    println!("{:?}", umpl2expr()("if 1 do ᚜1 unless 1 than ᚜1 2 else ᚜1 2 otherwise ᚜if 1 do ᚜1 2 otherwise ᚜until 1 then ᚜1 2"));
 }
 
 fn print(input: String) -> String {
