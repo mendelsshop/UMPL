@@ -16,7 +16,7 @@ fanction 2+ ᚜
     {"1" print)
 ᚛ 
 
-goto labels
+link label [label]
 @name -> label naem
 
 until conditon do loop -> while _ {}

@@ -1,4 +1,5 @@
 pub mod lexer;
+mod parsercombinator;
 mod pc;
 
 #[cfg(feature = "multi-threaded")]

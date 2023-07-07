@@ -1,16 +1,396 @@
-pub struct ParseError {}
+use std::iter::empty;
 
-pub trait ParserFn<T>: Fn(&str) -> Result<(T, &str), ParseError> {
-    fn clone_box<'a>(&self) -> Box<dyn ParserFn<T> + 'a>
+use std::iter;
+
+
+#[derive(Debug)]
+pub enum ParseErrorType {
+    EOF,
+    Other(String),
+    NotADigit(char),
+    Mismatch(char, char),
+    Fail,
+    NotEnoughMatches,
+    NoMatchFound,
+    SatisfyMismatch(char),
+}
+
+#[derive(Debug)]
+pub struct ParseError<'a> {
+    pub(crate) kind: ParseErrorType,
+    pub(crate) input: &'a str,
+}
+
+pub fn digit() -> Box<Parser<usize>> {
+    Box::new(|input: &str| {
+        println!("`{input:?}` -> digit");
+        match input.chars().next() {
+            Some(n) => match n.to_digit(10) {
+                Some(d) => Ok((d as usize, input.split_at(1).1)),
+                None => Err(ParseError {
+                    kind: ParseErrorType::NotADigit(n),
+                    input,
+                }),
+            },
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
+        }
+    })
+}
+
+pub fn char(looking_for: char) -> Box<Parser<char>> {
+    Box::new(move |input: &str| {
+        println!("`{input:?}` -> `{looking_for:?}`");
+        match input.chars().next() {
+            Some(n) => {
+                if n == looking_for {
+                    Ok((n, input.split_at(n.len_utf8()).1))
+                } else {
+                    Err(ParseError {
+                        kind: ParseErrorType::Mismatch(looking_for, n),
+                        input,
+                    })
+                }
+            }
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
+        }
+    })
+}
+
+pub fn integer() -> Box<Parser<usize>> {
+    map(
+        many1(any_of(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])),
+        |input| input.collect::<String>().parse().unwrap(),
+    )
+}
+
+pub fn satify(checker: impl Fn(char) -> bool + 'static + Clone) -> Box<Parser<char>> {
+    Box::new(move |input: &str| {
+        // println!("{}`{input:?}` -> `{looking_for:?}`", indent());
+        match input.chars().next() {
+            Some(n) => {
+                if checker(n) {
+                    println!("found match {n}");
+                    Ok((n, input.split_at(n.len_utf8()).1))
+                } else {
+                    println!("not match {n}");
+                    Err(ParseError {
+                        kind: ParseErrorType::SatisfyMismatch(n),
+                        input,
+                    })
+                }
+            }
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
+        }
+    })
+}
+
+pub fn not_char(looking_for: char) -> Box<Parser<char>> {
+    Box::new(move |input: &str| {
+        println!("`{input:?}` -> !`{looking_for:?}`");
+        match input.chars().next() {
+            Some(n) => {
+                if n != looking_for {
+                    Ok((n, input.split_at(n.len_utf8()).1))
+                } else {
+                    Err(ParseError {
+                        kind: ParseErrorType::Mismatch(looking_for, n),
+                        input,
+                    })
+                }
+            }
+            None => Err(ParseError {
+                kind: ParseErrorType::EOF,
+                input: "",
+            }),
+        }
+    })
+}
+
+pub(crate) fn take() -> Box<Parser<char>> {
+    Box::new(move |input: &str| {
+        let chars = &mut input.chars();
+        chars.next().map_or_else(
+            || {
+                Err(ParseError {
+                    input: "",
+                    kind: ParseErrorType::EOF,
+                })
+            },
+            |char| Ok((char, input.split_at(char.len_utf8()).1)),
+        )
+    })
+}
+
+pub fn chain<T: 'static, U: 'static>(
+    parser1: Box<Parser<T>>,
+    parser2: Box<Parser<U>>,
+) -> Box<Parser<(T, U)>> {
+    Box::new(move |input: &str| {
+        // println!("chain s `{input}`");
+        let (res1, input) = parser1(input)?;
+        // println!("chain m `{input}`");
+        let (res2, input) = parser2(input)?;
+        // println!("chain e `{input}`");
+        Ok(((res1, res2), input))
+    })
+}
+
+pub fn map<T: 'static, U: 'static, F: Fn(T) -> U + 'static + Clone>(
+    parser: Box<Parser<T>>,
+    map_fn: F,
+) -> Box<Parser<U>> {
+    Box::new(move |input| {
+        // println!("map s `{input}`");
+        let (ir, input) = parser(input)?;
+        // println!("map e `{input}`");
+        Ok((map_fn(ir), input))
+    })
+}
+
+pub fn try_map<
+    T: 'static,
+    U: 'static,
+    F: Fn(T) -> Result<U, ParseError<'static>> + 'static + Clone,
+>(
+    parser: Box<Parser<T>>,
+    map_fn: F,
+) -> Box<Parser<U>> {
+    Box::new(move |input| {
+        // println!("map s `{input}`");
+        let (ir, input) = parser(input)?;
+        // println!("map e `{input}`");
+        map_fn(ir).map(|ir| (ir, input))
+    })
+}
+
+pub fn alt<T: 'static>(parser1: Box<Parser<T>>, parser2: Box<Parser<T>>) -> Box<Parser<T>> {
+    Box::new(move |input| {
+        println!("alt s `{input}`");
+        match parser1(input) {
+            Ok((res, input)) => {
+                println!("alt m `{input}`");
+                Ok((res, input))
+            }
+            Err(_) => {
+                println!("alt e `{input}`");
+                parser2(input)
+            }
+        }
+    })
+}
+
+pub fn opt<T: 'static>(parser: Box<Parser<T>>) -> Box<Parser<Option<T>>> {
+    Box::new(move |input| match parser(input) {
+        Ok(ok) => Ok((Some(ok.0), ok.1)),
+        // TODO: error should return leftover substring
+        Err(e) => Ok((None, e.input)),
+    })
+}
+
+pub fn many<T: 'static>(
+    parser: Box<Parser<T>>,
+) -> Box<Parser<Option<Box<dyn Iterator<Item = T>>>>> {
+    Box::new(move |mut input| {
+        // println!("many s `{input}`");
+        let mut init: Option<Box<dyn Iterator<Item = T>>> = None;
+        while let Ok((v, new_input)) = parser(input) {
+            input = new_input;
+            // println!("many m`{input}`");
+            let v = iter::once(v);
+            init = match init {
+                Some(old_v) => Some(Box::new(old_v.chain(v))),
+                None => Some(Box::new(v)),
+            };
+        }
+        Ok((init, input))
+    })
+}
+
+pub fn keep_left<T: 'static, U: 'static>(
+    left_parser: Box<Parser<T>>,
+    right_parser: Box<Parser<U>>,
+) -> Box<Parser<T>> {
+    map(chain(left_parser, right_parser), |i| i.0)
+}
+
+pub fn keep_right<T: 'static, U: 'static>(
+    left_parser: Box<Parser<T>>,
+    right_parser: Box<Parser<U>>,
+) -> Box<Parser<U>> {
+    map(chain(left_parser, right_parser), |i| i.1)
+}
+
+pub fn inbetween<T: 'static, U: 'static, V: 'static>(
+    left_parser: Box<Parser<T>>,
+    middle_parser: Box<Parser<U>>,
+    right_parser: Box<Parser<V>>,
+) -> Box<Parser<U>> {
+    keep_left(keep_right(left_parser, middle_parser), right_parser)
+}
+
+pub fn many1<T: 'static>(parser: Box<Parser<T>>) -> Box<Parser<Box<dyn Iterator<Item = T>>>> {
+    let many = many(parser);
+    Box::new(move |input| match many(input)? {
+        (None, input) => Err(ParseError {
+            kind: ParseErrorType::NotEnoughMatches,
+            input,
+        }),
+        (Some(v), input) => Ok((v, input)),
+    })
+}
+
+pub fn fail<T>() -> Box<Parser<T>> {
+    Box::new(move |input| {
+        Err(ParseError {
+            kind: ParseErrorType::Fail,
+            input,
+        })
+    })
+}
+
+pub fn unit<T: 'static + Clone>(val: T) -> Box<Parser<T>> {
+    Box::new(move |input| Ok((val.clone(), input)))
+}
+
+pub fn seq<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<impl Iterator<Item = T>>> {
+    Box::new(move |mut input| {
+        let mut res: Box<dyn Iterator<Item = T>> = Box::new(empty());
+        for parser in &parsers {
+            let (res_part, new_input) = parser(input)?;
+            input = new_input;
+            res = Box::new(res.chain(iter::once(res_part)));
+        }
+
+        Ok((res, input))
+    })
+    // parsers
+    //     .into_iter()
+    //     .fold::<Box<Parser<Box<dyn Iterator<Item = T>>>>, _>(Box::new(move |input| -> Result<(Box<dyn Iterator<Item = _>>, _), _> {Ok((Box::new(empty()), input))}), |a, b| {
+    //         Box::new(move |input: &str| -> Result<_, _> {
+    //             let ((rest, first), input) = chain(a, b)(input)?;
+    //             Ok((Box::new(rest.chain(iter::once(first))), input))
+    //         })
+    //     })
+}
+
+pub fn choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
+    // {
+    //     let mut this = parsers.into_iter();
+    //     let init = fail();
+    //     let mut f = &alt;
+    //     let mut accum = init;
+    //     while let Some(x) = this.next() {
+    //         accum = f(accum, x);
+    //     }
+    //     accum
+    // }
+    Box::new(move |input| {
+        for parser in parsers.clone().into_iter() {
+            println!("choice s `{input}`");
+            match parser(input) {
+                Ok(ok) => return Ok(ok),
+                Err(_) => continue,
+            }
+        }
+        fail()(input)
+    })
+}
+
+pub fn not_choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
+    // {
+    //     let mut this = parsers.into_iter();
+    //     let init = fail();
+    //     let mut f = &alt;
+    //     let mut accum = init;
+    //     while let Some(x) = this.next() {
+    //         accum = f(accum, x);
+    //     }
+    //     accum
+    // }
+    Box::new(move |input| {
+        let mut res = None;
+        for parser in parsers.clone().into_iter() {
+            println!("choice s `{input}`");
+            res = Some(parser(input)?);
+        }
+        res.ok_or(ParseError {
+            kind: ParseErrorType::NoMatchFound,
+            input,
+        })
+    })
+}
+
+pub fn any_of(chars: impl IntoIterator<Item = char>) -> Box<Parser<char>> {
+    choice(chars.into_iter().map(char).collect())
+}
+
+pub fn not_any_of(chars: impl IntoIterator<Item = char>) -> Box<Parser<char>> {
+    not_choice(chars.into_iter().map(not_char).collect())
+}
+
+pub fn string(to_match: &str) -> Box<Parser<String>> {
+    map(seq(to_match.chars().map(|c| char(c)).collect()), |chars| {
+        chars.collect::<String>()
+    })
+}
+
+pub fn sep<T: 'static, U: 'static>(
+    parser: Box<Parser<T>>,
+    delimeter: Box<Parser<U>>,
+) -> Box<Parser<Option<Box<dyn Iterator<Item = T>>>>> {
+    let rest = many(keep_right(delimeter, parser.clone_box()));
+    Box::new(move |input| {
+        let (first, new_input) = match parser(input) {
+            Ok(v) => v,
+            Err(e) => return Ok((None, e.input)),
+        };
+        let first = iter::once(first);
+        let (rest, input) = rest(new_input)?;
+        Ok(match rest {
+            None => (Some(Box::new(first)), new_input),
+            Some(v) => (Some(Box::new(first.chain(v))), input),
+        })
+    })
+}
+
+pub fn sep1<T: 'static, U: 'static>(
+    parser: Box<Parser<T>>,
+    delimeter: Box<Parser<U>>,
+) -> Box<Parser<Box<dyn Iterator<Item = T>>>> {
+    let sep = sep(parser, delimeter);
+    Box::new(move |input| match sep(input)? {
+        (None, input) => Err(ParseError {
+            kind: ParseErrorType::NotEnoughMatches,
+            input,
+        }),
+        (Some(v), input) => Ok((v, input)),
+    })
+}
+
+pub(crate) fn white_space() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
+    many(any_of([' ', '\n', '\t']))
+}
+
+pub trait CloneFn<T>: Fn(&str) -> Result<(T, &str), ParseError> {
+    fn clone_box<'a>(&self) -> Box<dyn CloneFn<T> + 'a>
     where
         Self: 'a;
 }
 
-impl<T, F> ParserFn<T> for F
+impl<T, F> CloneFn<T> for F
 where
     F: Fn(&str) -> Result<(T, &str), ParseError> + Clone,
 {
-    fn clone_box<'a>(&self) -> Box<dyn ParserFn<T> + 'a>
+    fn clone_box<'a>(&self) -> Box<dyn CloneFn<T> + 'a>
     where
         Self: 'a,
     {
@@ -18,44 +398,10 @@ where
     }
 }
 
-impl<'a, T: 'a> Clone for Box<dyn 'a + ParserFn<T>> {
+impl<'a, T: 'a> Clone for Box<dyn 'a + CloneFn<T>> {
     fn clone(&self) -> Self {
         (**self).clone_box()
     }
 }
 
-pub type Parser<T> = dyn ParserFn<T>;
-
-// String parser (generator) String -> Parser(String)
-// takes as input string to match
-// return parser (function) that
-// tries to match the (start of) the input to the input given to parser generator
-// consuming? ie: String("hello")("heppo") ->
-
-// pub fn string(match_string: &str) -> Box<Parser<&str>> {
-//     Box::new(|input|
-
-//     )
-// }
-
-// many takes input parser of A -> Parser [A]
-// never errors
-// matches parser against input as many times as possible
-
-// choice takes [parser A] -> Parser A
-// goes through each parser attempts to match orignal input (not whatever left over from last parser in choice)
-// errors if no parsers match
-// consuming?
-
-// map (Parser A, A->B) -> Parser B
-// attempts to run parser on input
-// if succes than change result to B via second function
-// consuming on error?
-
-// sequnece [Parser A] -> Parser [A]
-// attempts to run next parser on result of last parser
-// ie (p2 (p1 input)) ..
-// consuming on  error
-
-// eof () -> Parser A
-// if there is nothing left ok otherwise error
+pub type Parser<T> = dyn CloneFn<T>;
