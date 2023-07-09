@@ -453,7 +453,7 @@ mod tests {
         assert!(test_result.is_ok());
         assert_eq!(
             test_result.unwrap(),
-            UMPL2Expr::Unless(
+            UMPL2Expr::If(
                 Box::new(UMPL2Expr::Bool(Boolean::Maybee)),
                 Box::new(UMPL2Expr::Scope(vec![
                     UMPL2Expr::Number(2.0),
