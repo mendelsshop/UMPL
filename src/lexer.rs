@@ -1,13 +1,17 @@
 #![allow(dead_code)]
 
+use std::iter;
 
 use parse_int::parse;
 
-use crate::{pc::{
-    alt, any_of, chain, char, choice, inbetween, integer, keep_right, many, many1, map, not_any_of,
-    not_char, opt, satify, seq, string, try_map, white_space, ParseError, ParseErrorType, Parser,
-}, interior_mut::RC};
-
+use crate::{
+    interior_mut::RC,
+    pc::{
+        alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
+        map, not_any_of, not_char, opt, satify, seq, string, try_map, white_space, ParseError,
+        ParseErrorType, Parser,
+    },
+};
 
 #[derive(Debug, Default, PartialEq)]
 pub enum UMPL2Expr {
@@ -70,13 +74,31 @@ pub enum PrintType {
     PrintLN,
 }
 
+fn ws_or_comment() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
+    map(
+        many(alt(
+            keep_right(char('!'), keep_left(many(not_char('\n')), opt(char('\n')))),
+            map(any_of([' ', '\n', '\t']), |i| {
+                Some(opaquify::<char>(iter::once(i)))
+            }),
+        )),
+        |r| -> Option<Box<dyn Iterator<Item = char>>> {
+            r.and_then(|r| Some(opaquify::<char>(r.filter_map(|i| i).flatten())))
+        },
+    )
+}
+
+fn opaquify<T>(f: impl Iterator<Item = char> + 'static) -> Box<dyn Iterator<Item = char>> {
+    Box::new(f)
+}
+
 fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
     inbetween(
-        keep_right(white_space(), char('᚜')),
+        keep_right(ws_or_comment(), char('᚜')),
         map(many(p), |r| {
             UMPL2Expr::Scope(r.map_or_else(Vec::new, Iterator::collect))
         }),
-        opt(keep_right(white_space(), char('᚛'))),
+        opt(keep_right(ws_or_comment(), char('᚛'))),
     )
 }
 
@@ -84,7 +106,7 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
     // needs to be its own new closure so that we don't have infinite recursion while creating the parser (so we add a level of indirection)
     Box::new(|input| {
         keep_right(
-            white_space(),
+            ws_or_comment(),
             choice(
                 [
                     literal(),
@@ -103,10 +125,10 @@ fn application() -> Box<Parser<UMPL2Expr>> {
     map(
         chain(
             inbetween(
-                keep_right(white_space(), any_of(call_start().iter().copied())),
+                keep_right(ws_or_comment(), any_of(call_start().iter().copied())),
                 many(umpl2expr()),
                 opt(keep_right(
-                    white_space(),
+                    ws_or_comment(),
                     any_of(call_end().iter().copied()),
                 )),
             ),
@@ -204,9 +226,12 @@ fn if_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         seq(vec![
             keep_right(string("if"), umpl2expr()),
-            keep_right(keep_right(white_space(), string("do")), scope(umpl2expr())),
             keep_right(
-                keep_right(white_space(), string("otherwise")),
+                keep_right(ws_or_comment(), string("do")),
+                scope(umpl2expr()),
+            ),
+            keep_right(
+                keep_right(ws_or_comment(), string("otherwise")),
                 scope(umpl2expr()),
             ),
         ]),
@@ -225,11 +250,11 @@ fn unless_stmt() -> Box<Parser<UMPL2Expr>> {
         seq(vec![
             keep_right(string("unless"), umpl2expr()),
             keep_right(
-                keep_right(white_space(), string("than")),
+                keep_right(ws_or_comment(), string("than")),
                 scope(umpl2expr()),
             ),
             keep_right(
-                keep_right(white_space(), string("else")),
+                keep_right(ws_or_comment(), string("else")),
                 scope(umpl2expr()),
             ),
         ]),
@@ -247,7 +272,7 @@ fn until_stmt() -> Box<Parser<UMPL2Expr>> {
         seq(vec![
             keep_right(string("until"), umpl2expr()),
             keep_right(
-                keep_right(white_space(), string("then")),
+                keep_right(ws_or_comment(), string("then")),
                 scope(umpl2expr()),
             ),
         ]),
@@ -264,9 +289,9 @@ fn go_through_stmt() -> Box<Parser<UMPL2Expr>> {
         seq(vec![
             keep_right(
                 string("go-through"),
-                keep_right(white_space(), ident_umpl()),
+                keep_right(ws_or_comment(), ident_umpl()),
             ), // TODO: use identifier parserl, not the full blown expression parser
-            keep_right(keep_right(white_space(), string("of")), umpl2expr()),
+            keep_right(keep_right(ws_or_comment(), string("of")), umpl2expr()),
             scope(umpl2expr()),
         ]),
         |mut r| {
@@ -298,8 +323,8 @@ fn continue_doing_stmt() -> Box<Parser<UMPL2Expr>> {
 fn link_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         chain(
-            keep_right(string("link"), keep_right(white_space(), label_umpl())),
-            many1(keep_right(white_space(), label_umpl())),
+            keep_right(string("link"), keep_right(ws_or_comment(), label_umpl())),
+            many1(keep_right(ws_or_comment(), label_umpl())),
         ),
         |res| {
             let to_link = match res.0 {
@@ -329,13 +354,13 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
         chain(
             keep_right(
                 string("fanction"),
-                keep_right(white_space(), satify(unic_emoji_char::is_emoji)),
+                keep_right(ws_or_comment(), satify(unic_emoji_char::is_emoji)),
             ),
             chain(
-                opt(keep_right(white_space(), integer())),
+                opt(keep_right(ws_or_comment(), integer())),
                 chain(
                     opt(keep_right(
-                        white_space(),
+                        ws_or_comment(),
                         map(any_of(['*', '+']), |char|
                             // its ok to unwrap b/c we already know that it is a correct form
                              Varidiac::from_char(char).unwrap()),
@@ -545,10 +570,7 @@ mod tests {
     fn umpl_ident() {
         let test_result = parse_umpl("a===a");
         assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::Ident("a===a".into())
-        )
+        assert_eq!(test_result.unwrap(), UMPL2Expr::Ident("a===a".into()))
     }
 
     #[test]
@@ -587,5 +609,11 @@ mod tests {
         let test_result = parse_umpl("'10'");
         assert!(test_result.is_ok());
         assert_eq!(test_result.unwrap(), UMPL2Expr::FnParam(8))
+    }
+
+    #[test]
+    fn umpl_with_comment() {
+        let test_result = parse_umpl("!t\n (1!aaa\n 22 6 ]>");
+        assert!(test_result.is_ok());
     }
 }

@@ -1,3 +1,4 @@
+mod eval;
 pub mod lexer;
 mod parsercombinator;
 mod pc;
