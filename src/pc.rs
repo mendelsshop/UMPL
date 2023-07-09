@@ -2,7 +2,6 @@ use std::iter::empty;
 
 use std::iter;
 
-
 #[derive(Debug)]
 pub enum ParseErrorType {
     EOF,

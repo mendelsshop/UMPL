@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
+use parse_int::parse;
 
-use crate::pc::{keep_right, string, white_space, Parser, inbetween, map, char, any_of, choice, chain, opt, many, alt, try_map, many1, not_char, seq, integer, satify, not_any_of, ParseError, ParseErrorType};
-
-
+use crate::pc::{
+    alt, any_of, chain, char, choice, inbetween, integer, keep_right, many, many1, map, not_any_of,
+    not_char, opt, satify, seq, string, try_map, white_space, ParseError, ParseErrorType, Parser,
+};
 
 // #[derive(Debug)]
 // pub enum Op {
@@ -61,8 +63,6 @@ use crate::pc::{keep_right, string, white_space, Parser, inbetween, map, char, a
 //     println!("{res2:?}")
 // }
 
-
-
 // pub fn expr() -> Box<Parser<Expr>> {
 //     Box::new(|input| keep_right(white_space(), alt(number(), op_expr()))(input))
 // }
@@ -97,8 +97,6 @@ use crate::pc::{keep_right, string, white_space, Parser, inbetween, map, char, a
 //         }
 //     }
 // }
-
-
 
 // #[derive(Debug)]
 // pub enum LispExpr {
@@ -211,6 +209,7 @@ pub enum UMPL2Expr {
     Application(Vec<UMPL2Expr>, PrintType),
     Quoted(Box<UMPL2Expr>),
     Label(String),
+    FnParam(usize),
     #[default]
     Hempty,
     Link(String, Vec<String>),
@@ -283,21 +282,26 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
 }
 
 fn application() -> Box<Parser<UMPL2Expr>> {
-    map(chain(inbetween(
-        keep_right(white_space(), any_of(call_start().iter().copied())),
-        many(umpl2expr()),
-        opt(keep_right(
-            white_space(),
-            any_of(call_end().iter().copied()),
-        )),
-    ), alt(map( char('<'),|_|PrintType::None), map(chain(char('>'), opt(char('>'))), |r| {
-        match r.1 {
-            None => PrintType::PrintLN,
-            Some(_) => PrintType::Print
-        }
-    }))),|r| {
-        UMPL2Expr::Application(r.0.map_or_else(Vec::new, Iterator::collect), r.1)
-    })
+    map(
+        chain(
+            inbetween(
+                keep_right(white_space(), any_of(call_start().iter().copied())),
+                many(umpl2expr()),
+                opt(keep_right(
+                    white_space(),
+                    any_of(call_end().iter().copied()),
+                )),
+            ),
+            alt(
+                map(char('<'), |_| PrintType::None),
+                map(chain(char('>'), opt(char('>'))), |r| match r.1 {
+                    None => PrintType::PrintLN,
+                    Some(_) => PrintType::Print,
+                }),
+            ),
+        ),
+        |r| UMPL2Expr::Application(r.0.map_or_else(Vec::new, Iterator::collect), r.1),
+    )
 }
 
 pub fn parse_umpl(input: &str) -> Result<UMPL2Expr, ParseError> {
@@ -372,7 +376,7 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
             go_through_stmt(),
             continue_doing_stmt(),
             fn_stmt(),
-            link_stmt()
+            link_stmt(),
         ]
         .to_vec(),
     )
@@ -384,7 +388,7 @@ fn if_stmt() -> Box<Parser<UMPL2Expr>> {
             keep_right(string("if"), umpl2expr()),
             keep_right(keep_right(white_space(), string("do")), scope(umpl2expr())),
             keep_right(
-                keep_right(white_space(),string("otherwise")),
+                keep_right(white_space(), string("otherwise")),
                 scope(umpl2expr()),
             ),
         ]),
@@ -484,13 +488,15 @@ fn link_stmt() -> Box<Parser<UMPL2Expr>> {
                 UMPL2Expr::Label(l) => l,
                 _ => panic!(),
             };
-            let linked_list = res.1.map(|e| match e {
-                UMPL2Expr::Label(l) => l,
-                _ => panic!(),
-            }).collect();
+            let linked_list = res
+                .1
+                .map(|e| match e {
+                    UMPL2Expr::Label(l) => l,
+                    _ => panic!(),
+                })
+                .collect();
             UMPL2Expr::Link(to_link, linked_list)
         },
-        
     )
 }
 
@@ -579,7 +585,7 @@ fn terminal_umpl() -> Box<Parser<UMPL2Expr>> {
 }
 
 fn special_start() -> Box<Parser<UMPL2Expr>> {
-    alt(quoted_umpl(), label_umpl())
+    choice(vec![quoted_umpl(), label_umpl(), param_umpl()])
 }
 
 fn quoted_umpl() -> Box<Parser<UMPL2Expr>> {
@@ -598,9 +604,20 @@ fn label_umpl() -> Box<Parser<UMPL2Expr>> {
     })
 }
 
+fn param_umpl() -> Box<Parser<UMPL2Expr>> {
+    inbetween(
+        any_of(['\'', '"']),
+        map(
+            many1(any_of(['0', '1', '2', '3', '4', '5', '6', '7'])),
+            |res| UMPL2Expr::FnParam(parse(&format!("0o{}", res.collect::<String>())).unwrap()),
+        ),
+        opt(any_of(['\'', '"'])),
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{parse_umpl, Boolean, UMPL2Expr, Varidiac, PrintType};
+    use crate::lexer::{parse_umpl, Boolean, PrintType, UMPL2Expr, Varidiac};
 
     #[test]
     pub(crate) fn umpl() {
@@ -665,13 +682,15 @@ mod tests {
             test_result.unwrap(),
             UMPL2Expr::GoThrough(
                 "a".to_string(),
-                Box::new(UMPL2Expr::Application(vec![
-                    UMPL2Expr::Ident("tree".to_string()),
-                    UMPL2Expr::Number(5.0),
-                    UMPL2Expr::Number(6.0),
-                    UMPL2Expr::Number(7.0)
-                ],
-                PrintType::None,)),
+                Box::new(UMPL2Expr::Application(
+                    vec![
+                        UMPL2Expr::Ident("tree".to_string()),
+                        UMPL2Expr::Number(5.0),
+                        UMPL2Expr::Number(6.0),
+                        UMPL2Expr::Number(7.0)
+                    ],
+                    PrintType::None,
+                )),
                 Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("ab/".to_string())]))
             )
         )
@@ -734,11 +753,21 @@ mod tests {
         assert!(test_result.is_ok());
         assert_eq!(
             test_result.unwrap(),
-            UMPL2Expr::Application(vec![
-                UMPL2Expr::Ident("mul".to_string()),
-                UMPL2Expr::Number(5.0),
-                UMPL2Expr::Number(16.0)
-            ], PrintType::Print)
+            UMPL2Expr::Application(
+                vec![
+                    UMPL2Expr::Ident("mul".to_string()),
+                    UMPL2Expr::Number(5.0),
+                    UMPL2Expr::Number(16.0)
+                ],
+                PrintType::Print
+            )
         )
+    }
+
+    #[test]
+    fn umpl_acces_param() {
+        let test_result = parse_umpl("'10'");
+        assert!(test_result.is_ok());
+        assert_eq!(test_result.unwrap(), UMPL2Expr::FnParam(8))
     }
 }
