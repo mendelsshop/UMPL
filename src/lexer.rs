@@ -1,218 +1,36 @@
 #![allow(dead_code)]
 
+
 use parse_int::parse;
 
-use crate::pc::{
+use crate::{pc::{
     alt, any_of, chain, char, choice, inbetween, integer, keep_right, many, many1, map, not_any_of,
     not_char, opt, satify, seq, string, try_map, white_space, ParseError, ParseErrorType, Parser,
-};
+}, interior_mut::RC};
 
-// #[derive(Debug)]
-// pub enum Op {
-//     Add,
-//     Sub,
-//     Div,
-//     Mul,
-// }
 
-// #[derive(Debug)]
-// pub enum Expr {
-//     Number(usize),
-//     MathOp(Box<Expr>, Op, Box<Expr>),
-// }
-
-// pub fn number() -> Box<Parser<Expr>> {
-//     map(digit(), Expr::Number)
-// }
-
-// pub fn op() -> Box<Parser<Op>> {
-//     alt(
-//         map(char('/'), |_| Op::Div),
-//         alt(
-//             map(char('*'), |_| Op::Mul),
-//             alt(map(char('+'), |_| Op::Add), map(char('-'), |_| Op::Sub)),
-//         ),
-//     )
-// }
-
-// #[test]
-// fn test() {
-//     // let input = "   (  1   +  1  )";
-//     // let expr = expr()(input).unwrap().0;
-//     // let res = eval(&expr);
-//     // println!("{res}");
-//     // let parsers = vec![char('"'), char('a')];
-//     // let p1 = seq(parsers);
-//     // // println!("done");
-//     // let res = p1("\"a").unwrap();
-//     // println!("'{}'", res.0.into_iter().collect::<String>());
-//     // let choi = choice(
-//     //     vec![
-//     //         any_of(vec!['b']),
-//     //         map(digit(), |number| char::from_u32(number as u32).unwrap()),
-//     //     ]
-//     //     .into_iter(),
-//     // );
-//     // let res = choi("b").unwrap();
-//     // let if_ = string("if");
-//     // let if_ = if_("if");
-//     // println!("{if_:?}");
-//     let sepped = sep1(digit(), char(','));
-//     // let res = sepped.clone_box()("1").unwrap().0.unwrap().collect::<Vec<_>>();
-//     let res2 = sepped("").unwrap().0.collect::<Vec<_>>();
-//     println!("{res2:?}")
-// }
-
-// pub fn expr() -> Box<Parser<Expr>> {
-//     Box::new(|input| keep_right(white_space(), alt(number(), op_expr()))(input))
-// }
-
-// fn op_expr() -> Box<Parser<Expr>> {
-//     map(
-//         // chain(
-//         //     char('('),
-//         //     chain(chain(expr(), keep_right(white_space(), op())), chain(expr(), char(')'))),
-//         // ),
-//         inbetween(
-//             char('('),
-//             chain(expr(), chain(keep_right(white_space(), op()), expr())),
-//             keep_right(white_space(), char(')')),
-//         ),
-//         |ir| Expr::MathOp(Box::new(ir.0), ir.1 .0, Box::new(ir.1 .1)),
-//     )
-// }
-
-// pub fn eval(input: &Expr) -> usize {
-//     match input {
-//         Expr::Number(n) => *n,
-//         Expr::MathOp(e1, op, e2) => {
-//             let e1 = eval(&*e1);
-//             let e2 = eval(&*e2);
-//             match op {
-//                 Op::Add => e1 + e2,
-//                 Op::Sub => e1 - e2,
-//                 Op::Div => e1 / e2,
-//                 Op::Mul => e1 * e2,
-//             }
-//         }
-//     }
-// }
-
-// #[derive(Debug)]
-// pub enum LispExpr {
-//     Number(usize),
-//     Symbol(String),
-//     List(Vec<LispExpr>),
-//     If(Box<LispExpr>, Box<LispExpr>, Box<LispExpr>),
-// }
-
-// static mut INDENT: usize = 0;
-// pub fn inc_indent() {
-//     unsafe { INDENT += 1 }
-// }
-// pub fn dec_indent() {
-//     unsafe { INDENT -= 1 }
-// }
-// pub fn indent() -> String {
-//     format!("{}{}", unsafe { INDENT }, " ".repeat(unsafe { INDENT * 4 }))
-// }
-
-// pub fn lispnumber() -> Box<Parser<LispExpr>> {
-//     Box::new(|input| {
-//         println!("{}number", indent());
-//         map(many1(digit()), |i| {
-//             let collect = &i.map(|i| i.to_string()).collect::<String>();
-//             LispExpr::Number(collect.parse().unwrap())
-//         })(input)
-//     })
-// }
-
-// pub fn lisplist() -> Box<Parser<LispExpr>> {
-//     Box::new(|input| {
-//         println!("{}list", indent());
-//         inc_indent();
-//         let res = inbetween(
-//             keep_left(char('('), white_space()),
-//             map(sep(lispexpr(), white_space()), |i| {
-//                 LispExpr::List(i.map_or(vec![], Iterator::collect))
-//             }),
-//             keep_right(white_space(), char(')')),
-//         )(input);
-//         dec_indent();
-//         res
-//     })
-// }
-
-// pub fn lispif() -> Box<Parser<LispExpr>> {
-//     map(
-//         seq(vec![
-//             keep_right(string("if"), lispexpr()),
-//             keep_right(chain(white_space(), string("then")), lispexpr()),
-//             keep_right(chain(white_space(), string("else")), lispexpr()),
-//         ]),
-//         |mut i| {
-//             LispExpr::If(
-//                 Box::new(i.next().unwrap()),
-//                 Box::new(i.next().unwrap()),
-//                 Box::new(i.next().unwrap()),
-//             )
-//         },
-//     )
-// }
-
-// pub fn lispsymbol() -> Box<Parser<LispExpr>> {
-//     Box::new(|input| {
-//         println!("{}sybmol", indent());
-//         map(many1(not_any_of(['\n', ' ', '\t', '.', '(', ')'])), |i| {
-//             LispExpr::Symbol(i.collect())
-//         })(input)
-//     })
-// }
-
-// pub fn lispexpr() -> Box<Parser<LispExpr>> {
-//     Box::new(|input| {
-//         println!("{}listexpr", indent());
-//         inc_indent();
-//         let res = keep_right(
-//             white_space(),
-//             choice([lispnumber(), lisplist(), lispif(), lispsymbol()].to_vec()),
-//         )(input);
-//         dec_indent();
-//         res
-//     })
-// }
-
-// #[test]
-// fn lisp() {
-//     // let sym  = lispsymbol();
-//     // sym("()").unwrap();
-//     let p = lispexpr();
-//     let res = p("(t55 if t then 6 else 5)");
-
-//     println!("{res:?}")
-// }
 #[derive(Debug, Default, PartialEq)]
 pub enum UMPL2Expr {
     Bool(Boolean),
     Number(f64),
-    String(String),
+    String(RC<str>),
     Scope(Vec<UMPL2Expr>),
-    Ident(String),
+    Ident(RC<str>),
     If(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
     Unless(Box<UMPL2Expr>, Box<UMPL2Expr>, Box<UMPL2Expr>),
     Stop(Box<UMPL2Expr>),
     Skip,
     Until(Box<UMPL2Expr>, Box<UMPL2Expr>),
-    GoThrough(String, Box<UMPL2Expr>, Box<UMPL2Expr>),
+    GoThrough(RC<str>, Box<UMPL2Expr>, Box<UMPL2Expr>),
     ContiueDoing(Box<UMPL2Expr>),
     Fanction(char, usize, Option<Varidiac>, Box<UMPL2Expr>),
     Application(Vec<UMPL2Expr>, PrintType),
     Quoted(Box<UMPL2Expr>),
-    Label(String),
+    Label(RC<str>),
     FnParam(usize),
     #[default]
     Hempty,
-    Link(String, Vec<String>),
+    Link(RC<str>, Vec<RC<str>>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -333,7 +151,7 @@ fn hexnumber() -> Box<Parser<UMPL2Expr>> {
                 let number = match r {
                     (None, None) => {
                         return Err(ParseError {
-                            kind: ParseErrorType::Other("not a digit".to_string()),
+                            kind: ParseErrorType::Other("not a digit".into()),
                             input: "",
                         })
                     }
@@ -361,7 +179,7 @@ fn stringdot() -> Box<Parser<UMPL2Expr>> {
     inbetween(
         char('.'),
         map(many(not_char('.')), |r| {
-            UMPL2Expr::String(r.map_or_else(String::new, Iterator::collect))
+            UMPL2Expr::String(r.map_or_else(String::new, Iterator::collect).into())
         }),
         opt(char('.')),
     )
@@ -546,7 +364,7 @@ fn ident_umpl() -> Box<Parser<UMPL2Expr>> {
                 .chain(call_end())
                 .copied(),
         )),
-        |res| UMPL2Expr::Ident(res.collect()),
+        |res| UMPL2Expr::Ident(res.collect::<String>().into()),
     )
 }
 
@@ -656,7 +474,7 @@ mod tests {
             UMPL2Expr::Unless(
                 Box::new(UMPL2Expr::Bool(Boolean::True)),
                 Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Number(4.0)])),
-                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("t".to_string())]))
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("t".into())]))
             )
         )
     }
@@ -669,7 +487,7 @@ mod tests {
             test_result.unwrap(),
             UMPL2Expr::Until(
                 Box::new(UMPL2Expr::Bool(Boolean::False)),
-                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("ab/".to_string())]))
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("ab/".into())]))
             )
         )
     }
@@ -681,17 +499,17 @@ mod tests {
         assert_eq!(
             test_result.unwrap(),
             UMPL2Expr::GoThrough(
-                "a".to_string(),
+                "a".into(),
                 Box::new(UMPL2Expr::Application(
                     vec![
-                        UMPL2Expr::Ident("tree".to_string()),
+                        UMPL2Expr::Ident("tree".into()),
                         UMPL2Expr::Number(5.0),
                         UMPL2Expr::Number(6.0),
                         UMPL2Expr::Number(7.0)
                     ],
                     PrintType::None,
                 )),
-                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("ab/".to_string())]))
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::String("ab/".into())]))
             )
         )
     }
@@ -703,7 +521,7 @@ mod tests {
         assert_eq!(
             test_result.unwrap(),
             UMPL2Expr::ContiueDoing(Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident(
-                "lg`".to_string()
+                "lg`".into()
             )])))
         )
     }
@@ -718,7 +536,7 @@ mod tests {
                 '🚗',
                 1,
                 Some(Varidiac::AtLeast0),
-                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("^l".to_string())]))
+                Box::new(UMPL2Expr::Scope(vec![UMPL2Expr::Ident("^l".into())]))
             )
         )
     }
@@ -729,7 +547,7 @@ mod tests {
         assert!(test_result.is_ok());
         assert_eq!(
             test_result.unwrap(),
-            UMPL2Expr::Ident(String::from("a===a"))
+            UMPL2Expr::Ident("a===a".into())
         )
     }
 
@@ -755,7 +573,7 @@ mod tests {
             test_result.unwrap(),
             UMPL2Expr::Application(
                 vec![
-                    UMPL2Expr::Ident("mul".to_string()),
+                    UMPL2Expr::Ident("mul".into()),
                     UMPL2Expr::Number(5.0),
                     UMPL2Expr::Number(16.0)
                 ],
