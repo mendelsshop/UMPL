@@ -1,7 +1,7 @@
-mod eval;
+pub mod ast;
+pub mod eval;
 pub mod lexer;
-mod parsercombinator;
-mod pc;
+pub mod pc;
 
 #[cfg(feature = "multi-threaded")]
 pub mod interior_mut {

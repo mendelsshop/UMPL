@@ -16,8 +16,8 @@ pub enum ParseErrorType {
 
 #[derive(Debug)]
 pub struct ParseError<'a> {
-    pub(crate) kind: ParseErrorType,
-    pub(crate) input: &'a str,
+    pub kind: ParseErrorType,
+    pub input: &'a str,
 }
 
 pub fn digit() -> Box<Parser<usize>> {
@@ -114,7 +114,7 @@ pub fn not_char(looking_for: char) -> Box<Parser<char>> {
     })
 }
 
-pub(crate) fn take() -> Box<Parser<char>> {
+pub fn take() -> Box<Parser<char>> {
     Box::new(move |input: &str| {
         let chars = &mut input.chars();
         chars.next().map_or_else(
@@ -375,7 +375,7 @@ pub fn sep1<T: 'static, U: 'static>(
     })
 }
 
-pub(crate) fn white_space() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
+pub fn white_space() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
     many(any_of([' ', '\n', '\t']))
 }
 
