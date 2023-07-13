@@ -98,6 +98,7 @@ impl Eval {
             UMPL2Expr::Fanction(fanction) => {
                 self.find_links(fanction.scope_mut());
             }
+            UMPL2Expr::FnKW(_) => todo!(),
         });
     }
 
@@ -188,6 +189,7 @@ impl Eval {
             UMPL2Expr::FnParam(_) => todo!(),
             UMPL2Expr::Link(_, _) => unreachable!(),
             UMPL2Expr::Label(l) => Ok(Err(Stopper::Goto(l))),
+            UMPL2Expr::FnKW(_) => todo!(),
         }
     }
 

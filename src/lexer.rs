@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-use std::iter;
+use std::{iter, str::FromStr};
 
 use parse_int::parse;
 
 use crate::{
     ast::{
-        Application, Boolean, Fanction, GoThrough, If, PrintType, UMPL2Expr, Unless, Until,
-        Varidiac,
+        Application, Boolean, Fanction, FnKeyword, GoThrough, If, PrintType, UMPL2Expr, Unless,
+        Until, Varidiac,
     },
     pc::{
         alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
@@ -61,6 +61,7 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                 [
                     literal(),
                     stmt(),
+                    stlib_kewyword(),
                     ident_umpl(),
                     application(),
                     special_start(),
@@ -420,6 +421,11 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
         opt(any_of(['\'', '"'])),
     )
 }
+fn stlib_kewyword() -> Box<Parser<UMPL2Expr>> {
+    map(choice(vec![string("add"), string("sub")]), |kw| {
+        UMPL2Expr::FnKW(FnKeyword::from_str(&kw).unwrap())
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -579,5 +585,22 @@ mod tests {
     fn umpl_with_comment() {
         let test_result = parse_umpl("!t\n (1!aaa\n 22 6 ]>");
         assert!(test_result.is_ok());
+    }
+
+    #[test]
+    fn umpl_nested_application() {
+        let test_result = parse_umpl("fanction 🚗  1 * ᚜ {mul 5 0x10 ]> ᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::Application(Application::new(
+                vec![
+                    UMPL2Expr::Ident("mul".into()),
+                    UMPL2Expr::Number(5.0),
+                    UMPL2Expr::Number(16.0)
+                ],
+                PrintType::Print
+            ))
+        )
     }
 }

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::interior_mut::{MUTEX, RC};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,6 +36,30 @@ pub enum UMPL2Expr {
     Hempty,
     Link(RC<str>, Vec<RC<str>>),
     Tree(Tree),
+    FnKW(FnKeyword),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum FnKeyword {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
+
+impl FromStr for FnKeyword {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "add" => Ok(Self::Add),
+            "div" => Ok(Self::Div),
+            "sub" => Ok(Self::Sub),
+            "mul" => Ok(Self::Mul),
+            "mod" => Ok(Self::Mod),
+            other => Err(format!("not a function keyword {other}")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,6 +68,7 @@ pub struct Fanction {
     param_count: usize,
     optinal_params: Option<Varidiac>,
     scope: Vec<UMPL2Expr>,
+    lazy: bool,
 }
 
 impl Fanction {
@@ -56,11 +83,28 @@ impl Fanction {
             param_count,
             optinal_params,
             scope,
+            lazy: true,
         }
     }
 
     pub fn scope_mut(&mut self) -> &mut Vec<UMPL2Expr> {
         &mut self.scope
+    }
+
+    pub fn name(&self) -> char {
+        self.name
+    }
+
+    pub fn optinal_params(&self) -> Option<&Varidiac> {
+        self.optinal_params.as_ref()
+    }
+
+    pub fn param_count(&self) -> usize {
+        self.param_count
+    }
+
+    pub fn scope(&self) -> &[UMPL2Expr] {
+        self.scope.as_ref()
     }
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +120,10 @@ impl Application {
 
     pub fn args_mut(&mut self) -> &mut Vec<UMPL2Expr> {
         &mut self.args
+    }
+
+    pub fn args(&self) -> &[UMPL2Expr] {
+        self.args.as_ref()
     }
 }
 
