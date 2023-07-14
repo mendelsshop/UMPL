@@ -1,15 +1,25 @@
 use std::collections::HashMap;
 
-use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
 use inkwell::values::{BasicMetadataValueEnum, FloatValue, FunctionValue, PointerValue};
 use inkwell::FloatPredicate;
+use inkwell::{
+    builder::Builder,
+    values::{BasicValue, BasicValueEnum},
+};
 
 use crate::ast::{Fanction, FnKeyword, UMPL2Expr};
-
+macro_rules! return_none {
+    ($expr:expr) => {
+        match $expr {
+            Some(e) => e,
+            _ => return Ok(None),
+        }
+    };
+}
 /// Defines the `Expr` compiler.
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
@@ -87,9 +97,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             self.variables.insert(arg_name.clone(), alloca);
         }
-        let scope = &self.function.scope()[0];
-        let body = self.compile_expr(scope)?;
-        self.builder.build_return(Some(&body));
+        let scope = &self.function.scope();
+        let mut done = false;
+        let mut ret = None;
+        for expr in scope.iter() {
+            
+            let value = match self.compile_expr(expr)? {
+                Some(v) => v,
+                None => {
+                    done = true;
+                    self.builder.build_return(Some(&ret.unwrap()));
+                    break;
+                }
+            };
+
+            println!("{}", value.to_string());
+            ret = Some(value);
+        }
+        if !done { self.builder.build_return(Some(&ret.unwrap()));}
+       
 
         // return the whole thing after verification and optimization
         if fn_val.verify(true) {
@@ -105,16 +131,96 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<FloatValue<'ctx>, &'static str> {
+    fn compile_scope(
+        &mut self,
+        scope: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, &'static str> {
+        let mut res = None;
+        for expr in scope {
+            res = Some(return_none!(self.compile_expr(expr)?));
+        }
+        Ok(Some(res.ok_or("")?))
+    }
+
+    fn compile_expr(
+        &mut self,
+        expr: &UMPL2Expr,
+    ) -> Result<Option<BasicValueEnum<'ctx>>, &'static str> {
         match expr {
-            UMPL2Expr::Bool(_) => todo!(),
-            UMPL2Expr::Number(n) => Ok(self.context.f64_type().const_float(*n)),
+            UMPL2Expr::Bool(b) => Ok(Some(
+                self.context
+                    .bool_type()
+                    .const_int(
+                        match b {
+                            crate::ast::Boolean::True => 1,
+                            crate::ast::Boolean::False => 0,
+                            crate::ast::Boolean::Maybee => todo!(),
+                        },
+                        false,
+                    )
+                    .as_basic_value_enum(),
+            )),
+            UMPL2Expr::Number(n) => Ok(Some(
+                self.context
+                    .f64_type()
+                    .const_float(*n)
+                    .as_basic_value_enum(),
+            )),
             UMPL2Expr::String(_) => todo!(),
             UMPL2Expr::Scope(_) => todo!(),
             UMPL2Expr::Ident(_) => todo!(),
-            UMPL2Expr::If(_) => todo!(),
+            UMPL2Expr::If(if_stmt) => {
+                let parent = self.fn_value();
+                let cond = return_none!(self.compile_expr(if_stmt.cond())?).into_int_value();
+                let zero_const = self.context.bool_type().const_int(0, false);
+                self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    cond,
+                    zero_const,
+                    "ifcond",
+                );
+                let then_bb = self.context.append_basic_block(parent, "then");
+                let else_bb = self.context.append_basic_block(parent, "else");
+                let cont_bb = self.context.append_basic_block(parent, "ifcont");
+                self.builder
+                    .build_conditional_branch(cond, then_bb, else_bb);
+                self.builder.position_at_end(then_bb);
+                let then_val = (self.compile_scope(if_stmt.cons())?);
+                self.builder.build_unconditional_branch(cont_bb);
+
+                let then_bb = self.builder.get_insert_block().unwrap();
+
+                // build else block
+                self.builder.position_at_end(else_bb);
+                let else_val = (self.compile_scope(if_stmt.alt())?);
+                self.builder.build_unconditional_branch(cont_bb);
+
+                let else_bb = self.builder.get_insert_block().unwrap();
+
+                // emit merge block
+                self.builder.position_at_end(cont_bb);
+
+                let phi = self.builder.build_phi(self.context.f64_type(), "iftmp");
+                match (then_val, else_val) {
+                    (None, None) => phi.add_incoming(&[(&self.context.f64_type().const_zero().as_basic_value_enum(), then_bb), (&self.context.f64_type().const_zero().as_basic_value_enum(), else_bb)]),
+                    (None, Some(_)) => phi.add_incoming(&[(&self.context.f64_type().const_zero().as_basic_value_enum(), then_bb), (&self.context.f64_type().const_zero().as_basic_value_enum(), else_bb)]),
+                    (Some(_), None) => phi.add_incoming(&[(&self.context.f64_type().const_zero().as_basic_value_enum(), then_bb), (&self.context.f64_type().const_zero().as_basic_value_enum(), else_bb)]),
+                    (Some(then_val), Some(else_val)) => phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]),
+                }
+                
+
+                Ok(Some(phi.as_basic_value()))
+            }
             UMPL2Expr::Unless(_) => todo!(),
-            UMPL2Expr::Stop(_) => todo!(),
+            UMPL2Expr::Stop(s) => {
+                // let parent = self.fn_value();
+                // self.context.append_basic_block(parent, "exit");
+                // let basic_block  = self.builder.get_insert_block().unwrap();
+                // self.builder.position_at_end(basic_block);
+                // self.builder
+                //     .build_return(Some(&return_none!(self.compile_expr(&*s)?)));
+                Ok(None)
+            }
             UMPL2Expr::Skip => todo!(),
             UMPL2Expr::Until(_) => todo!(),
             UMPL2Expr::GoThrough(_) => todo!(),
@@ -144,15 +250,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     UMPL2Expr::Tree(_) => todo!(),
                     UMPL2Expr::FnKW(k) => k,
                 };
-                let f = self.compile_expr(&a.args()[1])?;
-                let l = self.compile_expr(&a.args()[2])?;
-                match op {
-                    FnKeyword::Add => Ok(self.builder.build_float_add(f, l, "tmpadd")),
-                    FnKeyword::Sub => Ok(self.builder.build_float_sub(f, l, "tmpsub")),
-                    FnKeyword::Mul => Ok(self.builder.build_float_mul(f, l, "tmpmul")),
-                    FnKeyword::Div => Ok(self.builder.build_float_div(f, l, "tmpdiv")),
-                    FnKeyword::Mod => todo!(),
-                }
+                let f = return_none!(self.compile_expr(&a.args()[1])?).into_float_value();
+                let l = return_none!(self.compile_expr(&a.args()[2])?).into_float_value();
+                Ok(Some(
+                    match op {
+                        FnKeyword::Add => self.builder.build_float_add(f, l, "tmpadd"),
+                        FnKeyword::Sub => self.builder.build_float_sub(f, l, "tmpsub"),
+                        FnKeyword::Mul => self.builder.build_float_mul(f, l, "tmpmul"),
+                        FnKeyword::Div => self.builder.build_float_div(f, l, "tmpdiv"),
+                        FnKeyword::Mod => todo!(),
+                    }
+                    .as_basic_value_enum(),
+                ))
             }
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),

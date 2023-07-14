@@ -190,6 +190,18 @@ impl If {
     pub fn cond_mut(&mut self) -> &mut UMPL2Expr {
         &mut self.cond
     }
+
+    pub fn cond(&self) -> &UMPL2Expr {
+        &self.cond
+    }
+
+    pub fn cons(&self) -> &[UMPL2Expr] {
+        self.cons.as_ref()
+    }
+
+    pub fn alt(&self) -> &[UMPL2Expr] {
+        self.alt.as_ref()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

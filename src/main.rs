@@ -42,7 +42,11 @@ fn main() {
     fpm.add_reassociate_pass();
 
     fpm.initialize();
-    let fn_type = match parse_umpl("fanction 🚗  1 * ᚜ {add 5 0x10 ]> ᚛").unwrap() {
+    let fn_type = match parse_umpl(
+        "fanction 🚗  1 * ᚜ & {add 5 1 ]> 5 if & do ᚜2 stop 2 6᚛  otherwise ᚜4᚛ ᚛",
+    )
+    .unwrap()
+    {
         ast::UMPL2Expr::Bool(_) => todo!(),
         ast::UMPL2Expr::Number(_) => todo!(),
         ast::UMPL2Expr::String(_) => todo!(),

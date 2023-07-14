@@ -62,6 +62,7 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                     literal(),
                     stmt(),
                     stlib_kewyword(),
+                    terminal_umpl(),
                     ident_umpl(),
                     application(),
                     special_start(),
