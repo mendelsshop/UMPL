@@ -37,6 +37,7 @@ pub enum UMPL2Expr {
     Link(RC<str>, Vec<RC<str>>),
     Tree(Tree),
     FnKW(FnKeyword),
+    Let(RC<str>, Box<UMPL2Expr>)
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum FnKeyword {

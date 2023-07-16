@@ -83,14 +83,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .fn_type(args_types, self.function.optinal_params().is_some());
         let fn_val = self.module.add_function(&name, fn_type, None);
         for (i, arg) in fn_val.get_param_iter().enumerate() {
-            arg.into_float_value().set_name(&format!("|{i}|"));
+            arg.into_float_value().set_name(&format!("{i}"));
         }
         let entry = self.context.append_basic_block(fn_val, "entry");
         self.builder.position_at_end(entry);
         self.fn_value_opt = Some(fn_val);
         self.variables.reserve(self.function.param_count());
         for (i, arg) in fn_val.get_param_iter().enumerate() {
-            let arg_name = format!("|{i}|");
+            let arg_name = format!("{i}");
             let alloca = self.create_entry_block_alloca(&arg_name);
 
             self.builder.build_store(alloca, arg);
@@ -168,7 +168,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             )),
             UMPL2Expr::String(_) => todo!(),
             UMPL2Expr::Scope(_) => todo!(),
-            UMPL2Expr::Ident(_) => todo!(),
+            UMPL2Expr::Ident(i) => {
+                match self.variables.get(i.to_string().as_str()) {
+                    Some(var) => Ok(Some(self.builder.build_load(*var, i.to_string().as_str()))),
+                    None => Err("Could not find a matching variable."),
+                }
+            },
             UMPL2Expr::If(if_stmt) => {
                 let parent = self.fn_value();
                 let cond = return_none!(self.compile_expr(if_stmt.cond())?).into_int_value();
@@ -249,6 +254,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     UMPL2Expr::Link(_, _) => todo!(),
                     UMPL2Expr::Tree(_) => todo!(),
                     UMPL2Expr::FnKW(k) => k,
+                    UMPL2Expr::Let(_, _) => todo!(),
                 };
                 let f = return_none!(self.compile_expr(&a.args()[1])?).into_float_value();
                 let l = return_none!(self.compile_expr(&a.args()[2])?).into_float_value();
@@ -265,11 +271,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
-            UMPL2Expr::FnParam(_) => todo!(),
+            UMPL2Expr::FnParam(s) => {
+                match self.variables.get(&format!("{s}")) {
+                    Some(var) => Ok(Some(self.builder.build_load(*var, s.to_string().as_str()))),
+                    None => Err("Could not find a matching variable."),
+                }
+            },
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::Tree(_) => todo!(),
             UMPL2Expr::FnKW(_) => todo!(),
+            UMPL2Expr::Let(i, v) => {
+                let v = return_none!(self.compile_expr(&*v)?);
+                let ty = self.context.f64_type();
+                let ptr = self.builder.build_alloca(ty, i);
+                self.builder.build_store(ptr, v);
+                let alloca = self.create_entry_block_alloca(i.to_string().as_str());
+                self.variables.insert(i.to_string(), alloca);
+                return Ok(Some(self.context.f64_type().const_zero().as_basic_value_enum()));
+            },
         }
     }
 }

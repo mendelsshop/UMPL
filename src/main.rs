@@ -4,7 +4,7 @@ use crate::{codegen::Compiler, lexer::parse_umpl};
 
 pub mod ast;
 mod codegen;
-pub mod eval;
+// pub mod eval;
 pub mod lexer;
 pub mod pc;
 
@@ -43,7 +43,7 @@ fn main() {
 
     fpm.initialize();
     let fn_type = match parse_umpl(
-        "fanction 🚗  1 * ᚜ & {add 5 1 ]> 5 if & do ᚜2 stop 2 6᚛  otherwise ᚜4᚛ ᚛",
+        "fanction 🚗  1 * ᚜ '0'᚛",
     )
     .unwrap()
     {
@@ -68,6 +68,7 @@ fn main() {
         ast::UMPL2Expr::Link(_, _) => todo!(),
         ast::UMPL2Expr::Tree(_) => todo!(),
         ast::UMPL2Expr::FnKW(_) => todo!(),
+        ast::UMPL2Expr::Let(_, _) => todo!(),
     };
     println!("{fn_type:?}");
     match Compiler::compile(&context, &builder, &fpm, &module, &fn_type) {
@@ -75,7 +76,7 @@ fn main() {
             println!("{o}");
             o.print_to_stderr();
         }
-        Err(_) => todo!(),
+        Err(e) => println!("{e}"),
     }
 
     println!("Hello, world!");
