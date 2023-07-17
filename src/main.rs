@@ -46,6 +46,7 @@ fn main() {
     let fn_type = umpl_parse("fanction 🚗  1 ᚜  '0' .a. .a.  ᚛").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
+    #[allow(clippy::match_single_binding)]
     match complier.compile_program(&fn_type) {
         () => ()
         // Ok(o) => {

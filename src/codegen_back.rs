@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_variables, unused_mut)]
 use std::collections::HashMap;
 
 use inkwell::module::Module;
@@ -5,11 +6,11 @@ use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
 use inkwell::values::{FunctionValue, PointerValue};
 
+use inkwell::context::Context;
 use inkwell::{
     builder::Builder,
     values::{BasicValue, BasicValueEnum},
 };
-use inkwell::{context::Context, types::BasicType};
 
 use crate::ast::{Fanction, FnKeyword, UMPL2Expr};
 macro_rules! return_none {
@@ -196,14 +197,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder
                     .build_conditional_branch(cond, then_bb, else_bb);
                 self.builder.position_at_end(then_bb);
-                let then_val = (self.compile_scope(if_stmt.cons())?);
+                let then_val = self.compile_scope(if_stmt.cons())?;
                 self.builder.build_unconditional_branch(cont_bb);
 
                 let then_bb = self.builder.get_insert_block().unwrap();
 
                 // build else block
                 self.builder.position_at_end(else_bb);
-                let else_val = (self.compile_scope(if_stmt.alt())?);
+                let else_val = self.compile_scope(if_stmt.alt())?;
                 self.builder.build_unconditional_branch(cont_bb);
 
                 let else_bb = self.builder.get_insert_block().unwrap();
@@ -314,7 +315,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Tree(_) => todo!(),
             UMPL2Expr::FnKW(_) => todo!(),
             UMPL2Expr::Let(i, v) => {
-                let v = return_none!(self.compile_expr(&*v)?);
+                let v = return_none!(self.compile_expr(v)?);
                 let ty = self.context.bool_type();
                 let ptr = self.builder.build_alloca(ty, i);
                 self.builder.build_store(ptr, v);

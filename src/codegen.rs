@@ -71,13 +71,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .i8_type()
                 .const_int(ty as u64, false)
                 .as_basic_value_enum(),
-            
             if let Some(s) = string {
                 // making sure same string isnt saved more than once
                 self.string
                     .get(&s)
                     .map(|s| s.as_basic_value_enum())
-                    .unwrap_or_else( ||{
+                    .unwrap_or_else(|| {
                         let str_ptr = &self.builder.build_global_string_ptr(&s, &s);
                         self.string.insert(s, *str_ptr);
                         str_ptr.as_basic_value_enum()
@@ -209,7 +208,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Invalid generated function.")
                 }
             }
-            UMPL2Expr::Ident(s) => self.builder.build_load(*self.variables.get(s).unwrap(), &s),
+            UMPL2Expr::Ident(s) => self.builder.build_load(*self.variables.get(s).unwrap(), s),
             UMPL2Expr::Scope(_) => todo!(),
             UMPL2Expr::If(_) => todo!(),
             UMPL2Expr::Unless(_) => todo!(),
