@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
@@ -10,6 +9,7 @@ use inkwell::{
     builder::Builder,
     values::{BasicValue, BasicValueEnum},
 };
+use inkwell::{context::Context, types::BasicType};
 
 use crate::ast::{Fanction, FnKeyword, UMPL2Expr};
 macro_rules! return_none {
@@ -67,10 +67,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             None => builder.position_at_end(entry),
         }
 
-        builder.build_alloca(self.context.f64_type(), name)
+        builder.build_alloca(self.context.struct_type(&[], false), name)
     }
     fn compile_fn(&mut self) -> Result<FunctionValue<'ctx>, &'static str> {
-        let ret_type = self.context.f64_type();
+        let ret_type = self.context.struct_type(&[], false);
         let name = self.function.name().to_string();
         let args_types = std::iter::repeat(ret_type)
             .take(self.function.param_count())
@@ -79,17 +79,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args_types = args_types.as_slice();
         let fn_type = self
             .context
-            .f64_type()
+            .void_type()
             .fn_type(args_types, self.function.optinal_params().is_some());
+        println!("{}", fn_type);
         let fn_val = self.module.add_function(&name, fn_type, None);
         for (i, arg) in fn_val.get_param_iter().enumerate() {
-            arg.into_float_value().set_name(&format!("{i}"));
+            arg.set_name(&format!("{i}"));
         }
         let entry = self.context.append_basic_block(fn_val, "entry");
         self.builder.position_at_end(entry);
         self.fn_value_opt = Some(fn_val);
         self.variables.reserve(self.function.param_count());
         for (i, arg) in fn_val.get_param_iter().enumerate() {
+            println!("{arg}");
             let arg_name = format!("{i}");
             let alloca = self.create_entry_block_alloca(&arg_name);
 
@@ -97,29 +99,35 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             self.variables.insert(arg_name.clone(), alloca);
         }
+
         let scope = &self.function.scope();
         let mut done = false;
-        let mut ret = None;
-        for expr in scope.iter() {
-            
-            let value = match self.compile_expr(expr)? {
-                Some(v) => v,
-                None => {
-                    done = true;
-                    self.builder.build_return(Some(&ret.unwrap()));
-                    break;
-                }
-            };
+        // let mut ret = None;
+        // for expr in scope.iter() {
 
-            println!("{}", value.to_string());
-            ret = Some(value);
+        //     let value = match self.compile_expr(expr)? {
+        //         Some(v) => v,
+        //         None => {
+        //             done = true;
+
+        //             self.builder.build_return(Some(&ret.unwrap()));
+        //             break;
+        //         }
+        //     };
+
+        //     println!("{}", value.to_string());
+        //     ret = Some(value);
+        // }
+        if !done {
+            // self.builder.build_return(Some(&ret.unwrap()));
+            self.builder.build_return(None);
         }
-        if !done { self.builder.build_return(Some(&ret.unwrap()));}
-       
+        fn_val.print_to_stderr();
+        println!("{}", fn_val);
 
         // return the whole thing after verification and optimization
         if fn_val.verify(true) {
-            self.fpm.run_on(&fn_val);
+            // self.fpm.run_on(&fn_val);
 
             Ok(fn_val)
         } else {
@@ -162,17 +170,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             )),
             UMPL2Expr::Number(n) => Ok(Some(
                 self.context
-                    .f64_type()
-                    .const_float(*n)
+                    .bool_type()
+                    .const_int(*n as u64, false)
                     .as_basic_value_enum(),
             )),
             UMPL2Expr::String(_) => todo!(),
             UMPL2Expr::Scope(_) => todo!(),
-            UMPL2Expr::Ident(i) => {
-                match self.variables.get(i.to_string().as_str()) {
-                    Some(var) => Ok(Some(self.builder.build_load(*var, i.to_string().as_str()))),
-                    None => Err("Could not find a matching variable."),
-                }
+            UMPL2Expr::Ident(i) => match self.variables.get(i.to_string().as_str()) {
+                Some(var) => Ok(Some(self.builder.build_load(*var, i.to_string().as_str()))),
+                None => Err("Could not find a matching variable."),
             },
             UMPL2Expr::If(if_stmt) => {
                 let parent = self.fn_value();
@@ -205,14 +211,42 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 // emit merge block
                 self.builder.position_at_end(cont_bb);
 
-                let phi = self.builder.build_phi(self.context.f64_type(), "iftmp");
+                let phi = self.builder.build_phi(self.context.bool_type(), "iftmp");
                 match (then_val, else_val) {
-                    (None, None) => phi.add_incoming(&[(&self.context.f64_type().const_zero().as_basic_value_enum(), then_bb), (&self.context.f64_type().const_zero().as_basic_value_enum(), else_bb)]),
-                    (None, Some(_)) => phi.add_incoming(&[(&self.context.f64_type().const_zero().as_basic_value_enum(), then_bb), (&self.context.f64_type().const_zero().as_basic_value_enum(), else_bb)]),
-                    (Some(_), None) => phi.add_incoming(&[(&self.context.f64_type().const_zero().as_basic_value_enum(), then_bb), (&self.context.f64_type().const_zero().as_basic_value_enum(), else_bb)]),
-                    (Some(then_val), Some(else_val)) => phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]),
+                    (None, None) => phi.add_incoming(&[
+                        (
+                            &self.context.bool_type().const_zero().as_basic_value_enum(),
+                            then_bb,
+                        ),
+                        (
+                            &self.context.bool_type().const_zero().as_basic_value_enum(),
+                            else_bb,
+                        ),
+                    ]),
+                    (None, Some(_)) => phi.add_incoming(&[
+                        (
+                            &self.context.bool_type().const_zero().as_basic_value_enum(),
+                            then_bb,
+                        ),
+                        (
+                            &self.context.bool_type().const_zero().as_basic_value_enum(),
+                            else_bb,
+                        ),
+                    ]),
+                    (Some(_), None) => phi.add_incoming(&[
+                        (
+                            &self.context.bool_type().const_zero().as_basic_value_enum(),
+                            then_bb,
+                        ),
+                        (
+                            &self.context.bool_type().const_zero().as_basic_value_enum(),
+                            else_bb,
+                        ),
+                    ]),
+                    (Some(then_val), Some(else_val)) => {
+                        phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)])
+                    }
                 }
-                
 
                 Ok(Some(phi.as_basic_value()))
             }
@@ -256,14 +290,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     UMPL2Expr::FnKW(k) => k,
                     UMPL2Expr::Let(_, _) => todo!(),
                 };
-                let f = return_none!(self.compile_expr(&a.args()[1])?).into_float_value();
-                let l = return_none!(self.compile_expr(&a.args()[2])?).into_float_value();
+                let f = return_none!(self.compile_expr(&a.args()[1])?).into_int_value();
+                let l = return_none!(self.compile_expr(&a.args()[2])?).into_int_value();
                 Ok(Some(
                     match op {
-                        FnKeyword::Add => self.builder.build_float_add(f, l, "tmpadd"),
-                        FnKeyword::Sub => self.builder.build_float_sub(f, l, "tmpsub"),
-                        FnKeyword::Mul => self.builder.build_float_mul(f, l, "tmpmul"),
-                        FnKeyword::Div => self.builder.build_float_div(f, l, "tmpdiv"),
+                        FnKeyword::Add => self.builder.build_int_add(f, l, "tmpadd"),
+                        FnKeyword::Sub => self.builder.build_int_sub(f, l, "tmpsub"),
+                        FnKeyword::Mul => self.builder.build_int_mul(f, l, "tmpmul"),
+                        FnKeyword::Div => self.builder.build_int_signed_div(f, l, "tmpdiv"),
                         FnKeyword::Mod => todo!(),
                     }
                     .as_basic_value_enum(),
@@ -271,11 +305,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
-            UMPL2Expr::FnParam(s) => {
-                match self.variables.get(&format!("{s}")) {
-                    Some(var) => Ok(Some(self.builder.build_load(*var, s.to_string().as_str()))),
-                    None => Err("Could not find a matching variable."),
-                }
+            UMPL2Expr::FnParam(s) => match self.variables.get(&format!("{s}")) {
+                Some(var) => Ok(Some(self.builder.build_load(*var, s.to_string().as_str()))),
+                None => Err("Could not find a matching variable."),
             },
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
@@ -283,13 +315,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::FnKW(_) => todo!(),
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(&*v)?);
-                let ty = self.context.f64_type();
+                let ty = self.context.bool_type();
                 let ptr = self.builder.build_alloca(ty, i);
                 self.builder.build_store(ptr, v);
                 let alloca = self.create_entry_block_alloca(i.to_string().as_str());
                 self.variables.insert(i.to_string(), alloca);
-                return Ok(Some(self.context.f64_type().const_zero().as_basic_value_enum()));
-            },
+                return Ok(Some(
+                    self.context.bool_type().const_zero().as_basic_value_enum(),
+                ));
+            }
         }
     }
 }

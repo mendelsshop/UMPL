@@ -5,6 +5,7 @@ use crate::{codegen::Compiler, lexer::parse_umpl};
 pub mod ast;
 mod codegen;
 // pub mod eval;
+mod cg;
 pub mod lexer;
 pub mod pc;
 
@@ -42,11 +43,7 @@ fn main() {
     fpm.add_reassociate_pass();
 
     fpm.initialize();
-    let fn_type = match parse_umpl(
-        "fanction 🚗  1 * ᚜ '0'᚛",
-    )
-    .unwrap()
-    {
+    let fn_type = match parse_umpl("fanction 🚗  1 ᚜   ᚛").unwrap() {
         ast::UMPL2Expr::Bool(_) => todo!(),
         ast::UMPL2Expr::Number(_) => todo!(),
         ast::UMPL2Expr::String(_) => todo!(),

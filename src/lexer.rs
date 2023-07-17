@@ -184,15 +184,21 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
     )
 }
 
-fn let_stmt()  -> Box<Parser<UMPL2Expr>> {
-    map(keep_right(string("let"), chain(keep_right(ws_or_comment(),ident_umpl()), umpl2expr())), |r| {
-        let let_ident = match r.0 {
-            UMPL2Expr::Ident(str) => str,
-            // TODO don't panic use try_map, or randomly create an ident string
-            _ => panic!(),
-        };
-        UMPL2Expr::Let(let_ident, Box::new(r.1))
-    })
+fn let_stmt() -> Box<Parser<UMPL2Expr>> {
+    map(
+        keep_right(
+            string("let"),
+            chain(keep_right(ws_or_comment(), ident_umpl()), umpl2expr()),
+        ),
+        |r| {
+            let let_ident = match r.0 {
+                UMPL2Expr::Ident(str) => str,
+                // TODO don't panic use try_map, or randomly create an ident string
+                _ => panic!(),
+            };
+            UMPL2Expr::Let(let_ident, Box::new(r.1))
+        },
+    )
 }
 
 fn if_stmt() -> Box<Parser<UMPL2Expr>> {
