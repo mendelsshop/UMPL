@@ -1,11 +1,11 @@
-use inkwell::{context::Context, passes::PassManager, values::AnyValue};
+use inkwell::{context::Context, passes::PassManager};
 
-use crate::{codegen::Compiler, lexer::parse_umpl};
+use crate::{codegen::Compiler, lexer::umpl_parse};
 
 pub mod ast;
-mod codegen;
+mod codegen_back;
 // pub mod eval;
-mod cg;
+mod codegen;
 pub mod lexer;
 pub mod pc;
 
@@ -43,38 +43,18 @@ fn main() {
     fpm.add_reassociate_pass();
 
     fpm.initialize();
-    let fn_type = match parse_umpl("fanction 🚗  1 ᚜   ᚛").unwrap() {
-        ast::UMPL2Expr::Bool(_) => todo!(),
-        ast::UMPL2Expr::Number(_) => todo!(),
-        ast::UMPL2Expr::String(_) => todo!(),
-        ast::UMPL2Expr::Scope(_) => todo!(),
-        ast::UMPL2Expr::Ident(_) => todo!(),
-        ast::UMPL2Expr::If(_) => todo!(),
-        ast::UMPL2Expr::Unless(_) => todo!(),
-        ast::UMPL2Expr::Stop(_) => todo!(),
-        ast::UMPL2Expr::Skip => todo!(),
-        ast::UMPL2Expr::Until(_) => todo!(),
-        ast::UMPL2Expr::GoThrough(_) => todo!(),
-        ast::UMPL2Expr::ContiueDoing(_) => todo!(),
-        ast::UMPL2Expr::Fanction(f) => f,
-        ast::UMPL2Expr::Application(_) => todo!(),
-        ast::UMPL2Expr::Quoted(_) => todo!(),
-        ast::UMPL2Expr::Label(_) => todo!(),
-        ast::UMPL2Expr::FnParam(_) => todo!(),
-        ast::UMPL2Expr::Hempty => todo!(),
-        ast::UMPL2Expr::Link(_, _) => todo!(),
-        ast::UMPL2Expr::Tree(_) => todo!(),
-        ast::UMPL2Expr::FnKW(_) => todo!(),
-        ast::UMPL2Expr::Let(_, _) => todo!(),
-    };
+    let fn_type = umpl_parse("fanction 🚗  1 ᚜  '0' .a. .a.  ᚛").unwrap();
     println!("{fn_type:?}");
-    match Compiler::compile(&context, &builder, &fpm, &module, &fn_type) {
-        Ok(o) => {
-            println!("{o}");
-            o.print_to_stderr();
-        }
-        Err(e) => println!("{e}"),
+    let mut complier = Compiler::new(&context, &module, &builder, &fpm);
+    match complier.compile_program(&fn_type) {
+        () => ()
+        // Ok(o) => {
+        //     println!("{o}");
+        //     o.print_to_stderr();
+        // }
+        // Err(e) => println!("{e}"),
     }
+    complier.print_ir();
 
     println!("Hello, world!");
 }
