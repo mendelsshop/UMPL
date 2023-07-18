@@ -143,26 +143,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.value(TyprIndex::Lambda, None, None, None, Some(fn_value))
     }
     #[inline]
-    fn fn_value(&self, name: &str) -> FunctionValue<'ctx> {
-        self.module.get_function(name).unwrap()
+    fn fn_value(&self, name: &str) -> Result<FunctionValue<'ctx>, String> {
+        self.module
+            .get_function(name)
+            .ok_or(format!("could not find function {name}"))
     }
     // / Creates a new stack allocation instruction in the entry block of the function.
-    fn create_entry_block_alloca(&self, fn_name: &str, name: &str) -> PointerValue<'ctx> {
-        let fn_value = self.fn_value(fn_name);
+    fn create_entry_block_alloca(
+        &self,
+        fn_name: &str,
+        name: &str,
+    ) -> Result<PointerValue<'ctx>, String> {
+        let fn_value = self.fn_value(fn_name)?;
+        // if a function is already allocated it will have an entry block so its fine to unwrap
         let entry = fn_value.get_first_basic_block().unwrap();
 
         entry.get_first_instruction().map_or_else(
             || self.builder.position_at_end(entry),
             |first_instr| self.builder.position_before(&first_instr),
         );
-        self.builder.build_alloca(self.kind, name)
+        Ok(self.builder.build_alloca(self.kind, name))
     }
 
-    fn compile_expr(&mut self, expr: &UMPL2Expr) -> BasicValueEnum<'ctx> {
+    fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
-            UMPL2Expr::Number(value) => self.number(*value).as_basic_value_enum(),
-            UMPL2Expr::Bool(value) => self.bool(*value).as_basic_value_enum(),
-            UMPL2Expr::String(value) => self.string(value.clone()).as_basic_value_enum(),
+            UMPL2Expr::Number(value) => Ok(self.number(*value).as_basic_value_enum()),
+            UMPL2Expr::Bool(value) => Ok(self.bool(*value).as_basic_value_enum()),
+            UMPL2Expr::String(value) => Ok(self.string(value.clone()).as_basic_value_enum()),
             UMPL2Expr::Fanction(r#fn) => {
                 let old_block = self.builder.get_insert_block();
                 let body = r#fn.scope();
@@ -183,7 +190,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 for (i, arg) in fn_value.get_param_iter().enumerate() {
                     let arg_name: RC<str> = i.to_string().into();
 
-                    let alloca = self.create_entry_block_alloca(&name, &arg_name);
+                    let alloca = self.create_entry_block_alloca(&name, &arg_name)?;
 
                     self.builder.build_store(alloca, arg);
 
@@ -193,9 +200,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .position_at_end(fn_value.get_last_basic_block().unwrap());
                 let mut ret_value = None;
                 for expr in body {
-                    ret_value = Some(self.compile_expr(expr));
+                    ret_value = Some(self.compile_expr(expr)?);
                 }
-                let ret_value = ret_value.unwrap();
+                let ret_value =
+                    ret_value.ok_or("function doesn't have any expression to return")?;
 
                 self.builder.build_return(Some(&ret_value));
                 if let Some(end) = old_block {
@@ -206,7 +214,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if fn_value.verify(true) {
                     self.fpm.run_on(&fn_value);
 
-                    self.function(fn_value).as_basic_value_enum()
+                    Ok(self.function(fn_value).as_basic_value_enum())
                 } else {
                     println!();
                     println!();
@@ -215,10 +223,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         fn_value.delete();
                     }
 
-                    panic!("Invalid generated function.")
+                    Err("Invalid generated function.".to_string())
                 }
             }
-            UMPL2Expr::Ident(s) => self.builder.build_load(*self.variables.get(s).unwrap(), s),
+            UMPL2Expr::Ident(s) => self.get_var(s),
             UMPL2Expr::Scope(_) => todo!(),
             UMPL2Expr::If(_) => todo!(),
             UMPL2Expr::Unless(_) => todo!(),
@@ -230,13 +238,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Application(_) => todo!(),
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
-            UMPL2Expr::FnParam(s) => self.builder.build_load(
-                *self
-                    .variables
-                    .get::<RC<str>>(&(s.to_string().into()))
-                    .unwrap(),
-                &s.to_string(),
-            ),
+            UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()),
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::Tree(_) => todo!(),
@@ -245,7 +247,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub fn compile_program(&mut self, program: &[UMPL2Expr]) {
+    fn get_var(&mut self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
+        Ok(self
+            .builder
+            .build_load(*self.variables.get(s).ok_or(format!("{s} not found"))?, s))
+    }
+
+    pub fn compile_program(&mut self, program: &[UMPL2Expr]) -> Option<String> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
@@ -253,10 +261,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder.position_at_end(main_block);
 
         for expr in program {
-            self.compile_expr(expr);
+            match self.compile_expr(expr) {
+                Ok(_) => continue,
+                Err(e) => return Some(e),
+            }
         }
 
         builder.build_return(Some(&self.context.i32_type().const_zero()));
+        None
     }
 
     pub fn print_ir(&self) {

@@ -52,19 +52,15 @@ fn main() {
     fpm.add_reassociate_pass();
 
     fpm.initialize();
-    let fn_type = umpl_parse("fanction 🚗  1 ᚜  '0' .a. .a.  ᚛").unwrap();
+    let fn_type = umpl_parse("fanction 🚗  1 ᚜  ᚛").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
-    #[allow(clippy::match_single_binding)]
-    match complier.compile_program(&fn_type) {
-        () => ()
-        // Ok(o) => {
-        //     println!("{o}");
-        //     o.print_to_stderr();
-        // }
-        // Err(e) => println!("{e}"),
-    }
-    complier.print_ir();
-
-    println!("Hello, world!");
+    complier.compile_program(&fn_type).map_or_else(
+        || {
+            complier.print_ir();
+        },
+        |err| {
+            println!("error: {err}");
+        },
+    );
 }
