@@ -17,7 +17,7 @@ use crate::{
 };
 
 impl Varidiac {
-    fn from_char(c: char) -> Option<Self> {
+    const fn from_char(c: char) -> Option<Self> {
         match c {
             '*' => Some(Self::AtLeast0),
             '+' => Some(Self::AtLeast1),
@@ -101,11 +101,11 @@ fn application() -> Box<Parser<UMPL2Expr>> {
     )
 }
 
-pub fn parse_umpl(input: &str) -> Result<UMPL2Expr, ParseError> {
+pub fn parse_umpl(input: &str) -> Result<UMPL2Expr, ParseError<'_>> {
     umpl2expr()(input).map(|res| res.0)
 }
 
-pub fn umpl_parse(input: &str) -> Result<Vec<UMPL2Expr>, ParseError> {
+pub fn umpl_parse(input: &str) -> Result<Vec<UMPL2Expr>, ParseError<'_>> {
     map(many(umpl2expr()), |r| r.map_or(vec![], Iterator::collect))(input).map(|res| res.0)
 }
 
@@ -191,11 +191,7 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
             chain(keep_right(ws_or_comment(), ident_umpl()), umpl2expr()),
         ),
         |r| {
-            let let_ident = match r.0 {
-                UMPL2Expr::Ident(str) => str,
-                // TODO don't panic use try_map, or randomly create an ident string
-                _ => panic!(),
-            };
+            let UMPL2Expr::Ident(let_ident) = r.0 else { panic!() };
             UMPL2Expr::Let(let_ident, Box::new(r.1))
         },
     )
@@ -278,11 +274,7 @@ fn go_through_stmt() -> Box<Parser<UMPL2Expr>> {
             scope(umpl2expr()),
         ]),
         |mut r| {
-            let for_ident = match r.next().unwrap_or_default() {
-                UMPL2Expr::Ident(str) => str,
-                // TODO don't panic use try_map, or randomly create an ident string
-                _ => panic!(),
-            };
+            let UMPL2Expr::Ident(for_ident) = r.next().unwrap_or_default() else { panic!() };
             let iterable = r.next().unwrap_or_default();
             let loop_scope = get_scope(r.next());
             UMPL2Expr::GoThrough(Box::new(GoThrough::new(for_ident, iterable, loop_scope)))
@@ -310,10 +302,7 @@ fn link_stmt() -> Box<Parser<UMPL2Expr>> {
             many1(keep_right(ws_or_comment(), label_umpl())),
         ),
         |res| {
-            let to_link = match res.0 {
-                UMPL2Expr::Label(l) => l,
-                _ => panic!(),
-            };
+            let UMPL2Expr::Label(to_link) = res.0 else { panic!() };
             let linked_list = res
                 .1
                 .map(|e| match e {
@@ -357,7 +346,7 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
             // TODO: maybe if no count given then randomly choose a count
             let param_count = r.1 .0.unwrap_or_default();
             let variadic = r.1 .1 .0;
-            let scope = r.1 .1 .1.get_scope_owned().unwrap_or(vec![]);
+            let scope = r.1 .1 .1.get_scope_owned().unwrap_or_default();
             UMPL2Expr::Fanction(Fanction::new(name, param_count, variadic, scope))
         },
     )
@@ -376,13 +365,13 @@ fn ident_umpl() -> Box<Parser<UMPL2Expr>> {
     )
 }
 
-fn special_char() -> &'static [char] {
+const fn special_char() -> &'static [char] {
     &[
         '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t', '<', '>',
     ]
 }
 
-fn call_start() -> &'static [char] {
+const fn call_start() -> &'static [char] {
     &[
         '(', '༺', '༼', '⁅', '⁽', '₍', '⌈', '⌊', '❨', '❪', '❬', '❮', '❰', '❲', '❴', '⟅', '⟦', '⟨',
         '⟪', '⟬', '⟮', '⦃', '⦅', '⦇', '⦉', '⦋', '⦍', '⦏', '⦑', '⦓', '⦕', '⦗', '⧘', '⧚', '⸢', '⸤',
@@ -391,7 +380,7 @@ fn call_start() -> &'static [char] {
     ]
 }
 
-fn call_end() -> &'static [char] {
+const fn call_end() -> &'static [char] {
     &[
         ')', '༻', '༽', '⁆', '⁾', '₎', '⌉', '⌋', '❩', '❫', '❭', '❯', '❱', '❳', '❵', '⟆', '⟧', '⟩',
         '⟫', '⟭', '⟯', '⦄', '⦆', '⦈', '⦊', '⦌', '⦎', '⦐', '⦒', '⦔', '⦖', '⦘', '⧙', '⧛', '⸣', '⸥',
@@ -454,17 +443,17 @@ mod tests {
     };
 
     #[test]
-    pub(crate) fn umpl() {
+    pub fn umpl() {
         println!("{:?}", parse_umpl("if 1 do ᚜1 unless 1 than ᚜1 2᚛ else ᚜1᚛ 2᚛ otherwise ᚜if 1 do ᚜1 2᚛ otherwise ᚜until 1 then ᚜1 2᚛᚛᚛"));
     }
 
     #[test]
-    pub(crate) fn umpl_no_end() {
+    pub fn umpl_no_end() {
         println!("{:?}", parse_umpl("if 1 do ᚜1 unless 1 than ᚜1 2 else ᚜1 2 otherwise ᚜if 1 do ᚜1 2 otherwise ᚜until 1 then ᚜1 2"));
     }
 
     #[test]
-    pub(crate) fn umpl_if() {
+    pub fn umpl_if() {
         let test_result = parse_umpl("if ? do ᚜2 6 6᚛  otherwise ᚜4᚛");
         assert!(test_result.is_ok());
         assert_eq!(

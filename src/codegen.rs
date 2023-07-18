@@ -2,9 +2,11 @@ use std::collections::HashMap;
 
 use inkwell::{
     builder::Builder,
+    context::Context,
+    module::Module,
     passes::PassManager,
     types::{BasicType, StructType},
-    values::{BasicValue, FunctionValue, GlobalValue, PointerValue, StructValue},
+    values::{BasicValue, BasicValueEnum, FunctionValue, GlobalValue, PointerValue, StructValue},
     AddressSpace,
 };
 
@@ -12,10 +14,17 @@ use crate::{
     ast::{Boolean, UMPL2Expr},
     interior_mut::RC,
 };
-
-pub(crate) struct Compiler<'a, 'ctx> {
-    context: &'ctx inkwell::context::Context,
-    module: &'a inkwell::module::Module<'ctx>,
+macro_rules! return_none {
+    ($expr:expr) => {
+        match $expr {
+            Some(e) => e,
+            _ => return Ok(None),
+        }
+    };
+}
+pub struct Compiler<'a, 'ctx> {
+    context: &'ctx Context,
+    module: &'a Module<'ctx>,
     variables: HashMap<RC<str>, PointerValue<'ctx>>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
@@ -30,8 +39,8 @@ pub enum TyprIndex {
 }
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn new(
-        context: &'ctx inkwell::context::Context,
-        module: &'a inkwell::module::Module<'ctx>,
+        context: &'ctx Context,
+        module: &'a Module<'ctx>,
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
@@ -73,9 +82,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .as_basic_value_enum(),
             if let Some(s) = string {
                 // making sure same string isnt saved more than once
+                #[allow(clippy::map_unwrap_or)]
+                // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
                 self.string
                     .get(&s)
-                    .map(|s| s.as_basic_value_enum())
+                    .map(BasicValue::as_basic_value_enum)
                     .unwrap_or_else(|| {
                         let str_ptr = &self.builder.build_global_string_ptr(&s, &s);
                         self.string.insert(s, *str_ptr);
@@ -94,15 +105,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .as_basic_value_enum(),
             self.context
                 .bool_type()
-                .const_int(bool.unwrap_or_default() as u64, false)
+                .const_int(u64::from(bool.unwrap_or_default()), false)
                 .as_basic_value_enum(),
             fn_ty
-                .map(|f| f.as_global_value().as_pointer_value())
-                .unwrap_or(
+                .map_or(
                     self.context
                         .i8_type()
                         .ptr_type(AddressSpace::default())
                         .const_null(),
+                    |f| f.as_global_value().as_pointer_value(),
                 )
                 .as_basic_value_enum(),
         ])
@@ -140,15 +151,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let fn_value = self.fn_value(fn_name);
         let entry = fn_value.get_first_basic_block().unwrap();
 
-        match entry.get_first_instruction() {
-            Some(first_instr) => self.builder.position_before(&first_instr),
-            None => self.builder.position_at_end(entry),
-        }
-
+        entry.get_first_instruction().map_or_else(
+            || self.builder.position_at_end(entry),
+            |first_instr| self.builder.position_before(&first_instr),
+        );
         self.builder.build_alloca(self.kind, name)
     }
 
-    fn compile_expr(&mut self, expr: &UMPL2Expr) -> inkwell::values::BasicValueEnum<'ctx> {
+    fn compile_expr(&mut self, expr: &UMPL2Expr) -> BasicValueEnum<'ctx> {
         match expr {
             UMPL2Expr::Number(value) => self.number(*value).as_basic_value_enum(),
             UMPL2Expr::Bool(value) => self.bool(*value).as_basic_value_enum(),
@@ -159,7 +169,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let name = r#fn.name().to_string();
                 let arg_types: Vec<_> = std::iter::repeat(self.kind)
                     .take(r#fn.param_count())
-                    .map(|a| a.into())
+                    .map(std::convert::Into::into)
                     .collect();
                 let ret_type = self.kind;
                 let fn_type = ret_type.fn_type(&arg_types, false);
@@ -183,7 +193,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .position_at_end(fn_value.get_last_basic_block().unwrap());
                 let mut ret_value = None;
                 for expr in body {
-                    ret_value = Some(self.compile_expr(expr))
+                    ret_value = Some(self.compile_expr(expr));
                 }
                 let ret_value = ret_value.unwrap();
 

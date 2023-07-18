@@ -39,7 +39,7 @@ pub enum UMPL2Expr {
     FnKW(FnKeyword),
     Let(RC<str>, Box<UMPL2Expr>),
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FnKeyword {
     Add,
     Sub,
@@ -73,6 +73,7 @@ pub struct Fanction {
 }
 
 impl Fanction {
+    #[must_use]
     pub fn new(
         name: char,
         param_count: usize,
@@ -92,18 +93,22 @@ impl Fanction {
         &mut self.scope
     }
 
-    pub fn name(&self) -> char {
+    #[must_use]
+    pub const fn name(&self) -> char {
         self.name
     }
 
-    pub fn optinal_params(&self) -> Option<&Varidiac> {
+    #[must_use]
+    pub const fn optinal_params(&self) -> Option<&Varidiac> {
         self.optinal_params.as_ref()
     }
 
-    pub fn param_count(&self) -> usize {
+    #[must_use]
+    pub const fn param_count(&self) -> usize {
         self.param_count
     }
 
+    #[must_use]
     pub fn scope(&self) -> &[UMPL2Expr] {
         self.scope.as_ref()
     }
@@ -115,6 +120,7 @@ pub struct Application {
 }
 
 impl Application {
+    #[must_use]
     pub fn new(args: Vec<UMPL2Expr>, print: PrintType) -> Self {
         Self { args, print }
     }
@@ -123,6 +129,7 @@ impl Application {
         &mut self.args
     }
 
+    #[must_use]
     pub fn args(&self) -> &[UMPL2Expr] {
         self.args.as_ref()
     }
@@ -136,6 +143,7 @@ pub struct GoThrough {
 }
 
 impl GoThrough {
+    #[must_use]
     pub fn new(ident: RC<str>, iter: UMPL2Expr, scope: Vec<UMPL2Expr>) -> Self {
         Self { ident, iter, scope }
     }
@@ -156,6 +164,7 @@ pub struct Until {
 }
 
 impl Until {
+    #[must_use]
     pub fn new(cond: UMPL2Expr, scope: Vec<UMPL2Expr>) -> Self {
         Self { cond, scope }
     }
@@ -176,6 +185,7 @@ pub struct If {
 }
 
 impl If {
+    #[must_use]
     pub fn new(cond: UMPL2Expr, cons: Vec<UMPL2Expr>, alt: Vec<UMPL2Expr>) -> Self {
         Self { cond, cons, alt }
     }
@@ -192,14 +202,17 @@ impl If {
         &mut self.cond
     }
 
-    pub fn cond(&self) -> &UMPL2Expr {
+    #[must_use]
+    pub const fn cond(&self) -> &UMPL2Expr {
         &self.cond
     }
 
+    #[must_use]
     pub fn cons(&self) -> &[UMPL2Expr] {
         self.cons.as_ref()
     }
 
+    #[must_use]
     pub fn alt(&self) -> &[UMPL2Expr] {
         self.alt.as_ref()
     }
@@ -213,6 +226,7 @@ pub struct Unless {
 }
 
 impl Unless {
+    #[must_use]
     pub fn new(cond: UMPL2Expr, alt: Vec<UMPL2Expr>, cons: Vec<UMPL2Expr>) -> Self {
         Self { cond, cons, alt }
     }
@@ -230,7 +244,7 @@ impl Unless {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Boolean {
     /// &
     True,
@@ -239,7 +253,7 @@ pub enum Boolean {
     /// ?
     Maybee,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Varidiac {
     /// denotes that besides the usual arg count function will take extra args
     /// in form of tree (requires at least 1 arg)
@@ -249,7 +263,7 @@ pub enum Varidiac {
     AtLeast0,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PrintType {
     None,
     Print,
@@ -259,7 +273,8 @@ pub enum PrintType {
 macro_rules! get_expr {
     ($type:ident, $ret:ty, $method_name:ident) => {
         impl UMPL2Expr {
-            pub fn $method_name(&self) -> Option<&$ret> {
+            #[must_use]
+            pub const fn $method_name(&self) -> Option<&$ret> {
                 match self {
                     Self::$type(t) => Some(t),
                     _ => None,
@@ -274,6 +289,8 @@ get_expr! {Scope, Vec<UMPL2Expr>, get_scope}
 macro_rules! get_expr_owned {
     ($type:ident, $ret:ty, $method_name:ident) => {
         impl UMPL2Expr {
+            #[allow(clippy::missing_const_for_fn)] // taking self doesnt work well with const fn (something about destructors)
+            #[must_use]
             pub fn $method_name(self) -> Option<$ret> {
                 match self {
                     Self::$type(t) => Some(t),

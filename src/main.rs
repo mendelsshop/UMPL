@@ -1,9 +1,18 @@
+#![warn(clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![deny(
+    clippy::use_self,
+    rust_2018_idioms,
+    missing_debug_implementations,
+    clippy::missing_panics_doc
+)]
+#![allow(clippy::similar_names)]
+
 use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 
 pub mod ast;
-mod codegen_back;
+// mod codegen_back;
 // pub mod eval;
 mod codegen;
 pub mod lexer;

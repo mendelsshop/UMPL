@@ -63,10 +63,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let entry = self.fn_value().get_first_basic_block().unwrap();
 
-        match entry.get_first_instruction() {
-            Some(first_instr) => builder.position_before(&first_instr),
-            None => builder.position_at_end(entry),
-        }
+        entry.get_first_instruction().map_or_else(|| builder.position_at_end(entry), |first_instr| builder.position_before(&first_instr));
 
         builder.build_alloca(self.context.struct_type(&[], false), name)
     }
@@ -75,14 +72,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let name = self.function.name().to_string();
         let args_types = std::iter::repeat(ret_type)
             .take(self.function.param_count())
-            .map(|f| f.into())
-            .collect::<Vec<BasicMetadataTypeEnum>>();
+            .map(std::convert::Into::into)
+            .collect::<Vec<BasicMetadataTypeEnum<'_>>>();
         let args_types = args_types.as_slice();
         let fn_type = self
             .context
             .void_type()
             .fn_type(args_types, self.function.optinal_params().is_some());
-        println!("{}", fn_type);
+        println!("{fn_type}");
         let fn_val = self.module.add_function(&name, fn_type, None);
         for (i, arg) in fn_val.get_param_iter().enumerate() {
             arg.set_name(&format!("{i}"));
@@ -124,7 +121,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.build_return(None);
         }
         fn_val.print_to_stderr();
-        println!("{}", fn_val);
+        println!("{fn_val}");
 
         // return the whole thing after verification and optimization
         if fn_val.verify(true) {
