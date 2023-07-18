@@ -6,12 +6,15 @@ use inkwell::{
     module::Module,
     passes::PassManager,
     types::{BasicType, StructType},
-    values::{BasicValue, BasicValueEnum, FunctionValue, GlobalValue, PointerValue, StructValue},
+    values::{
+        BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, PointerValue,
+        StructValue,
+    },
     AddressSpace,
 };
 
 use crate::{
-    ast::{Boolean, UMPL2Expr},
+    ast::{Boolean, FnKeyword, UMPL2Expr},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -129,14 +132,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn string(&mut self, string: RC<str>) -> StructValue<'ctx> {
         self.value(TyprIndex::String, Some(string), None, None, None)
     }
-    fn number(&mut self, number: f64) -> StructValue<'ctx> {
+    fn const_number(&mut self, number: f64) -> StructValue<'ctx> {
         self.value(TyprIndex::Number, None, Some(number), None, None)
+    }
+
+    fn number(&mut self, number: FloatValue<'ctx>) -> StructValue<'ctx> {
+        // we first create an empty object because if we just create the struct with number llvm complains about returning instructions
+        let num = self.value(TyprIndex::Number, None, Some(0.0), None, None);
+        // after creating object set the number field to the value 
+        self.builder
+            .build_insert_value(num, number, 2, "number")
+            .unwrap()
+            .into_struct_value()
     }
     fn bool(&mut self, bool: Boolean) -> StructValue<'ctx> {
         self.value(
             TyprIndex::Boolean,
             None,
-            None,
+            None,  
             Some(match bool {
                 Boolean::True => true,
                 Boolean::False => false,
@@ -164,12 +177,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             || self.builder.position_at_end(entry),
             |first_instr| self.builder.position_before(&first_instr),
         );
+        
         Ok(self.builder.build_alloca(self.kind, name))
     }
 
     fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         match expr {
-            UMPL2Expr::Number(value) => Ok(Some(self.number(*value).as_basic_value_enum())),
+            UMPL2Expr::Number(value) => Ok(Some(self.const_number(*value).as_basic_value_enum())),
             UMPL2Expr::Bool(value) => Ok(Some(self.bool(*value).as_basic_value_enum())),
             UMPL2Expr::String(value) => Ok(Some(self.string(value.clone()).as_basic_value_enum())),
             UMPL2Expr::Fanction(r#fn) => {
@@ -288,7 +302,52 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Until(_) => todo!(),
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
-            UMPL2Expr::Application(_) => todo!(),
+            UMPL2Expr::Application(application) => {
+                let op = match &application.args()[0] {
+                    UMPL2Expr::Bool(_) => todo!(),
+                    UMPL2Expr::Number(_) => todo!(),
+                    UMPL2Expr::String(_) => todo!(),
+                    UMPL2Expr::Scope(_) => todo!(),
+                    UMPL2Expr::Ident(_) => todo!(),
+                    UMPL2Expr::If(_) => todo!(),
+                    UMPL2Expr::Unless(_) => todo!(),
+                    UMPL2Expr::Stop(_) => todo!(),
+                    UMPL2Expr::Skip => todo!(),
+                    UMPL2Expr::Until(_) => todo!(),
+                    UMPL2Expr::GoThrough(_) => todo!(),
+                    UMPL2Expr::ContiueDoing(_) => todo!(),
+                    UMPL2Expr::Fanction(_) => todo!(),
+                    UMPL2Expr::Application(_) => todo!(),
+                    UMPL2Expr::Quoted(_) => todo!(),
+                    UMPL2Expr::Label(_) => todo!(),
+                    UMPL2Expr::FnParam(_) => todo!(),
+                    UMPL2Expr::Hempty => todo!(),
+                    UMPL2Expr::Link(_, _) => todo!(),
+                    UMPL2Expr::Tree(_) => todo!(),
+                    UMPL2Expr::FnKW(k) => k,
+                    UMPL2Expr::Let(_, _) => todo!(),
+                };
+                let lhs = return_none!(self.compile_expr(&application.args()[1])?);
+                let f = self
+                    .extract_number(lhs.into_struct_value())
+                    .unwrap()
+                    .into_float_value();
+                let rhs = return_none!(self.compile_expr(&application.args()[2])?);
+                let l = self
+                    .extract_number(rhs.into_struct_value())
+                    .unwrap()
+                    .into_float_value();
+                Ok(Some(
+                    self.number(match op {
+                        FnKeyword::Add => self.builder.build_float_add(f, l, "tmpadd"),
+                        FnKeyword::Sub => self.builder.build_float_sub(f, l, "tmpsub"),
+                        FnKeyword::Mul => self.builder.build_float_mul(f, l, "tmpmul"),
+                        FnKeyword::Div => self.builder.build_float_div(f, l, "tmpdiv"),
+                        FnKeyword::Mod => todo!(),
+                    })
+                    .as_basic_value_enum(),
+                ))
+            }
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
@@ -296,7 +355,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::Tree(_) => todo!(),
             UMPL2Expr::FnKW(_) => todo!(),
-            UMPL2Expr::Let(_, _) => todo!(),
+            UMPL2Expr::Let(i, v) => {
+                let v = return_none!(self.compile_expr(v)?);
+                let ty = self.kind;
+                let ptr = self.builder.build_alloca(ty, i);
+                self.builder.build_store(ptr, v);
+                self.variables.insert(i.clone(), ptr);
+                return Ok(Some(
+                    self.context.bool_type().const_zero().as_basic_value_enum(),
+                ));
+            }
         }
     }
 
@@ -320,6 +388,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn extract_function(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
         self.builder.build_extract_value(cond_struct, 4, "load")
     }
+
+    // fn extract_number_checked(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+    //     let ty = self.extract_type(cond_struct).unwrap().into_int_value();
+
+    //     if val != TyprIndex::Number as u64 {
+    //         println!("type mismatch");
+    //         return None;
+    //     }
+    //     self.builder.build_extract_value(cond_struct, 2, "load")
+    // }
 
     fn compile_scope(
         &mut self,

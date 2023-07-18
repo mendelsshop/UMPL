@@ -53,7 +53,7 @@ fn main() {
 
     fpm.initialize();
     let fn_type =
-        umpl_parse("fanction 🚗  1 ᚜ .v.  if '0' do ᚜ stop 5 ᚛ otherwise ᚜ stop 2 3 ᚛ 4᚛  ")
+        umpl_parse("fanction 🚗  1 ᚜ .v. let i (add 1 '0')< if '0' do ᚜ 5 ᚛ otherwise ᚜ stop (add 1 i)< stop  3 ᚛ 4᚛  ")
             .unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
