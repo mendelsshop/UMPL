@@ -52,7 +52,9 @@ fn main() {
     fpm.add_reassociate_pass();
 
     fpm.initialize();
-    let fn_type = umpl_parse("fanction 🚗  1 ᚜  ᚛").unwrap();
+    let fn_type =
+        umpl_parse("fanction 🚗  1 ᚜ .v.  if '0' do ᚜ stop 5 ᚛ otherwise ᚜ stop 2 3 ᚛ 4᚛  ")
+            .unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(

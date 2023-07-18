@@ -30,6 +30,7 @@ pub struct Compiler<'a, 'ctx> {
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
     kind: StructType<'ctx>,
+    fn_value: Option<FunctionValue<'ctx>>,
 }
 pub enum TyprIndex {
     String = 0,
@@ -58,10 +59,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .i8_type()
                         .ptr_type(AddressSpace::default())
                         .as_basic_type_enum(),
+                    context.f64_type().as_basic_type_enum(),
                     context.bool_type().as_basic_type_enum(),
+                    context
+                        .i8_type()
+                        .ptr_type(AddressSpace::default())
+                        .as_basic_type_enum(),
                 ],
                 false,
             ),
+            fn_value: None,
         }
     }
 
@@ -143,18 +150,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.value(TyprIndex::Lambda, None, None, None, Some(fn_value))
     }
     #[inline]
-    fn fn_value(&self, name: &str) -> Result<FunctionValue<'ctx>, String> {
-        self.module
-            .get_function(name)
-            .ok_or(format!("could not find function {name}"))
+    fn current_fn_value(&self) -> Result<FunctionValue<'ctx>, String> {
+        self.fn_value
+            .ok_or("could not find current function".to_string())
     }
     // / Creates a new stack allocation instruction in the entry block of the function.
-    fn create_entry_block_alloca(
-        &self,
-        fn_name: &str,
-        name: &str,
-    ) -> Result<PointerValue<'ctx>, String> {
-        let fn_value = self.fn_value(fn_name)?;
+    fn create_entry_block_alloca(&self, name: &str) -> Result<PointerValue<'ctx>, String> {
+        let fn_value = self.current_fn_value()?;
         // if a function is already allocated it will have an entry block so its fine to unwrap
         let entry = fn_value.get_first_basic_block().unwrap();
 
@@ -165,12 +167,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(self.builder.build_alloca(self.kind, name))
     }
 
-    fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<BasicValueEnum<'ctx>, String> {
+    fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         match expr {
-            UMPL2Expr::Number(value) => Ok(self.number(*value).as_basic_value_enum()),
-            UMPL2Expr::Bool(value) => Ok(self.bool(*value).as_basic_value_enum()),
-            UMPL2Expr::String(value) => Ok(self.string(value.clone()).as_basic_value_enum()),
+            UMPL2Expr::Number(value) => Ok(Some(self.number(*value).as_basic_value_enum())),
+            UMPL2Expr::Bool(value) => Ok(Some(self.bool(*value).as_basic_value_enum())),
+            UMPL2Expr::String(value) => Ok(Some(self.string(value.clone()).as_basic_value_enum())),
             UMPL2Expr::Fanction(r#fn) => {
+                let old_fn = self.fn_value;
                 let old_block = self.builder.get_insert_block();
                 let body = r#fn.scope();
                 let name = r#fn.name().to_string();
@@ -186,37 +189,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     arg.set_name(&name.to_string());
                 }
                 let entry = self.context.append_basic_block(fn_value, "entry");
+                self.fn_value = Some(fn_value);
                 self.builder.position_at_end(entry);
                 for (i, arg) in fn_value.get_param_iter().enumerate() {
                     let arg_name: RC<str> = i.to_string().into();
-
-                    let alloca = self.create_entry_block_alloca(&name, &arg_name)?;
-
+                    let alloca = self.create_entry_block_alloca(&arg_name)?;
                     self.builder.build_store(alloca, arg);
-
                     self.variables.insert(arg_name, alloca);
                 }
                 self.builder
                     .position_at_end(fn_value.get_last_basic_block().unwrap());
-                let mut ret_value = None;
-                for expr in body {
-                    ret_value = Some(self.compile_expr(expr)?);
-                }
-                let ret_value =
-                    ret_value.ok_or("function doesn't have any expression to return")?;
 
-                self.builder.build_return(Some(&ret_value));
+                if let Some(ret) = self.compile_scope(body)? {
+                    self.builder.build_return(Some(&ret));
+                }
+                // reset to previous state (before function) needed for functions in functions
                 if let Some(end) = old_block {
                     self.builder.position_at_end(end);
                 }
+                self.fn_value = old_fn;
 
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
                     self.fpm.run_on(&fn_value);
 
-                    Ok(self.function(fn_value).as_basic_value_enum())
+                    Ok(Some(self.function(fn_value).as_basic_value_enum()))
                 } else {
-                    println!();
                     println!();
                     fn_value.print_to_stderr();
                     unsafe {
@@ -226,11 +224,66 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     Err("Invalid generated function.".to_string())
                 }
             }
-            UMPL2Expr::Ident(s) => self.get_var(s),
+            UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
             UMPL2Expr::Scope(_) => todo!(),
-            UMPL2Expr::If(_) => todo!(),
+            UMPL2Expr::If(if_stmt) => {
+                let parent = self.current_fn_value()?;
+                let cond_struct =
+                    return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
+                let bool_val = self.extract_bool(cond_struct).unwrap().into_int_value();
+                let object_type = self.extract_type(cond_struct).unwrap().into_int_value();
+                // if its not a bool type
+                let cond = self.builder.build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    object_type,
+                    self.context.i8_type().const_int(2, false),
+                    "ifcond",
+                );
+
+                // conditinal: either not bool or true
+                self.builder.build_or(bool_val, cond, "ifcond");
+                let then_bb = self.context.append_basic_block(parent, "then");
+                let else_bb = self.context.append_basic_block(parent, "else");
+                let cont_bb = self.context.append_basic_block(parent, "ifcont");
+                self.builder
+                    .build_conditional_branch(cond, then_bb, else_bb);
+                self.builder.position_at_end(then_bb);
+                let then_val = self.compile_scope(if_stmt.cons())?;
+                if then_val.is_some() {
+                    self.builder.build_unconditional_branch(cont_bb);
+                }
+                let then_bb = self.builder.get_insert_block().unwrap();
+
+                // build else block
+                self.builder.position_at_end(else_bb);
+                let else_val = self.compile_scope(if_stmt.alt())?;
+                if else_val.is_some() {
+                    self.builder.build_unconditional_branch(cont_bb);
+                }
+                let else_bb = self.builder.get_insert_block().unwrap();
+
+                // emit merge block
+                self.builder.position_at_end(cont_bb);
+
+                let phi = self.builder.build_phi(self.kind, "iftmp");
+                match (then_val, else_val) {
+                    (None, None) => phi.add_incoming(&[]),
+                    (None, Some(else_val)) => phi.add_incoming(&[(&else_val, else_bb)]),
+                    (Some(then_val), None) => phi.add_incoming(&[(&then_val, then_bb)]),
+                    (Some(then_val), Some(else_val)) => {
+                        phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
+                    }
+                }
+                self.module.print_to_stderr();
+
+                Ok(Some(phi.as_basic_value()))
+            }
             UMPL2Expr::Unless(_) => todo!(),
-            UMPL2Expr::Stop(_) => todo!(),
+            UMPL2Expr::Stop(s) => {
+                let res = return_none!(self.compile_expr(s)?);
+                self.builder.build_return(Some(&res));
+                Ok(None)
+            }
             UMPL2Expr::Skip => todo!(),
             UMPL2Expr::Until(_) => todo!(),
             UMPL2Expr::GoThrough(_) => todo!(),
@@ -238,13 +291,45 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Application(_) => todo!(),
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
-            UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()),
+            UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::Tree(_) => todo!(),
             UMPL2Expr::FnKW(_) => todo!(),
             UMPL2Expr::Let(_, _) => todo!(),
         }
+    }
+
+    fn extract_type(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        self.builder.build_extract_value(cond_struct, 0, "load")
+    }
+
+    // TODO: for all extract_* methods have checked variants that check that what is trying to be obtained is in fact the type of the object
+    fn extract_bool(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        self.builder.build_extract_value(cond_struct, 3, "load")
+    }
+
+    fn extract_string(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        self.builder.build_extract_value(cond_struct, 1, "load")
+    }
+
+    fn extract_number(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        self.builder.build_extract_value(cond_struct, 2, "load")
+    }
+
+    fn extract_function(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        self.builder.build_extract_value(cond_struct, 4, "load")
+    }
+
+    fn compile_scope(
+        &mut self,
+        body: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        let mut res = Err("scope does not have value".to_string());
+        for expr in body {
+            res = Ok(return_none!(self.compile_expr(expr)?));
+        }
+        res.map(Some)
     }
 
     fn get_var(&mut self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
