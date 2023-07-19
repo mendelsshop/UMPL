@@ -17,7 +17,6 @@ pub mod ast;
 mod codegen;
 pub mod lexer;
 pub mod pc;
-
 #[cfg(feature = "multi-threaded")]
 pub mod interior_mut {
     use std::sync::{Arc, Mutex};
@@ -53,7 +52,7 @@ fn main() {
 
     fpm.initialize();
 
-    let fn_type = umpl_parse("let i 1  (print (add i 8)<)< (print .a.)> ").unwrap();
+    let fn_type = umpl_parse("let i 1  (print (sub 5 5 .v. i)<)< (print .a.)> ").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(

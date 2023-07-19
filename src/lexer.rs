@@ -326,7 +326,7 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
         chain(
             keep_right(
                 string("fanction"),
-                keep_right(ws_or_comment(), satify(unic_emoji_char::is_emoji)),
+                opt(keep_right(ws_or_comment(), satify(unic_emoji_char::is_emoji))),
             ),
             chain(
                 opt(keep_right(ws_or_comment(), integer())),
@@ -537,7 +537,7 @@ mod tests {
         assert_eq!(
             test_result.unwrap(),
             UMPL2Expr::Fanction(Fanction::new(
-                '🚗',
+                Some('🚗'),
                 1,
                 Some(Varidiac::AtLeast0),
                 vec![UMPL2Expr::Ident("^l".into())]

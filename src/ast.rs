@@ -67,7 +67,7 @@ impl FromStr for FnKeyword {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fanction {
-    name: char,
+    name: Option<char>,
     param_count: usize,
     optinal_params: Option<Varidiac>,
     scope: Vec<UMPL2Expr>,
@@ -77,7 +77,7 @@ pub struct Fanction {
 impl Fanction {
     #[must_use]
     pub fn new(
-        name: char,
+        name: Option<char>,
         param_count: usize,
         optinal_params: Option<Varidiac>,
         scope: Vec<UMPL2Expr>,
@@ -96,7 +96,7 @@ impl Fanction {
     }
 
     #[must_use]
-    pub const fn name(&self) -> char {
+    pub const fn name(&self) -> Option<char> {
         self.name
     }
 

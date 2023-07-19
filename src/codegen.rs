@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
-    fmt,
+    fmt, borrow::BorrowMut,
 };
 
 use inkwell::{
@@ -15,7 +15,7 @@ use inkwell::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
         StructValue,
     },
-    AddressSpace,
+    AddressSpace, basic_block::BasicBlock,
 };
 
 use crate::{
@@ -77,7 +77,7 @@ impl Object {
 
     pub extern "C" fn extract_bool(self) -> bool {
         if self.kind != TyprIndex::Boolean {
-            panic!()
+           panic!()
         }
 
         unsafe { self.object.bool }
@@ -88,6 +88,12 @@ impl Object {
             kind: TyprIndex::Boolean,
             object: UntaggedObject { bool },
         }
+    }
+
+
+    pub extern "C" fn extract_error(self) -> *const i8 {
+        // self.object.error
+        todo!()
     }
 
     pub extern "C" fn extract_type(self) -> i32 {
@@ -131,18 +137,19 @@ pub union UntaggedObject {
     number: f64,
     bool: bool,
     lambda: *mut Function,
-    // lambda: *const i8,
+    error: *mut i8,
 }
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     module: &'a Module<'ctx>,
-    variables: HashMap<RC<str>, PointerValue<'ctx>>,
+    variables: Vec<HashMap<RC<str>, PointerValue<'ctx>>>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
     kind: StructType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
     jit: ExecutionEngine<'ctx>,
+    error_block: Option<BasicBlock<'ctx>>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
@@ -257,13 +264,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Self {
             context,
             module,
-            variables: HashMap::new(),
+            variables: vec![],
             builder,
             fpm,
             string: HashMap::new(),
             kind,
             fn_value: None,
             jit,
+            error_block: None,
         }
     }
 
@@ -334,6 +342,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(self.builder.build_alloca(self.kind, name))
     }
 
+    fn new_env(&mut self) {
+        self.variables.push(HashMap::new());
+    }
+
+    fn pop_env(&mut self) {
+        self.variables.pop();
+    }
+
+    fn insert_variable(&mut self, name: RC<str>, value: PointerValue<'ctx>) {
+        if let Some(scope) = self.variables.last_mut() {
+            scope.insert(name, value);
+        }
+    }
+
+    fn get_variable(&self, name: &RC<str>) -> Option<PointerValue<'ctx>> {
+        self.variables
+            .iter()
+            .rev()
+            .flatten()
+            .find(|v| v.0 == name)
+            .map(|v| v.1.clone())
+    }
+
     fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         match expr {
             UMPL2Expr::Number(value) => Ok(Some(self.const_number(*value).as_basic_value_enum())),
@@ -345,7 +376,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let old_fn = self.fn_value;
                 let old_block = self.builder.get_insert_block();
                 let body = r#fn.scope();
-                let name = r#fn.name().to_string();
+                let name = r#fn.name().map_or("lambda".to_string(), |name|name.to_string());
                 let arg_types: Vec<_> = std::iter::repeat(self.kind)
                     .take(r#fn.param_count())
                     .map(std::convert::Into::into)
@@ -360,11 +391,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let entry = self.context.append_basic_block(fn_value, "entry");
                 self.fn_value = Some(fn_value);
                 self.builder.position_at_end(entry);
+                self.new_env();
                 for (i, arg) in fn_value.get_param_iter().enumerate() {
                     let arg_name: RC<str> = i.to_string().into();
                     let alloca = self.create_entry_block_alloca(&arg_name)?;
                     self.builder.build_store(alloca, arg);
-                    self.variables.insert(arg_name, alloca);
+                    self.insert_variable(arg_name, alloca);
                 }
                 self.builder
                     .position_at_end(fn_value.get_last_basic_block().unwrap());
@@ -381,6 +413,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
                     self.fpm.run_on(&fn_value);
+                    self.pop_env();
 
                     // Ok(Some(self.function(fn_value).as_basic_value_enum()))
                     todo!()
@@ -488,55 +521,69 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .iter()
                     .skip(1)
                     .map(|expr| self.compile_expr(expr))
-                    .collect::<Result<Option<Vec<_>>, _>>()?);
+                    .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
                 Ok(Some(
                     match op {
                         // TODO shortent these
                         FnKeyword::Add => self.number(
-                            self.builder.build_float_add(
+                            args.into_iter()
+                                .map(|arg| {
+                                    self.extract_number(arg.into_struct_value())
+                                        .unwrap()
+                                        .into_float_value()
+                                })
+                                .fold(self.context.f64_type().const_zero(), |a, b| {
+                                    self.builder.build_float_add(a, b, "number add")
+                                }),
+                        ),
+                        FnKeyword::Sub => self.number(if args.len() == 1 {
+                            self.builder.build_float_neg(
                                 self.extract_number(args[0].into_struct_value())
                                     .unwrap()
                                     .into_float_value(),
-                                self.extract_number(args[1].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                "tmpadd",
-                            ),
-                        ),
-                        FnKeyword::Sub => self.number(
-                            self.builder.build_float_sub(
-                                self.extract_number(args[0].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                self.extract_number(args[1].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                "tmpsub",
-                            ),
-                        ),
+                                "float neg",
+                            )
+                        } else {
+                            args.into_iter()
+                                .map(|arg| {
+                                    self.extract_number(arg.into_struct_value())
+                                        .unwrap()
+                                        .into_float_value()
+                                })
+                                .reduce(|a, b| self.builder.build_float_sub(a, b, "number add"))
+                                .unwrap_or(self.context.f64_type().const_zero())
+                        }),
                         FnKeyword::Mul => self.number(
-                            self.builder.build_float_mul(
-                                self.extract_number(args[0].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                self.extract_number(args[1].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                "tmpmul",
-                            ),
+                            args.into_iter()
+                                .map(|arg| {
+                                    self.extract_number(arg.into_struct_value())
+                                        .unwrap()
+                                        .into_float_value()
+                                })
+                                .fold(self.context.f64_type().const_float(1.0), |a, b| {
+                                    self.builder.build_float_mul(a, b, "number add")
+                                }),
                         ),
                         FnKeyword::Div => self.number(
-                            self.builder.build_float_div(
-                                self.extract_number(args[0].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                self.extract_number(args[1].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                "tmpdiv",
-                            ),
+                            args.into_iter()
+                                .map(|arg| {
+                                    self.extract_number(arg.into_struct_value())
+                                        .unwrap()
+                                        .into_float_value()
+                                })
+                                .reduce(|a, b| self.builder.build_float_div(a, b, "number add"))
+                                .unwrap_or(self.context.f64_type().const_float(1.0)),
                         ),
-                        FnKeyword::Mod => todo!(),
+                        FnKeyword::Mod => self.number(
+                            args.into_iter()
+                                .map(|arg| {
+                                    self.extract_number(arg.into_struct_value())
+                                        .unwrap()
+                                        .into_float_value()
+                                })
+                                .reduce(|a, b| self.builder.build_float_rem(a, b, "number add"))
+                                .unwrap_or(self.context.f64_type().const_float(1.0)),
+                        ),
                         FnKeyword::Print => self.print(args[0]).into_struct_value(),
                     }
                     .as_basic_value_enum(),
@@ -554,7 +601,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let ty = self.kind;
                 let ptr = self.builder.build_alloca(ty, i);
                 self.builder.build_store(ptr, v);
-                self.variables.insert(i.clone(), ptr);
+                self.insert_variable(i.clone(), ptr);
                 return Ok(Some(
                     self.context.bool_type().const_zero().as_basic_value_enum(),
                 ));
@@ -613,15 +660,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn get_var(&mut self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
         Ok(self
             .builder
-            .build_load(*self.variables.get(s).ok_or(format!("{s} not found"))?, s))
+            .build_load(self.get_variable(s).ok_or(format!("{s} not found"))?, s))
     }
 
     pub fn compile_program(&mut self, program: &[UMPL2Expr]) -> Option<String> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
-
         self.builder.position_at_end(main_block);
+        self.new_env();
         for expr in program {
             match self.compile_expr(expr) {
                 Ok(_) => continue,
@@ -631,6 +678,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
+
         None
     }
 
