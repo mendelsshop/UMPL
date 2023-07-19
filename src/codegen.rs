@@ -1,25 +1,26 @@
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
-    fmt, borrow::BorrowMut,
+    fmt,
 };
 
 use inkwell::{
     builder::Builder,
     context::Context,
-    execution_engine::ExecutionEngine,
-    module::Module,
+    execution_engine::{ExecutionEngine, JitFunction},
+    module::{Module, Linkage},
     passes::PassManager,
     types::{BasicType, FunctionType, StructType},
     values::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
         StructValue,
     },
-    AddressSpace, basic_block::BasicBlock,
+    AddressSpace,
 };
 
 use crate::{
     ast::{Boolean, FnKeyword, UMPL2Expr},
+    exceptions::{raise_error, gen_defs, self},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -47,7 +48,7 @@ impl Object {
 
     pub extern "C" fn extract_num(self) -> f64 {
         if self.kind != TyprIndex::Number {
-            panic!()
+            unsafe { raise_error("type mimsatch".to_string()) }
         }
 
         unsafe { self.object.number }
@@ -62,7 +63,7 @@ impl Object {
 
     pub extern "C" fn extract_str(self) -> *const i8 {
         if self.kind != TyprIndex::String {
-            panic!()
+            unsafe { raise_error("type mimsatch".to_string()) }
         }
 
         unsafe { self.object.string }
@@ -77,7 +78,7 @@ impl Object {
 
     pub extern "C" fn extract_bool(self) -> bool {
         if self.kind != TyprIndex::Boolean {
-           panic!()
+            unsafe { raise_error("type mimsatch".to_string()) }
         }
 
         unsafe { self.object.bool }
@@ -89,7 +90,6 @@ impl Object {
             object: UntaggedObject { bool },
         }
     }
-
 
     pub extern "C" fn extract_error(self) -> *const i8 {
         // self.object.error
@@ -149,7 +149,6 @@ pub struct Compiler<'a, 'ctx> {
     kind: StructType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
     jit: ExecutionEngine<'ctx>,
-    error_block: Option<BasicBlock<'ctx>>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
@@ -166,9 +165,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
+        
         let jit = module
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
+        
         let kind = context.struct_type(
             &[
                 context.i32_type().as_basic_type_enum(),
@@ -261,6 +262,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ),
             Object::extract_type as usize,
         );
+        let fn_struct_ty = context.opaque_struct_type("unlisp_rt_function");
+
+        let ty_ty = context.i32_type();
+        let ty_name = context.i8_type().ptr_type(AddressSpace::default());
+        let ty_arglist = context
+            .i8_type()
+            .ptr_type(AddressSpace::default())
+            .ptr_type(AddressSpace::default());
+        let ty_arg_count = context.i64_type();
+        let ty_is_macro = context.bool_type();
+        let ty_invoke_f_ptr = context.i8_type().ptr_type(AddressSpace::default());
+        let ty_apply_to_f_ptr = context.i8_type().ptr_type(AddressSpace::default());
+        let ty_has_restarg = context.bool_type();
+gen_defs(context, module, jit.clone());
+        fn_struct_ty.set_body(
+            &[
+                ty_ty.into(),
+                ty_name.into(),
+                ty_arglist.into(),
+                ty_arg_count.into(),
+                ty_is_macro.into(),
+                ty_invoke_f_ptr.into(),
+                ty_apply_to_f_ptr.into(),
+                ty_has_restarg.into(),
+            ],
+            false,
+        );
         Self {
             context,
             module,
@@ -271,7 +299,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             kind,
             fn_value: None,
             jit,
-            error_block: None,
         }
     }
 
@@ -376,7 +403,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let old_fn = self.fn_value;
                 let old_block = self.builder.get_insert_block();
                 let body = r#fn.scope();
-                let name = r#fn.name().map_or("lambda".to_string(), |name|name.to_string());
+                let name = r#fn
+                    .name()
+                    .map_or("lambda".to_string(), |name| name.to_string());
                 let arg_types: Vec<_> = std::iter::repeat(self.kind)
                     .take(r#fn.param_count())
                     .map(std::convert::Into::into)
@@ -477,8 +506,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
                     }
                 }
-                self.module.print_to_stderr();
-
                 Ok(Some(phi.as_basic_value()))
             }
             UMPL2Expr::Unless(_) => todo!(),
@@ -664,10 +691,53 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub fn compile_program(&mut self, program: &[UMPL2Expr]) -> Option<String> {
+       
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
+        // let error = self.context.append_basic_block(main_fn, "error");
         self.builder.position_at_end(main_block);
+        // let buf_ptr = self.builder.build_alloca(
+        //     self.module.get_struct_type("setjmp_buf").unwrap(),
+        //     "setjmp_buf",
+        // );
+        // let setjmp = self
+        //     .builder
+        //     .build_call(
+        //         self.module.get_function("setjmp").unwrap(),
+        //         &[buf_ptr.into()],
+        //         "setjmp",
+        //     )
+        //     .try_as_basic_value()
+        //     .left()
+        //     .unwrap()
+        //     .into_int_value();
+
+        // let setjmp = self
+        //     .builder
+        //     .build_int_cast(setjmp, self.context.bool_type(), "setjmp cast");
+        // let args = self.bool(setjmp).as_basic_value_enum();
+        // self.print(args);
+        // let ok_block = self.context.append_basic_block(main_fn, "ok");
+        // let err_block = self.context.append_basic_block(main_fn, "err");
+        // self.builder
+        //     .build_conditional_branch(setjmp, err_block, ok_block);
+
+        // self.builder.position_at_end(ok_block);
+        // self.builder.build_call(
+        //     self.module.get_function("longjmp").unwrap(),
+        //     &[
+        //         buf_ptr.into(),
+        //         self.context.i32_type().const_int(1, false).into(),
+        //     ],
+        //     "longjmp",
+        // );
+        // self.builder
+        //     .build_return(Some(&self.context.i32_type().const_int(1, false)));
+        self.builder.position_at_end(main_block);
+
+        // ctx.blocks_stack.push(Rc::new(ok_block));
+        // self.builder.position_at_end(err_block);
         self.new_env();
         for expr in program {
             match self.compile_expr(expr) {
@@ -678,17 +748,50 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
+        self.pop_env();
+        if main_fn.verify(true) {
+            self.fpm.run_on(&main_fn);
+                // let main = self.module.add_function("main", main_fn_type, None);
+                // let main_block = self.context.append_basic_block(main, "entry");
+                // self.builder.position_at_end(main_block);
+                // self.module.print_to_stderr();
+                // let error_handling = self.module.get_function("global_error_handling").unwrap();
+                // let result = self.builder.build_call(error_handling, &[], "error handling").try_as_basic_value().expect_left("no error handling").into_int_value();
+                // self.builder.build_return(Some(&result));
+                None
+        } else {
+            println!("without optimized");
+            main_fn.print_to_stderr();
+            self.fpm.run_on(&main_fn);
+            println!("with optimized");
+            main_fn.print_to_stderr();
 
-        None
+            unsafe {
+                main_fn.delete();
+            }
+
+            Some("Invalid generated function.".to_string())
+        }
     }
 
     pub fn print_ir(&self) {
         self.module.print_to_stderr();
     }
-
     pub fn run(&self) -> u64 {
-        let main = self.module.get_function("main").unwrap();
-        unsafe { self.jit.run_function(main, &[]) }.as_int(false)
+        let compiled_fn: JitFunction<'_,unsafe extern "C" fn() -> Object> = unsafe { self
+                .jit
+                .get_function("main")
+                .expect("couldn't find top-level function in execution engine") };
+        match   unsafe { exceptions::run_with_global_ex_handler(|| compiled_fn.call()) } {
+            Ok(ok) => return  unsafe {
+                ok.object.number as u64
+            },
+            Err(e) => {
+                println!("Error {:?}", e);
+                1
+            }
+        }
+    
     }
 
     fn print(&self, args: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {

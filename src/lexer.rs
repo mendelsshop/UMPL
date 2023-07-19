@@ -142,7 +142,6 @@ fn hexnumber() -> Box<Parser<UMPL2Expr>> {
                     (Some(s), None) => (s.collect(), String::new()),
                     (Some(s), Some(r)) => (s.collect(), r.collect()),
                 };
-                println!("{}.{}", number.0, number.1);
                 Ok(UMPL2Expr::Number(
                     format!("0x{}.{}", number.0, number.1)
                         .parse::<hexponent::FloatLiteral>()
@@ -326,7 +325,10 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
         chain(
             keep_right(
                 string("fanction"),
-                opt(keep_right(ws_or_comment(), satify(unic_emoji_char::is_emoji))),
+                opt(keep_right(
+                    ws_or_comment(),
+                    satify(unic_emoji_char::is_emoji),
+                )),
             ),
             chain(
                 opt(keep_right(ws_or_comment(), integer())),
