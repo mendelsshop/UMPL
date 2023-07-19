@@ -52,14 +52,14 @@ fn main() {
     fpm.add_reassociate_pass();
 
     fpm.initialize();
-    let fn_type =
-        umpl_parse("fanction 🚗  1 ᚜ .v. let i (add 1 '0')< if '0' do ᚜ 5 ᚛ otherwise ᚜ stop (add 1 i)< stop  3 ᚛ 4᚛  ")
-            .unwrap();
+
+    let fn_type = umpl_parse("let i 1  (print (add i 8)<)< (print .a.)> ").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
         || {
             complier.print_ir();
+            complier.run();
         },
         |err| {
             println!("error: {err}");

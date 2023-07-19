@@ -430,9 +430,10 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
     )
 }
 fn stlib_kewyword() -> Box<Parser<UMPL2Expr>> {
-    map(choice(vec![string("add"), string("sub")]), |kw| {
-        UMPL2Expr::FnKW(FnKeyword::from_str(&kw).unwrap())
-    })
+    map(
+        choice(vec![string("add"), string("sub"), string("print")]),
+        |kw| UMPL2Expr::FnKW(FnKeyword::from_str(&kw).unwrap()),
+    )
 }
 
 #[cfg(test)]

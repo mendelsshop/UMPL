@@ -46,6 +46,7 @@ pub enum FnKeyword {
     Mul,
     Div,
     Mod,
+    Print,
 }
 
 impl FromStr for FnKeyword {
@@ -58,6 +59,7 @@ impl FromStr for FnKeyword {
             "sub" => Ok(Self::Sub),
             "mul" => Ok(Self::Mul),
             "mod" => Ok(Self::Mod),
+            "print" => Ok(Self::Print),
             other => Err(format!("not a function keyword {other}")),
         }
     }
