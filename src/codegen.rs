@@ -8,12 +8,12 @@ use inkwell::{
     builder::Builder,
     context::Context,
     execution_engine::{ExecutionEngine, JitFunction},
-    module::{Module, Linkage},
+    module::Module,
     passes::PassManager,
     types::{BasicType, FunctionType, StructType},
     values::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
-        StructValue,
+        StructValue, CallableValue,
     },
     AddressSpace,
 };
@@ -60,6 +60,20 @@ impl Object {
             object: UntaggedObject { number },
         }
     }
+    pub extern "C" fn extract_lambda(self) ->  *const FunctionValue<'static> {
+        if self.kind != TyprIndex::Lambda {
+            unsafe { raise_error("type mimsatch".to_string()) }
+        }
+
+        unsafe { self.object.lambda }
+    }
+
+    pub extern "C" fn from_lambda(lambda:  *const FunctionValue<'static>) -> Self {
+        Self {
+            kind: TyprIndex::Lambda,
+            object: UntaggedObject {lambda },
+        }
+    }
 
     pub extern "C" fn extract_str(self) -> *const i8 {
         if self.kind != TyprIndex::String {
@@ -95,7 +109,6 @@ impl Object {
         // self.object.error
         todo!()
     }
-
     pub extern "C" fn extract_type(self) -> i32 {
         self.kind as i32
     }
@@ -136,7 +149,8 @@ pub union UntaggedObject {
     string: *const i8,
     number: f64,
     bool: bool,
-    lambda: *mut Function,
+    lambda: *const FunctionValue<'static>,
+    List
     error: *mut i8,
 }
 pub struct Compiler<'a, 'ctx> {
@@ -165,6 +179,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
+
         
         let jit = module
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
@@ -180,6 +195,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ],
             false,
         );
+        // let fn_type = kind.fn_type(param_types, is_var_args)
+        // let fn_struct_ty = context.opaque_struct_type("function");
         jit.add_global_mapping(
             &module.add_function(
                 "extract_number",
@@ -262,7 +279,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ),
             Object::extract_type as usize,
         );
-        let fn_struct_ty = context.opaque_struct_type("unlisp_rt_function");
+        jit.add_global_mapping(
+            &module.add_function(
+                "from_lambda",
+                kind.fn_type(
+                    vec![kind.fn_type(&[kind.into()], false).ptr_type(AddressSpace::default())
+                        .into()]
+                    .as_slice(),
+                    false,
+                ),
+                None,
+            ),
+            Object::from_lambda as usize,
+        );
+        jit.add_global_mapping(
+            &module.add_function(
+                "extract_lambda",
+                kind.fn_type(&[kind.into()], false).ptr_type(AddressSpace::default())
+                    .fn_type(vec![kind.into()].as_slice(), false),
+                None,
+            ),
+            Object::extract_lambda as usize,
+        );
+
 
         let ty_ty = context.i32_type();
         let ty_name = context.i8_type().ptr_type(AddressSpace::default());
@@ -276,19 +315,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let ty_apply_to_f_ptr = context.i8_type().ptr_type(AddressSpace::default());
         let ty_has_restarg = context.bool_type();
 gen_defs(context, module, jit.clone());
-        fn_struct_ty.set_body(
-            &[
-                ty_ty.into(),
-                ty_name.into(),
-                ty_arglist.into(),
-                ty_arg_count.into(),
-                ty_is_macro.into(),
-                ty_invoke_f_ptr.into(),
-                ty_apply_to_f_ptr.into(),
-                ty_has_restarg.into(),
-            ],
-            false,
-        );
+
         Self {
             context,
             module,
@@ -307,6 +334,14 @@ gen_defs(context, module, jit.clone());
         let call = self
             .builder
             .build_call(from_number, &[value.into()], "to number");
+        call.try_as_basic_value().unwrap_left().into_struct_value()
+    }
+
+    fn function(&self, value: FunctionValue<'ctx>) -> StructValue<'ctx> {
+        let from_number = self.module.get_function("from_lambda").unwrap();
+        let call = self
+            .builder
+            .build_call(from_number, &[value.as_global_value().as_pointer_value().into()], "to lambda");
         call.try_as_basic_value().unwrap_left().into_struct_value()
     }
 
@@ -407,7 +442,7 @@ gen_defs(context, module, jit.clone());
                     .name()
                     .map_or("lambda".to_string(), |name| name.to_string());
                 let arg_types: Vec<_> = std::iter::repeat(self.kind)
-                    .take(r#fn.param_count())
+                    .take(1)
                     .map(std::convert::Into::into)
                     .collect();
                 let ret_type = self.kind;
@@ -443,9 +478,18 @@ gen_defs(context, module, jit.clone());
                 if fn_value.verify(true) {
                     self.fpm.run_on(&fn_value);
                     self.pop_env();
-
-                    // Ok(Some(self.function(fn_value).as_basic_value_enum()))
-                    todo!()
+                    let basic_value_enum = self.function(fn_value).as_basic_value_enum();
+                    match r#fn.name() {
+                        Some(v) => {
+                            let ty = self.kind;
+                            let ptr = self.builder.build_alloca(ty, &v.to_string());
+                            self.builder.build_store(ptr, basic_value_enum);
+                            self.insert_variable(v.to_string().into(),ptr )}
+                        None => {}
+                    }
+                    
+                    Ok(Some(basic_value_enum))
+                    // todo!()
                 } else {
                     println!();
                     fn_value.print_to_stderr();
@@ -463,7 +507,7 @@ gen_defs(context, module, jit.clone());
                 let cond_struct =
                     return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
                 let bool_val = self.extract_bool(cond_struct).unwrap().into_int_value();
-                let object_type = self.extract_type(cond_struct).unwrap().into_int_value();
+                let object_type = self.extract_type(cond_struct).unwrap();
                 // if its not a bool type
                 let cond = self.builder.build_int_compare(
                     inkwell::IntPredicate::NE,
@@ -519,102 +563,90 @@ gen_defs(context, module, jit.clone());
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
-                let op = match &application.args()[0] {
-                    UMPL2Expr::Bool(_) => todo!(),
-                    UMPL2Expr::Number(_) => todo!(),
-                    UMPL2Expr::String(_) => todo!(),
-                    UMPL2Expr::Scope(_) => todo!(),
-                    UMPL2Expr::Ident(_) => todo!(),
-                    UMPL2Expr::If(_) => todo!(),
-                    UMPL2Expr::Unless(_) => todo!(),
-                    UMPL2Expr::Stop(_) => todo!(),
-                    UMPL2Expr::Skip => todo!(),
-                    UMPL2Expr::Until(_) => todo!(),
-                    UMPL2Expr::GoThrough(_) => todo!(),
-                    UMPL2Expr::ContiueDoing(_) => todo!(),
-                    UMPL2Expr::Fanction(_) => todo!(),
-                    UMPL2Expr::Application(_) => todo!(),
-                    UMPL2Expr::Quoted(_) => todo!(),
-                    UMPL2Expr::Label(_) => todo!(),
-                    UMPL2Expr::FnParam(_) => todo!(),
-                    UMPL2Expr::Hempty => todo!(),
-                    UMPL2Expr::Link(_, _) => todo!(),
-                    UMPL2Expr::Tree(_) => todo!(),
-                    UMPL2Expr::FnKW(k) => k,
-                    UMPL2Expr::Let(_, _) => todo!(),
-                };
+                let op = return_none!(self.compile_expr(&application.args()[0])?);
                 let args = return_none!(application
                     .args()
                     .iter()
                     .skip(1)
                     .map(|expr| self.compile_expr(expr))
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
-                Ok(Some(
-                    match op {
-                        // TODO shortent these
-                        FnKeyword::Add => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .fold(self.context.f64_type().const_zero(), |a, b| {
-                                    self.builder.build_float_add(a, b, "number add")
-                                }),
-                        ),
-                        FnKeyword::Sub => self.number(if args.len() == 1 {
-                            self.builder.build_float_neg(
-                                self.extract_number(args[0].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                "float neg",
-                            )
-                        } else {
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .reduce(|a, b| self.builder.build_float_sub(a, b, "number add"))
-                                .unwrap_or(self.context.f64_type().const_zero())
-                        }),
-                        FnKeyword::Mul => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .fold(self.context.f64_type().const_float(1.0), |a, b| {
-                                    self.builder.build_float_mul(a, b, "number add")
-                                }),
-                        ),
-                        FnKeyword::Div => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .reduce(|a, b| self.builder.build_float_div(a, b, "number add"))
-                                .unwrap_or(self.context.f64_type().const_float(1.0)),
-                        ),
-                        FnKeyword::Mod => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .reduce(|a, b| self.builder.build_float_rem(a, b, "number add"))
-                                .unwrap_or(self.context.f64_type().const_float(1.0)),
-                        ),
-                        FnKeyword::Print => self.print(args[0]).into_struct_value(),
-                    }
-                    .as_basic_value_enum(),
-                ))
+                let args = args.iter().map(|v| v.clone().into()).collect::<Vec<_>>();
+                // let kind = self.extract_type(op.into_struct_value()).unwrap();
+                // let is_func = self.builder.build_int_compare(inkwell::IntPredicate::EQ, kind, self.context.i32_type().const_int(TyprIndex::Lambda as u64, false), "compare type");
+                // self.builder.build_load(ptr, name)
+            let extract_function = self.extract_function(op.into_struct_value()).unwrap();
+            // extract_function.
+            self.print_ir();
+            let function: CallableValue<'_> = extract_function.try_into().unwrap();
+            let call = self.builder.build_call(function, args.as_slice(), "application");
+            Ok(Some(call.try_as_basic_value().unwrap_left()))
+                // Ok(Some(
+                //     match op {
+                //         // TODO shortent these
+                //         FnKeyword::Add => self.number(
+                //             args.into_iter()
+                //                 .map(|arg| {
+                //                     self.extract_number(arg.into_struct_value())
+                //                         .unwrap()
+                //                         .into_float_value()
+                //                 })
+                //                 .fold(self.context.f64_type().const_zero(), |a, b| {
+                //                     self.builder.build_float_add(a, b, "number add")
+                //                 }),
+                //         ),
+                //         FnKeyword::Sub => self.number(if args.len() == 1 {
+                //             self.builder.build_float_neg(
+                //                 self.extract_number(args[0].into_struct_value())
+                //                     .unwrap()
+                //                     .into_float_value(),
+                //                 "float neg",
+                //             )
+                //         } else {
+                //             args.into_iter()
+                //                 .map(|arg| {
+                //                     self.extract_number(arg.into_struct_value())
+                //                         .unwrap()
+                //                         .into_float_value()
+                //                 })
+                //                 .reduce(|a, b| self.builder.build_float_sub(a, b, "number add"))
+                //                 .unwrap_or(self.context.f64_type().const_zero())
+                //         }),
+                //         FnKeyword::Mul => self.number(
+                //             args.into_iter()
+                //                 .map(|arg| {
+                //                     self.extract_number(arg.into_struct_value())
+                //                         .unwrap()
+                //                         .into_float_value()
+                //                 })
+                //                 .fold(self.context.f64_type().const_float(1.0), |a, b| {
+                //                     self.builder.build_float_mul(a, b, "number add")
+                //                 }),
+                //         ),
+                //         FnKeyword::Div => self.number(
+                //             args.into_iter()
+                //                 .map(|arg| {
+                //                     self.extract_number(arg.into_struct_value())
+                //                         .unwrap()
+                //                         .into_float_value()
+                //                 })
+                //                 .reduce(|a, b| self.builder.build_float_div(a, b, "number add"))
+                //                 .unwrap_or(self.context.f64_type().const_float(1.0)),
+                //         ),
+                //         FnKeyword::Mod => self.number(
+                //             args.into_iter()
+                //                 .map(|arg| {
+                //                     self.extract_number(arg.into_struct_value())
+                //                         .unwrap()
+                //                         .into_float_value()
+                //                 })
+                //                 .reduce(|a, b| self.builder.build_float_rem(a, b, "number add"))
+                //                 .unwrap_or(self.context.f64_type().const_float(1.0)),
+                //         ),
+                //         FnKeyword::Print => self.print(args[0]).into_struct_value(),
+                //     }
+                //     .as_basic_value_enum(),
+                // ))
+                // todo!()
             }
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
@@ -636,12 +668,12 @@ gen_defs(context, module, jit.clone());
         }
     }
 
-    fn extract_type(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+    fn extract_type(&mut self, cond_struct: StructValue<'ctx>) -> Option<IntValue<'ctx>> {
         let get_type = self.module.get_function("extract_type").unwrap();
         let call = self
             .builder
             .build_call(get_type, &[cond_struct.into()], "to type");
-        Some(call.try_as_basic_value().unwrap_left())
+        Some(call.try_as_basic_value().unwrap_left().into_int_value())
     }
 
     // TODO: for all extract_* methods have checked variants that check that what is trying to be obtained is in fact the type of the object
@@ -669,8 +701,14 @@ gen_defs(context, module, jit.clone());
         Some(call.try_as_basic_value().unwrap_left())
     }
 
-    fn extract_function(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        todo!()
+    fn extract_function(&mut self, cond_struct: StructValue<'ctx>) -> Option<PointerValue<'ctx>> {
+        let get_type = self.module.get_function("extract_lambda").unwrap();
+        let call = self
+            .builder
+            .build_call(get_type, &[cond_struct.into()], "to lambda");
+        Some(call.try_as_basic_value().unwrap_left().into_pointer_value())
+        // self.jit.
+        // self.builder.build_load(ptr, name)
     }
 
     fn compile_scope(

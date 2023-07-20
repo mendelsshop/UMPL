@@ -6,7 +6,7 @@ use std::ptr;
 use inkwell::{
     context::Context,
     module::Module,
-    AddressSpace, execution_engine::ExecutionEngine,
+    AddressSpace, execution_engine::ExecutionEngine, types::BasicType,
 };
 
 use crate::codegen::{Function, Object};
@@ -88,58 +88,63 @@ pub unsafe fn raise_error(msg: String) -> ! {
     longjmp(buf)
 }
 pub fn global_ex_handler_gen_def<'a, 'ctx>(ctx: &'ctx Context, module: &'a Module<'ctx>, jit: ExecutionEngine<'ctx>) {
+    let kind = ctx.struct_type(
+        &[
+            ctx.i32_type().as_basic_type_enum(),
+            ctx
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .as_basic_type_enum(),
+        ],
+        false,
+    );
     jit.add_global_mapping( &module.add_function(
         "global_error_handling",
         ctx.i32_type().fn_type(
-            &[module
-                .get_struct_type("unlisp_rt_function")
-                .unwrap()
-                
-                .ptr_type(AddressSpace::default())
-                .into()],
+            &[inkwell::types::BasicMetadataTypeEnum::PointerType(kind.fn_type(&[kind.into()], false).ptr_type(AddressSpace::default()))],
             false,
         ),
         None,
     ), unlisp_rt_run_with_global_ex_handler as usize );
 }
 pub fn gen_defs<'a, 'ctx>(ctx: &'ctx Context, module: &'a Module<'ctx>,jit: ExecutionEngine<'ctx>) {
-    sjlj_gen_def(ctx, module, jit.clone());
+    // sjlj_gen_def(ctx, module, jit.clone());
     global_ex_handler_gen_def(ctx, module, jit)
 //     raise_arity_error_gen_def(ctx, module);
 //     raise_undef_fn_error_gen_def(ctx, module);
 }
 
-pub fn sjlj_gen_def<'a, 'ctx>(ctx: &'ctx Context, module: &'a Module<'ctx>,jit: ExecutionEngine<'ctx>) {
-    let i32_ty = ctx.i32_type();
+// pub fn sjlj_gen_def<'a, 'ctx>(ctx: &'ctx Context, module: &'a Module<'ctx>,jit: ExecutionEngine<'ctx>) {
+//     let i32_ty = ctx.i32_type();
 
-    let buf_ty = ctx.opaque_struct_type("setjmp_buf");
-    let int32_arr_ty = i32_ty.array_type(40);
-    buf_ty.set_body(&[int32_arr_ty.into()], false);
-    // has to be looked up through module, to avoid renaming
-    let buf_ptr_ty = module
-        .get_struct_type("setjmp_buf")
-        .unwrap()
-        .ptr_type(AddressSpace::default());
-    let void_ty = ctx.void_type();
-    let sj_fn_ty = i32_ty.fn_type(&[buf_ptr_ty.into()], false);
-    let lj_fn_ty = void_ty.fn_type(&[buf_ptr_ty.into(), i32_ty.into()], false);
-    jit.add_global_mapping(
-        &module.add_function(
-            "setjmp",
-            sj_fn_ty,
-            None,
-        ),
-        setjmp as usize,
-    );
-    jit.add_global_mapping(
-        &module.add_function(
-            "longjmp",
-            lj_fn_ty,
-            None,
-        ),
-        longjmp as usize,
-    );
-}
+//     let buf_ty = ctx.opaque_struct_type("setjmp_buf");
+//     let int32_arr_ty = i32_ty.array_type(40);
+//     buf_ty.set_body(&[int32_arr_ty.into()], false);
+//     // has to be looked up through module, to avoid renaming
+//     let buf_ptr_ty = module
+//         .get_struct_type("setjmp_buf")
+//         .unwrap()
+//         .ptr_type(AddressSpace::default());
+//     let void_ty = ctx.void_type();
+//     let sj_fn_ty = i32_ty.fn_type(&[buf_ptr_ty.into()], false);
+//     let lj_fn_ty = void_ty.fn_type(&[buf_ptr_ty.into(), i32_ty.into()], false);
+//     jit.add_global_mapping(
+//         &module.add_function(
+//             "setjmp",
+//             sj_fn_ty,
+//             None,
+//         ),
+//         setjmp as usize,
+//     );
+//     jit.add_global_mapping(
+//         &module.add_function(
+//             "longjmp",
+//             lj_fn_ty,
+//             None,
+//         ),
+//         longjmp as usize,
+//     );
+// }
 
 pub unsafe fn raise_cast_error(from: String, to: String) -> ! {
     let msg = format!("cannot cast {} to {}", from, to);
