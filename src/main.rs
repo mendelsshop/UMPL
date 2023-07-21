@@ -57,15 +57,18 @@ fn main() {
 
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
-    let fn_type = umpl_parse(" (print 5)<").unwrap();
+    let fn_type = umpl_parse(" (1 5)<").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
         || {
             complier.print_ir();
-            let ret = complier.run();
+            complier.export_bc("bin/main");
+            complier.export_ir("bin/main");
+            complier.export_object("bin/main");
+            // let ret = complier.run();
 
-            print!("\nret {ret}\n", );
+            // print!("\nret {ret}\n", );
         },
         |err| {
             println!("error: {err}");

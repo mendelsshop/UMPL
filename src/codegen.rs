@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::{Path, PathBuf}};
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -12,8 +12,10 @@ use inkwell::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
         StructValue, CallableValue, BasicMetadataValueEnum,
     },
-    AddressSpace,
+    AddressSpace, targets::{Target, InitializationConfig, TargetMachine, CodeModel, RelocMode}, OptimizationLevel,
 };
+
+use std::io::Write;
 
 use crate::{
     ast::{Boolean, FnKeyword, UMPL2Expr},
@@ -280,7 +282,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
-                    self.fpm.run_on(&fn_value);
+                    // self.fpm.run_on(&fn_value);
                     self.pop_env();
 
                     Ok(Some(self.function(fn_value.as_global_value().as_pointer_value()).as_basic_value_enum()))
@@ -457,7 +459,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
+        // self.fpm.run_on(&print_fn);
     }
 
     fn extract_bool(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -512,7 +514,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
+        // self.fpm.run_on(&print_fn);
     }
 
     fn extract_number(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -570,7 +572,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
+        // self.fpm.run_on(&print_fn);
     }
 
     fn extract_string(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -604,7 +606,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(entry_block);
         let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
         block_ptr.print_to_stderr();
-        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
+        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting  function %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
         let ty = self
             .extract_type(args.into_struct_value())
             .unwrap()
@@ -633,7 +635,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
+        // self.fpm.run_on(&print_fn);
     }
 
     fn extract_function(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -682,12 +684,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // &[],
         // );
         // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting", "error").as_basic_value_enum().into()], "error print");
+        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
+        block_ptr.print_to_stderr();
+        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting print %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
         self.builder
             .build_return(Some((&self.context.i32_type().const_int(1, false))));
         self.builder.position_at_end(main_block);
-        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
-        block_ptr.print_to_stderr();
-        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
+      
         self.new_env();
         // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting", "error").as_basic_value_enum().into()], "error print");
         for expr in program {
@@ -703,13 +706,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let verify = main_fn.verify(true);
 
         if verify   {
-            self.fpm.run_on(&main_fn);
+            // self.fpm.run_on(&main_fn);
             println!("done");
             None
         } else {
             println!("without optimized");
             self.print_ir();
-            self.fpm.run_on(&main_fn);
+            // self.fpm.run_on(&main_fn);
             println!("with optimized");
             self.print_ir();
 
@@ -731,6 +734,41 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.jit
                 .run_function(self.module.get_function("main").unwrap(), &[]).as_int(false) as i32
         }
+    }
+
+    pub fn export_ir(&self, path: impl Into<PathBuf>) {
+        let mut path: PathBuf = path.into();
+        path.set_extension("ll");
+        self.module.print_to_file(&path).expect("couldn't export");
+    }
+
+    pub fn export_bc(&self, path: impl Into<PathBuf>) {
+        let mut path: PathBuf = path.into();
+        path.set_extension("bc");
+        self.module.write_bitcode_to_path(&path);
+    }
+
+    pub fn export_object(&self, path: impl Into<PathBuf>) {
+        let mut asm_path: PathBuf = path.into();
+        let mut o_path: PathBuf = asm_path.clone();
+        o_path.set_extension("o");
+        asm_path.set_extension("as");
+        // let o = self.module.write_bitcode_to_memory().create_object_file().expect("failed to generate code");
+        let config = InitializationConfig { asm_parser: true, asm_printer: true, base: true, disassembler: true, info: true, machine_code: true };
+        Target::initialize_native(&config);
+        let triple = TargetMachine::get_default_triple();
+        let target = Target::from_triple(&triple).unwrap();
+        let tm = target.create_target_machine(          &TargetMachine::get_default_triple(),
+        &TargetMachine::get_host_cpu_name().to_string(),
+        &TargetMachine::get_host_cpu_features().to_string(),
+        OptimizationLevel::None,
+        RelocMode::Default,
+        CodeModel::Default,).unwrap();
+        tm.add_analysis_passes(self.fpm);
+        
+        tm.write_to_file(self.module, inkwell::targets::FileType::Object, &o_path).expect(" writing to file " );
+                
+        tm.write_to_file(self.module, inkwell::targets::FileType::Assembly, &asm_path).expect(" writing to file " );
     }
 
     fn make_print(&mut self) {
@@ -847,7 +885,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_return(Some(&phi.as_basic_value()));
         self.fn_value = old;
         print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
+        // self.fpm.run_on(&print_fn);
     }
 
     fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
