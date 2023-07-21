@@ -56,16 +56,15 @@ fn main() {
     
 
     fpm.initialize();
-
-    let fn_type = umpl_parse(" (fanction  1* ᚜ (print '0')< ᚛ 5)<").unwrap();
-    println!("{fn_type:?}\u{39}");
-    println!("{}",is_emoji_presentation('1'));
+    // fanction  1* ᚜ (print '0')< ᚛
+    let fn_type = umpl_parse(" (print 5)<").unwrap();
+    println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
         || {
             complier.print_ir();
             let ret = complier.run();
-            
+
             print!("\nret {ret}\n", );
         },
         |err| {

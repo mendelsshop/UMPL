@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -10,7 +10,7 @@ use inkwell::{
     types::{BasicType, FunctionType, StructType, VectorType},
     values::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
-        StructValue, CallableValue,
+        StructValue, CallableValue, BasicMetadataValueEnum,
     },
     AddressSpace,
 };
@@ -36,11 +36,12 @@ pub struct Compiler<'a, 'ctx> {
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
     kind: StructType<'ctx>,
-    vec_type: VectorType<'ctx>,
+    // vec_type: VectorType<'ctx>,
     fn_type: FunctionType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
     error_block: Option<BasicBlock<'ctx>>,
     jit: ExecutionEngine<'ctx>,
+    cons_type: inkwell::types::PointerType<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,9 +64,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
         let kind = context.opaque_struct_type("object");
-        let vec_type = context.opaque_struct_type("vec");
-        let vec_type = kind.ptr_type(AddressSpace::default()).vec_type(1);
-        let fn_type = kind.fn_type(&[vec_type.into()], false);
+        // let vec_type = context.opaque_struct_type("vec");
+        // let vec_type = kind.ptr_type(AddressSpace::default()).vec_type(1);
+        let fn_type = kind.fn_type(&[kind.into()], false);
         let i8_type = context.i8_type();
         let str_type = i8_type.ptr_type(AddressSpace::default());
         let num_type = context.f64_type();
@@ -104,7 +105,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             error_block: None,
             jit,
             fn_type,
-            vec_type,
+            cons_type
         }
     }
 
@@ -132,9 +133,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 )
                 .into(),
             cons.unwrap_or(
-                self.context
-                    .i8_type()
-                    .ptr_type(AddressSpace::default())
+                self.cons_type
                     .const_null(),
             )
             .into(),
@@ -169,7 +168,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn function(&self, value: PointerValue<'ctx>) -> StructValue<'ctx> {
-        self.value(TyprIndex::String, None, None, Some(value), None, None)
+        self.value(TyprIndex::Lambda, None, None, None, None, Some(value))
     }
 
     fn const_string(&mut self, value: RC<str>) -> StructValue<'ctx> {
@@ -217,7 +216,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn insert_variable(&mut self, name: RC<str>, value: PointerValue<'ctx>) {
         if let Some(scope) = self.variables.last_mut() {
-            println!("infdrtt");
             scope.insert(name, value);
         }
     }
@@ -228,7 +226,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .rev()
             .flatten()
             .find(|v|  {
-                println!("{v:?}");
                 v.0 == name
             })
             .map(|v| v.1.clone())
@@ -257,7 +254,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let fn_value = self.module.add_function(&name, fn_type, None);
 
                 for (name, arg) in fn_value.get_param_iter().enumerate() {
-                    println!("arg");
                     arg.set_name(&name.to_string());
                 }
                 let entry = self.context.append_basic_block(fn_value, "entry");
@@ -284,7 +280,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
-                    // self.fpm.run_on(&fn_value);
+                    self.fpm.run_on(&fn_value);
                     self.pop_env();
 
                     Ok(Some(self.function(fn_value.as_global_value().as_pointer_value()).as_basic_value_enum()))
@@ -369,21 +365,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .skip(1)
                     .map(|expr| self.compile_expr(expr))
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
+           
+                let op = self.extract_function(op.into_struct_value()).unwrap();
+                    // self.print_ir();
                 let function: CallableValue<'_> = op.into_pointer_value().try_into().unwrap();
                 let args= args.iter().map(|a|
                     {
-                        // self.kind.ptr_type(A)
-                        let ptr = self.builder.build_alloca(self.kind, "argl;llll");
-                        self.builder.build_store(ptr, a.clone());
-                        ptr
+                    a.clone().into()
                     }
-                ).collect::<Vec<_>>();
+                ).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
-                let args= VectorType::const_vector(args.as_slice());
            
-                let unwrap_left = self.builder.build_call(function, &[args.into()], "callfn").try_as_basic_value().unwrap_left();
-                let print = self.module.get_function("printf").unwrap();
-                self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
+                let unwrap_left = self.builder.build_call(function, args.as_slice(), "callfn").try_as_basic_value().unwrap_left();
                 Ok(Some(
                     unwrap_left
                 ))
@@ -400,7 +393,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 FnKeyword::Mul => todo!(),
                 FnKeyword::Div => todo!(),
                 FnKeyword::Mod => todo!(),
-                FnKeyword::Print => Ok(self.module.get_function("print").map(|func|func.as_global_value().as_basic_value_enum()))
+                FnKeyword::Print => Ok(Some(self.function(self.module.get_function("print").map(|func|func.as_global_value().as_pointer_value()).unwrap()).as_basic_value_enum()))
             }
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
@@ -601,11 +594,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
+        
+
+
         self.builder.build_indirect_branch(
             unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-            &[],
+            &[error_block],
         );
         self.builder.position_at_end(entry_block);
+        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
+        block_ptr.print_to_stderr();
+        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
         let ty = self
             .extract_type(args.into_struct_value())
             .unwrap()
@@ -638,7 +637,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn extract_function(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let print = self.module.get_function("extract_string").unwrap();
+        let print = self.module.get_function("extract_function").unwrap();
         self.builder
             .build_call(print, &[val.into()], "print")
             .try_as_basic_value()
@@ -652,7 +651,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         let mut res = Err("scope does not have value".to_string());
         for expr in body {
-            println!("{:?}", self.variables);
             res = Ok(return_none!(self.compile_expr(expr)?));
         }
         res.map(Some)
@@ -679,22 +677,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.position_at_end(self.error_block.unwrap());
 
+        // self.builder.build_indirect_branch(
+            // unsafe { self.error_block.unwrap().get_address() }.unwrap(),
+            // &[],
+        // );
+        // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting", "error").as_basic_value_enum().into()], "error print");
         self.builder
             .build_return(Some((&self.context.i32_type().const_int(1, false))));
         self.builder.position_at_end(main_block);
+        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
+        block_ptr.print_to_stderr();
+        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
         self.new_env();
+        // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting", "error").as_basic_value_enum().into()], "error print");
         for expr in program {
             match self.compile_expr(expr) {
-                Ok(e) =>println!("{}", e.unwrap()),
+                Ok(_) => continue,
                 Err(e) => return Some(e),
             }
         }
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.pop_env();
-        self.fpm.run_on(&main_fn);
-        // let verify = main_fn.verify(true);
-        if true  {
+    
+        let verify = main_fn.verify(true);
+
+        if verify   {
+            self.fpm.run_on(&main_fn);
+            println!("done");
             None
         } else {
             println!("without optimized");
@@ -712,18 +722,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub fn print_ir(&self) {
+        // self.module.write_bitcode_to_path(Path::new("main.bc"));
+        // println!("{:?}",self.module.write_bitcode_to_memory().create_object_file());
         self.module.print_to_stderr();
     }
     pub fn run(&self) -> i32 {
         unsafe {
             self.jit
-                .run_function_as_main(self.module.get_function("main").unwrap(), &[])
+                .run_function(self.module.get_function("main").unwrap(), &[]).as_int(false) as i32
         }
     }
 
     fn make_print(&mut self) {
         let old = self.fn_value;
-        let print_fn_ty: FunctionType<'_> = self.kind.fn_type(&[self.vec_type.into()], false);
+        // self.fn_type.
+        let print_fn_ty: FunctionType<'_> = self.kind.fn_type(&[self.kind.into()], false);
         let print_fn = self.module.add_function("print", print_fn_ty, None);
         self.fn_value = Some(print_fn);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
@@ -735,22 +748,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let ret_block = self.context.append_basic_block(print_fn, "ret");
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
+        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
+        block_ptr.print_to_stderr();
+        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
         self.builder.build_indirect_branch(
-            unsafe { self.error_block.unwrap().get_address() }.unwrap(),
+            block_ptr,
             &[],
         );
 
-        let print = self.module.get_function("printf").unwrap();
-        // println!("{}",args.get_type().count_fields());
         self.builder.position_at_end(entry_block);
-        self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
-        let arg = print_fn.get_first_param().unwrap().into_vector_value();
+        let args = print_fn.get_first_param().unwrap().into_struct_value();
 
-        let args = self.builder.build_extract_element(arg, self.context.i32_type().const_zero(), "vec get::print");
-        let args =self.builder.build_load(args.into_pointer_value(), "load-arg::print");
-        self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
         let ty = self
-            .extract_type(args.into_struct_value())
+            .extract_type(args)
             .unwrap()
             .into_int_value();
         self.builder.build_switch(
@@ -779,7 +789,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
                 let print = self.module.get_function("printf").unwrap();
         self.builder.position_at_end(bool_block);
-        let val = self.extract_bool(args.into_struct_value()).unwrap();
+        let val = self.extract_bool(args).unwrap();
 
 
         self.builder.build_call(
@@ -796,7 +806,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_unconditional_branch(ret_block);
 
         self.builder.position_at_end(number_block);
-        let val = self.extract_number(args.into_struct_value()).unwrap();
+        let val = self.extract_number(args).unwrap();
 
 
         self.builder.build_call(
@@ -812,7 +822,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         self.builder.build_unconditional_branch(ret_block);
         self.builder.position_at_end(string_block);
-        let val = self.extract_string(args.into_struct_value()).unwrap();
+        let val = self.extract_string(args).unwrap();
 
         self.builder.build_call(
             print,
@@ -841,8 +851,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
-        let print = self.module.get_function("printf").unwrap();
-        self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
         let print = self.module.get_function("print").unwrap();
         self.builder
             .build_call(print, &[val.into()], "print")
