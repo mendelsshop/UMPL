@@ -7,10 +7,10 @@ use inkwell::{
     execution_engine::ExecutionEngine,
     module::{Linkage, Module},
     passes::PassManager,
-    types::{BasicType, FunctionType, StructType},
+    types::{BasicType, FunctionType, StructType, VectorType},
     values::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
-        StructValue,
+        StructValue, CallableValue,
     },
     AddressSpace,
 };
@@ -36,7 +36,7 @@ pub struct Compiler<'a, 'ctx> {
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
     kind: StructType<'ctx>,
-    vec_type: StructType<'ctx>,
+    vec_type: VectorType<'ctx>,
     fn_type: FunctionType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
     error_block: Option<BasicBlock<'ctx>>,
@@ -64,6 +64,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         let kind = context.opaque_struct_type("object");
         let vec_type = context.opaque_struct_type("vec");
+        let vec_type = kind.ptr_type(AddressSpace::default()).vec_type(1);
         let fn_type = kind.fn_type(&[vec_type.into()], false);
         let i8_type = context.i8_type();
         let str_type = i8_type.ptr_type(AddressSpace::default());
@@ -139,8 +140,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .into(),
             lambda
                 .unwrap_or(
-                    self.context
-                        .i8_type()
+                    self.fn_type
                         .ptr_type(AddressSpace::default())
                         .const_null(),
                 )
@@ -217,6 +217,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn insert_variable(&mut self, name: RC<str>, value: PointerValue<'ctx>) {
         if let Some(scope) = self.variables.last_mut() {
+            println!("infdrtt");
             scope.insert(name, value);
         }
     }
@@ -226,7 +227,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .iter()
             .rev()
             .flatten()
-            .find(|v| v.0 == name)
+            .find(|v|  {
+                println!("{v:?}");
+                v.0 == name
+            })
             .map(|v| v.1.clone())
     }
 
@@ -253,6 +257,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let fn_value = self.module.add_function(&name, fn_type, None);
 
                 for (name, arg) in fn_value.get_param_iter().enumerate() {
+                    println!("arg");
                     arg.set_name(&name.to_string());
                 }
                 let entry = self.context.append_basic_block(fn_value, "entry");
@@ -267,10 +272,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 self.builder
                     .position_at_end(fn_value.get_last_basic_block().unwrap());
-
                 if let Some(ret) = self.compile_scope(body)? {
                     self.builder.build_return(Some(&ret));
                 }
+            
                 // reset to previous state (before function) needed for functions in functions
                 if let Some(end) = old_block {
                     self.builder.position_at_end(end);
@@ -279,7 +284,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
-                    self.fpm.run_on(&fn_value);
+                    // self.fpm.run_on(&fn_value);
                     self.pop_env();
 
                     Ok(Some(self.function(fn_value.as_global_value().as_pointer_value()).as_basic_value_enum()))
@@ -357,101 +362,30 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
-                let op = match &application.args()[0] {
-                    UMPL2Expr::Bool(_) => todo!(),
-                    UMPL2Expr::Number(_) => todo!(),
-                    UMPL2Expr::String(_) => todo!(),
-                    UMPL2Expr::Scope(_) => todo!(),
-                    UMPL2Expr::Ident(_) => todo!(),
-                    UMPL2Expr::If(_) => todo!(),
-                    UMPL2Expr::Unless(_) => todo!(),
-                    UMPL2Expr::Stop(_) => todo!(),
-                    UMPL2Expr::Skip => todo!(),
-                    UMPL2Expr::Until(_) => todo!(),
-                    UMPL2Expr::GoThrough(_) => todo!(),
-                    UMPL2Expr::ContiueDoing(_) => todo!(),
-                    UMPL2Expr::Fanction(_) => todo!(),
-                    UMPL2Expr::Application(_) => todo!(),
-                    UMPL2Expr::Quoted(_) => todo!(),
-                    UMPL2Expr::Label(_) => todo!(),
-                    UMPL2Expr::FnParam(_) => todo!(),
-                    UMPL2Expr::Hempty => todo!(),
-                    UMPL2Expr::Link(_, _) => todo!(),
-                    UMPL2Expr::Tree(_) => todo!(),
-                    UMPL2Expr::FnKW(k) => k,
-                    UMPL2Expr::Let(_, _) => todo!(),
-                };
+                let op =return_none!(self.compile_expr(&application.args()[0] )?);
                 let args = return_none!(application
                     .args()
                     .iter()
                     .skip(1)
                     .map(|expr| self.compile_expr(expr))
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
-                Ok(Some(
-                    match op {
-                        // TODO shortent these
-                        FnKeyword::Add => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .fold(self.context.f64_type().const_zero(), |a, b| {
-                                    self.builder.build_float_add(a, b, "number add")
-                                }),
-                        ),
-                        FnKeyword::Sub => self.number(if args.len() == 1 {
-                            self.builder.build_float_neg(
-                                self.extract_number(args[0].into_struct_value())
-                                    .unwrap()
-                                    .into_float_value(),
-                                "float neg",
-                            )
-                        } else {
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .reduce(|a, b| self.builder.build_float_sub(a, b, "number add"))
-                                .unwrap_or(self.context.f64_type().const_zero())
-                        }),
-                        FnKeyword::Mul => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .fold(self.context.f64_type().const_float(1.0), |a, b| {
-                                    self.builder.build_float_mul(a, b, "number add")
-                                }),
-                        ),
-                        FnKeyword::Div => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .reduce(|a, b| self.builder.build_float_div(a, b, "number add"))
-                                .unwrap_or(self.context.f64_type().const_float(1.0)),
-                        ),
-                        FnKeyword::Mod => self.number(
-                            args.into_iter()
-                                .map(|arg| {
-                                    self.extract_number(arg.into_struct_value())
-                                        .unwrap()
-                                        .into_float_value()
-                                })
-                                .reduce(|a, b| self.builder.build_float_rem(a, b, "number add"))
-                                .unwrap_or(self.context.f64_type().const_float(1.0)),
-                        ),
-                        FnKeyword::Print => self.print(args[0]).into_struct_value(),
+                let function: CallableValue<'_> = op.into_pointer_value().try_into().unwrap();
+                let args= args.iter().map(|a|
+                    {
+                        // self.kind.ptr_type(A)
+                        let ptr = self.builder.build_alloca(self.kind, "argl;llll");
+                        self.builder.build_store(ptr, a.clone());
+                        ptr
                     }
-                    .as_basic_value_enum(),
+                ).collect::<Vec<_>>();
+
+                let args= VectorType::const_vector(args.as_slice());
+           
+                let unwrap_left = self.builder.build_call(function, &[args.into()], "callfn").try_as_basic_value().unwrap_left();
+                let print = self.module.get_function("printf").unwrap();
+                self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
+                Ok(Some(
+                    unwrap_left
                 ))
             }
             UMPL2Expr::Quoted(_) => todo!(),
@@ -460,7 +394,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::Tree(_) => todo!(),
-            UMPL2Expr::FnKW(_) => todo!(),
+            UMPL2Expr::FnKW(kw) => match kw {
+                FnKeyword::Add => todo!(),
+                FnKeyword::Sub => todo!(),
+                FnKeyword::Mul => todo!(),
+                FnKeyword::Div => todo!(),
+                FnKeyword::Mod => todo!(),
+                FnKeyword::Print => Ok(self.module.get_function("print").map(|func|func.as_global_value().as_basic_value_enum()))
+            }
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.kind;
@@ -473,6 +414,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         }
     }
+
+    fn make_add(&self) {}
 
     fn extract_type(&self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
         self.builder.build_extract_value(cond_struct, 0, "get_type")
@@ -647,8 +590,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn make_extract_function(&self) {
         let print_fn_ty: FunctionType<'_> = self
-            .context
-            .i8_type()
+            .fn_type
             .ptr_type(AddressSpace::default())
             .fn_type(&[self.kind.into()], false);
         let print_fn = self
@@ -687,7 +629,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_extract_value(
                     args.into_struct_value(),
                     TyprIndex::Lambda as u32 + 1,
-                    "extract string return",
+                    "extract function return",
                 )
                 .unwrap(),
         ));
@@ -710,6 +652,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         let mut res = Err("scope does not have value".to_string());
         for expr in body {
+            println!("{:?}", self.variables);
             res = Ok(return_none!(self.compile_expr(expr)?));
         }
         res.map(Some)
@@ -742,15 +685,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.new_env();
         for expr in program {
             match self.compile_expr(expr) {
-                Ok(_) => continue,
+                Ok(e) =>println!("{}", e.unwrap()),
                 Err(e) => return Some(e),
             }
         }
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.pop_env();
-        if main_fn.verify(true) {
-            self.fpm.run_on(&main_fn);
+        self.fpm.run_on(&main_fn);
+        // let verify = main_fn.verify(true);
+        if true  {
             None
         } else {
             println!("without optimized");
@@ -779,7 +723,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn make_print(&mut self) {
         let old = self.fn_value;
-        let print_fn_ty: FunctionType<'_> = self.kind.fn_type(&[self.kind.into()], false);
+        let print_fn_ty: FunctionType<'_> = self.kind.fn_type(&[self.vec_type.into()], false);
         let print_fn = self.module.add_function("print", print_fn_ty, None);
         self.fn_value = Some(print_fn);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
@@ -795,8 +739,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             unsafe { self.error_block.unwrap().get_address() }.unwrap(),
             &[],
         );
-        let args = print_fn.get_first_param().unwrap();
+
+        let print = self.module.get_function("printf").unwrap();
+        // println!("{}",args.get_type().count_fields());
         self.builder.position_at_end(entry_block);
+        self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
+        let arg = print_fn.get_first_param().unwrap().into_vector_value();
+
+        let args = self.builder.build_extract_element(arg, self.context.i32_type().const_zero(), "vec get::print");
+        let args =self.builder.build_load(args.into_pointer_value(), "load-arg::print");
+        self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
         let ty = self
             .extract_type(args.into_struct_value())
             .unwrap()
@@ -889,6 +841,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        let print = self.module.get_function("printf").unwrap();
+        self.builder.build_call(print, &[self.builder.build_global_string_ptr("here", "there").as_basic_value_enum().into()], "debug");
         let print = self.module.get_function("print").unwrap();
         self.builder
             .build_call(print, &[val.into()], "print")

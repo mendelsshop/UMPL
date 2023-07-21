@@ -327,7 +327,7 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
                 string("fanction"),
                 opt(keep_right(
                     ws_or_comment(),
-                    satify(unic_emoji_char::is_emoji),
+                    satify(unic_emoji_char::is_emoji_presentation),
                 )),
             ),
             chain(

@@ -10,6 +10,7 @@
 use std::time::Duration;
 
 use inkwell::{context::Context, passes::PassManager};
+use unic_emoji_char::is_emoji_presentation;
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 
@@ -52,11 +53,13 @@ fn main() {
     fpm.add_promote_memory_to_register_pass();
     fpm.add_instruction_combining_pass();
     fpm.add_reassociate_pass();
+    
 
     fpm.initialize();
 
-    let fn_type = umpl_parse("let i 4 (print i)<").unwrap();
-    println!("{fn_type:?}");
+    let fn_type = umpl_parse(" (fanction  1* ᚜ (print '0')< ᚛ 5)<").unwrap();
+    println!("{fn_type:?}\u{39}");
+    println!("{}",is_emoji_presentation('1'));
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
         || {
