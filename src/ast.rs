@@ -248,10 +248,10 @@ impl Unless {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Boolean {
-    /// &
-    True,
     /// |
-    False,
+    False = 0,
+    /// &
+    True = 1,
     /// ?
     Maybee,
 }

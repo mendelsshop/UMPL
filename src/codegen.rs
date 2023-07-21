@@ -5,12 +5,13 @@ use std::{
 };
 
 use inkwell::{
+    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     execution_engine::{ExecutionEngine, JitFunction},
-    module::{Module, Linkage},
+    module::{Linkage, Module},
     passes::PassManager,
-    types::{BasicType, FunctionType, StructType},
+    types::{AnyType, BasicType, FloatType, FunctionType, IntType, StructType},
     values::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
         StructValue,
@@ -20,7 +21,7 @@ use inkwell::{
 
 use crate::{
     ast::{Boolean, FnKeyword, UMPL2Expr},
-    exceptions::{raise_error, gen_defs, self},
+    // exceptions::{raise_error, gen_defs, self},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -31,114 +32,114 @@ macro_rules! return_none {
         }
     };
 }
-use std::ffi::CStr;
+// use std::ffi::CStr;
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Object {
-    kind: TyprIndex,
-    object: UntaggedObject,
-}
+// #[repr(C)]
+// #[derive(Clone, Copy)]
+// pub struct Object {
+//     kind: TyprIndex,
+//     object: UntaggedObject,
+// }
 
-impl Object {
-    pub extern "C" fn print(self) -> Self {
-        println!("{self}");
-        self
-    }
+// impl Object {
+//     pub extern "C" fn print(self) -> Self {
+//         println!("{self}");
+//         self
+//     }
 
-    pub extern "C" fn extract_num(self) -> f64 {
-        if self.kind != TyprIndex::Number {
-            unsafe { raise_error("type mimsatch".to_string()) }
-        }
+//     pub extern "C" fn extract_num(self) -> f64 {
+//         if self.kind != TyprIndex::Number {
+//             unsafe { raise_error("type mimsatch".to_string()) }
+//         }
 
-        unsafe { self.object.number }
-    }
+//         unsafe { self.object.number }
+//     }
 
-    pub extern "C" fn from_number(number: f64) -> Self {
-        Self {
-            kind: TyprIndex::Number,
-            object: UntaggedObject { number },
-        }
-    }
+//     pub extern "C" fn from_number(number: f64) -> Self {
+//         Self {
+//             kind: TyprIndex::Number,
+//             object: UntaggedObject { number },
+//         }
+//     }
 
-    pub extern "C" fn extract_str(self) -> *const i8 {
-        if self.kind != TyprIndex::String {
-            unsafe { raise_error("type mimsatch".to_string()) }
-        }
+//     pub extern "C" fn extract_str(self) -> *const i8 {
+//         if self.kind != TyprIndex::String {
+//             unsafe { raise_error("type mimsatch".to_string()) }
+//         }
 
-        unsafe { self.object.string }
-    }
+//         unsafe { self.object.string }
+//     }
 
-    pub extern "C" fn from_str(string: *const i8) -> Self {
-        Self {
-            kind: TyprIndex::String,
-            object: UntaggedObject { string },
-        }
-    }
+//     pub extern "C" fn from_str(string: *const i8) -> Self {
+//         Self {
+//             kind: TyprIndex::String,
+//             object: UntaggedObject { string },
+//         }
+//     }
 
-    pub extern "C" fn extract_bool(self) -> bool {
-        if self.kind != TyprIndex::Boolean {
-            unsafe { raise_error("type mimsatch".to_string()) }
-        }
+//     pub extern "C" fn extract_bool(self) -> bool {
+//         if self.kind != TyprIndex::Boolean {
+//             unsafe { raise_error("type mimsatch".to_string()) }
+//         }
 
-        unsafe { self.object.bool }
-    }
+//         unsafe { self.object.bool }
+//     }
 
-    pub extern "C" fn from_bool(bool: bool) -> Self {
-        Self {
-            kind: TyprIndex::Boolean,
-            object: UntaggedObject { bool },
-        }
-    }
+//     pub extern "C" fn from_bool(bool: bool) -> Self {
+//         Self {
+//             kind: TyprIndex::Boolean,
+//             object: UntaggedObject { bool },
+//         }
+//     }
 
-    pub extern "C" fn extract_error(self) -> *const i8 {
-        // self.object.error
-        todo!()
-    }
+//     pub extern "C" fn extract_error(self) -> *const i8 {
+//         // self.object.error
+//         todo!()
+//     }
 
-    pub extern "C" fn extract_type(self) -> i32 {
-        self.kind as i32
-    }
-}
+//     pub extern "C" fn extract_type(self) -> i32 {
+//         self.kind as i32
+//     }
+// }
 
-impl fmt::Display for Object {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {
-            match self.kind {
-                TyprIndex::String => write!(
-                    f,
-                    "{}",
-                    CStr::from_ptr(self.object.string).to_str().unwrap()
-                ),
-                TyprIndex::Number => write!(f, "{}", self.object.number),
-                TyprIndex::Boolean => write!(f, "{}", self.object.bool),
-                TyprIndex::Lambda => todo!(),
-            }
-        }
-    }
-}
+// impl fmt::Display for Object {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         unsafe {
+//             match self.kind {
+//                 TyprIndex::String => write!(
+//                     f,
+//                     "{}",
+//                     CStr::from_ptr(self.object.string).to_str().unwrap()
+//                 ),
+//                 TyprIndex::Number => write!(f, "{}", self.object.number),
+//                 TyprIndex::Boolean => write!(f, "{}", self.object.bool),
+//                 TyprIndex::Lambda => todo!(),
+//             }
+//         }
+//     }
+// }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Function {
-    pub ty: FunctionType<'static>,
-    pub name: *const c_char,
-    pub arglist: *const *const c_char,
-    pub arg_count: u64,
-    pub is_macro: bool,
-    pub invoke_f_ptr: *const c_void,
-    pub apply_to_f_ptr: *const c_void,
-    pub has_restarg: bool,
-}
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub union UntaggedObject {
-    string: *const i8,
-    number: f64,
-    bool: bool,
-    lambda: *mut Function,
-    error: *mut i8,
-}
+// #[repr(C)]
+// #[derive(Clone, Copy)]
+// pub struct Function {
+//     pub ty: FunctionType<'static>,
+//     pub name: *const c_char,
+//     pub arglist: *const *const c_char,
+//     pub arg_count: u64,
+//     pub is_macro: bool,
+//     pub invoke_f_ptr: *const c_void,
+//     pub apply_to_f_ptr: *const c_void,
+//     pub has_restarg: bool,
+// }
+// #[derive(Clone, Copy)]
+// #[repr(C)]
+// pub union UntaggedObject {
+//     string: *const i8,
+//     number: f64,
+//     bool: bool,
+//     lambda: *mut Function,
+//     error: *mut i8,
+// }
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     module: &'a Module<'ctx>,
@@ -147,16 +148,21 @@ pub struct Compiler<'a, 'ctx> {
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
     kind: StructType<'ctx>,
+    vec_type: StructType<'ctx>,
+    fn_type: FunctionType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
+    error_block: Option<BasicBlock<'ctx>>,
     jit: ExecutionEngine<'ctx>,
 }
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub enum TyprIndex {
-    String = 0,
+    String = 2,
     Number = 1,
-    Boolean = 2,
-    Lambda = 3,
+    Boolean = 0,
+    Cons = 3,
+    Lambda = 4,
 }
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn new(
@@ -165,127 +171,35 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
-        
         let jit = module
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
-        
-        let kind = context.struct_type(
+        let kind = context.opaque_struct_type("object");
+        let vec_type = context.opaque_struct_type("vec");
+        let fn_type = kind.fn_type(&[vec_type.into()], false);
+        let i8_type = context.i8_type();
+        let str_type = i8_type.ptr_type(AddressSpace::default());
+        let num_type = context.f64_type();
+        let cons_type = kind.array_type(2).ptr_type(AddressSpace::default());
+        let bool_type = context.bool_type();
+        module.add_function(
+            "printf",
+            context.i32_type().fn_type(
+                &[context.i8_type().ptr_type(AddressSpace::default()).into()],
+                true,
+            ),
+            Some(Linkage::External),
+        );
+        kind.set_body(
             &[
-                context.i32_type().as_basic_type_enum(),
-                context
-                    .i8_type()
+                i8_type.as_basic_type_enum(),
+                bool_type.as_basic_type_enum(),
+                num_type.as_basic_type_enum(),
+                str_type.as_basic_type_enum(),
+                cons_type.as_basic_type_enum(),
+                fn_type
                     .ptr_type(AddressSpace::default())
                     .as_basic_type_enum(),
-            ],
-            false,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "extract_number",
-                context
-                    .f64_type()
-                    .fn_type(vec![kind.into()].as_slice(), false),
-                None,
-            ),
-            Object::extract_num as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "from_number",
-                kind.fn_type(vec![context.f64_type().into()].as_slice(), false),
-                None,
-            ),
-            Object::from_number as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "print",
-                kind.fn_type(vec![kind.into()].as_slice(), false),
-                None,
-            ),
-            Object::print as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "extract_bool",
-                context
-                    .bool_type()
-                    .fn_type(vec![kind.into()].as_slice(), false),
-                None,
-            ),
-            Object::extract_bool as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "from_bool",
-                kind.fn_type(vec![context.bool_type().into()].as_slice(), false),
-                None,
-            ),
-            Object::from_bool as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "extract_string",
-                context
-                    .i8_type()
-                    .ptr_type(AddressSpace::default())
-                    .as_basic_type_enum()
-                    .fn_type(vec![kind.into()].as_slice(), false),
-                None,
-            ),
-            Object::extract_str as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "from_string",
-                kind.fn_type(
-                    vec![context
-                        .i8_type()
-                        .ptr_type(AddressSpace::default())
-                        .as_basic_type_enum()
-                        .into()]
-                    .as_slice(),
-                    false,
-                ),
-                None,
-            ),
-            Object::from_str as usize,
-        );
-        jit.add_global_mapping(
-            &module.add_function(
-                "extract_type",
-                context
-                    .i32_type()
-                    .fn_type(vec![kind.into()].as_slice(), false),
-                None,
-            ),
-            Object::extract_type as usize,
-        );
-        let fn_struct_ty = context.opaque_struct_type("unlisp_rt_function");
-
-        let ty_ty = context.i32_type();
-        let ty_name = context.i8_type().ptr_type(AddressSpace::default());
-        let ty_arglist = context
-            .i8_type()
-            .ptr_type(AddressSpace::default())
-            .ptr_type(AddressSpace::default());
-        let ty_arg_count = context.i64_type();
-        let ty_is_macro = context.bool_type();
-        let ty_invoke_f_ptr = context.i8_type().ptr_type(AddressSpace::default());
-        let ty_apply_to_f_ptr = context.i8_type().ptr_type(AddressSpace::default());
-        let ty_has_restarg = context.bool_type();
-gen_defs(context, module, jit.clone());
-        fn_struct_ty.set_body(
-            &[
-                ty_ty.into(),
-                ty_name.into(),
-                ty_arglist.into(),
-                ty_arg_count.into(),
-                ty_is_macro.into(),
-                ty_invoke_f_ptr.into(),
-                ty_apply_to_f_ptr.into(),
-                ty_has_restarg.into(),
             ],
             false,
         );
@@ -298,16 +212,56 @@ gen_defs(context, module, jit.clone());
             string: HashMap::new(),
             kind,
             fn_value: None,
+            error_block: None,
             jit,
+            fn_type,
+            vec_type,
         }
     }
 
+    fn value(
+        &self,
+        ty: TyprIndex,
+        bool: Option<IntValue<'ctx>>,
+        number: Option<FloatValue<'ctx>>,
+        string: Option<PointerValue<'ctx>>,
+        cons: Option<PointerValue<'ctx>>,
+        lambda: Option<PointerValue<'ctx>>,
+    ) -> StructValue<'ctx> {
+        self.kind.const_named_struct(&[
+            self.context.i8_type().const_int(ty as u64, false).into(),
+            bool.unwrap_or(self.context.bool_type().const_zero()).into(),
+            number
+                .unwrap_or(self.context.f64_type().const_zero())
+                .into(),
+            string
+                .unwrap_or(
+                    self.context
+                        .i8_type()
+                        .ptr_type(AddressSpace::default())
+                        .const_null(),
+                )
+                .into(),
+            cons.unwrap_or(
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default())
+                    .const_null(),
+            )
+            .into(),
+            lambda
+                .unwrap_or(
+                    self.context
+                        .i8_type()
+                        .ptr_type(AddressSpace::default())
+                        .const_null(),
+                )
+                .into(),
+        ])
+    }
+
     fn number(&self, value: FloatValue<'ctx>) -> StructValue<'ctx> {
-        let from_number = self.module.get_function("from_number").unwrap();
-        let call = self
-            .builder
-            .build_call(from_number, &[value.into()], "to number");
-        call.try_as_basic_value().unwrap_left().into_struct_value()
+        self.value(TyprIndex::Number, None, Some(value), None, None, None)
     }
 
     fn const_number(&self, value: f64) -> StructValue<'ctx> {
@@ -315,11 +269,7 @@ gen_defs(context, module, jit.clone());
     }
 
     fn bool(&self, value: IntValue<'ctx>) -> StructValue<'ctx> {
-        let from_bool = self.module.get_function("from_bool").unwrap();
-        let call = self
-            .builder
-            .build_call(from_bool, &[value.into()], "to bool");
-        call.try_as_basic_value().unwrap_left().into_struct_value()
+        self.value(TyprIndex::Boolean, Some(value), None, None, None, None)
     }
 
     fn const_bool(&self, value: Boolean) -> StructValue<'ctx> {
@@ -327,11 +277,7 @@ gen_defs(context, module, jit.clone());
     }
 
     fn string(&self, value: PointerValue<'ctx>) -> StructValue<'ctx> {
-        let from_string = self.module.get_function("from_string").unwrap();
-        let call = self
-            .builder
-            .build_call(from_string, &[value.into()], "to string");
-        call.try_as_basic_value().unwrap_left().into_struct_value()
+        self.value(TyprIndex::String, None, None, Some(value), None, None)
     }
 
     fn const_string(&mut self, value: RC<str>) -> StructValue<'ctx> {
@@ -519,6 +465,7 @@ gen_defs(context, module, jit.clone());
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
+                println!("{:?}", application);
                 let op = match &application.args()[0] {
                     UMPL2Expr::Bool(_) => todo!(),
                     UMPL2Expr::Number(_) => todo!(),
@@ -611,7 +558,12 @@ gen_defs(context, module, jit.clone());
                                 .reduce(|a, b| self.builder.build_float_rem(a, b, "number add"))
                                 .unwrap_or(self.context.f64_type().const_float(1.0)),
                         ),
-                        FnKeyword::Print => self.print(args[0]).into_struct_value(),
+                        FnKeyword::Print => {
+                            // self.print_ir();
+                            let r = self.print(args[0]).into_struct_value();
+                            // self.print_ir();
+                            r
+                        }
                     }
                     .as_basic_value_enum(),
                 ))
@@ -636,41 +588,163 @@ gen_defs(context, module, jit.clone());
         }
     }
 
-    fn extract_type(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let get_type = self.module.get_function("extract_type").unwrap();
-        let call = self
-            .builder
-            .build_call(get_type, &[cond_struct.into()], "to type");
-        Some(call.try_as_basic_value().unwrap_left())
+    fn extract_type(&self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        self.builder.build_extract_value(cond_struct, 0, "get_type")
     }
 
     // TODO: for all extract_* methods have checked variants that check that what is trying to be obtained is in fact the type of the object
-    fn extract_bool(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let get_type = self.module.get_function("extract_bool").unwrap();
-        let call = self
-            .builder
-            .build_call(get_type, &[cond_struct.into()], "to bool");
-        Some(call.try_as_basic_value().unwrap_left())
+    fn make_extract_bool(&self) {
+        let print_fn_ty: FunctionType<'_> =
+            self.context.bool_type().fn_type(&[self.kind.into()], false);
+        let print_fn = self.module.add_function("extract_bool", print_fn_ty, None);
+        let entry_block = self.context.append_basic_block(print_fn, "entry");
+        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let args = print_fn.get_first_param().unwrap();
+        self.builder.position_at_end(entry_block);
+        let ty = self
+            .extract_type(args.into_struct_value())
+            .unwrap()
+            .into_int_value();
+        let condition = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            ty,
+            self.context
+                .i8_type()
+                .const_int(TyprIndex::Boolean as u64, false),
+            "cmp",
+        );
+
+        self.builder
+            .build_conditional_branch(condition, ret_block, self.error_block.unwrap());
+        self.builder.position_at_end(ret_block);
+
+        self.builder.build_return(Some(
+            &self
+                .builder
+                .build_extract_value(args.into_struct_value(), TyprIndex::Boolean as u32 + 1, "extract bool return")
+                .unwrap(),
+        ));
+        print_fn.verify(true);
     }
 
-    fn extract_string(&self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let get_type = self.module.get_function("extract_string").unwrap();
-        let call = self
-            .builder
-            .build_call(get_type, &[cond_struct.into()], "to string");
-        Some(call.try_as_basic_value().unwrap_left())
+    fn extract_bool(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        let print = self.module.get_function("extract_bool").unwrap();
+        self.builder
+            .build_call(print, &[val.into()], "print")
+            .try_as_basic_value()
+            .left()
     }
 
-    fn extract_number(&self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let get_type = self.module.get_function("extract_number").unwrap();
-        let call = self
-            .builder
-            .build_call(get_type, &[cond_struct.into()], "to number");
-        Some(call.try_as_basic_value().unwrap_left())
+
+    fn make_extract_number(&self) {
+        let print_fn_ty: FunctionType<'_> =
+            self.context.f64_type().fn_type(&[self.kind.into()], false);
+        let print_fn = self.module.add_function("extract_number", print_fn_ty, None);
+        let entry_block = self.context.append_basic_block(print_fn, "entry");
+        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let args = print_fn.get_first_param().unwrap();
+        self.builder.position_at_end(entry_block);
+        let ty = self
+            .extract_type(args.into_struct_value())
+            .unwrap()
+            .into_int_value();
+        let condition = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            ty,
+            self.context
+                .i8_type()
+                .const_int(TyprIndex::Number as u64, false),
+            "cmp",
+        );
+
+        self.builder
+            .build_conditional_branch(condition, ret_block, self.error_block.unwrap());
+        self.builder.position_at_end(ret_block);
+
+        self.builder.build_return(Some(
+            &self
+                .builder
+                .build_extract_value(args.into_struct_value(), TyprIndex::Number as u32 + 1, "extract nmber return")
+                .unwrap(),
+        ));
+        print_fn.verify(true);
+    }
+
+    fn extract_number(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        let print = self.module.get_function("extract_number").unwrap();
+        self.builder
+            .build_call(print, &[val.into()], "print")
+            .try_as_basic_value()
+            .left()
+    }
+
+    fn make_extract_string(&self) {
+        let print_fn_ty: FunctionType<'_> =
+            self.context.i8_type().ptr_type(AddressSpace::default()).fn_type(&[self.kind.into()], false);
+        let print_fn = self.module.add_function("extract_string", print_fn_ty, None);
+        let entry_block = self.context.append_basic_block(print_fn, "entry");
+        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let args = print_fn.get_first_param().unwrap();
+        self.builder.position_at_end(entry_block);
+        let ty = self
+            .extract_type(args.into_struct_value())
+            .unwrap()
+            .into_int_value();
+        let condition = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            ty,
+            self.context
+                .i8_type()
+                .const_int(TyprIndex::String as u64, false),
+            "cmp",
+        );
+
+        self.builder
+            .build_conditional_branch(condition, ret_block, self.error_block.unwrap());
+        self.builder.position_at_end(ret_block);
+
+        self.builder.build_return(Some(
+            &self
+                .builder
+                .build_extract_value(args.into_struct_value(), TyprIndex::String as u32 + 1, "extract string return")
+                .unwrap(),
+        ));
+        print_fn.verify(true);
+    }
+
+    fn extract_string(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        let print = self.module.get_function("extract_string").unwrap();
+        self.builder
+            .build_call(print, &[val.into()], "print")
+            .try_as_basic_value()
+            .left()
     }
 
     fn extract_function(&mut self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        todo!()
+        let ty = self.extract_type(cond_struct).unwrap().into_int_value();
+        let condition = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            ty,
+            self.context
+                .i8_type()
+                .const_int(TyprIndex::Lambda as u64, false),
+            "cmp",
+        );
+        let bb = self
+            .context
+            .append_basic_block(self.fn_value.unwrap(), "them");
+
+        // {
+        //     self.builder
+        //     .build_unconditional_branch(self.error_block.unwrap());
+        //     self.context.i8_type().const_zero().as_basic_value_enum()
+        // },
+
+        self.builder
+            .build_conditional_branch(condition, bb, self.error_block.unwrap());
+        self.builder.position_at_end(bb);
+        self.builder
+            .build_extract_value(cond_struct, TyprIndex::Lambda as u32 + 1, "e")
     }
 
     fn compile_scope(
@@ -691,49 +765,20 @@ gen_defs(context, module, jit.clone());
     }
 
     pub fn compile_program(&mut self, program: &[UMPL2Expr]) -> Option<String> {
-       
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
-        // let error = self.context.append_basic_block(main_fn, "error");
-        self.builder.position_at_end(main_block);
-        // let buf_ptr = self.builder.build_alloca(
-        //     self.module.get_struct_type("setjmp_buf").unwrap(),
-        //     "setjmp_buf",
-        // );
-        // let setjmp = self
-        //     .builder
-        //     .build_call(
-        //         self.module.get_function("setjmp").unwrap(),
-        //         &[buf_ptr.into()],
-        //         "setjmp",
-        //     )
-        //     .try_as_basic_value()
-        //     .left()
-        //     .unwrap()
-        //     .into_int_value();
+        self.error_block = Some(self.context.append_basic_block(main_fn, "error"));
+        self.make_extract_bool();
+        self.make_extract_number();
+        self.make_extract_string();
+        self.fn_value = Some(main_fn);
+        self.make_print();
 
-        // let setjmp = self
-        //     .builder
-        //     .build_int_cast(setjmp, self.context.bool_type(), "setjmp cast");
-        // let args = self.bool(setjmp).as_basic_value_enum();
-        // self.print(args);
-        // let ok_block = self.context.append_basic_block(main_fn, "ok");
-        // let err_block = self.context.append_basic_block(main_fn, "err");
-        // self.builder
-        //     .build_conditional_branch(setjmp, err_block, ok_block);
+        self.builder.position_at_end(self.error_block.unwrap());
 
-        // self.builder.position_at_end(ok_block);
-        // self.builder.build_call(
-        //     self.module.get_function("longjmp").unwrap(),
-        //     &[
-        //         buf_ptr.into(),
-        //         self.context.i32_type().const_int(1, false).into(),
-        //     ],
-        //     "longjmp",
-        // );
-        // self.builder
-        //     .build_return(Some(&self.context.i32_type().const_int(1, false)));
+        self.builder
+            .build_return(Some((&self.context.i32_type().const_int(1, false))));
         self.builder.position_at_end(main_block);
 
         // ctx.blocks_stack.push(Rc::new(ok_block));
@@ -746,23 +791,36 @@ gen_defs(context, module, jit.clone());
             }
         }
 
+        // let obj = self
+        //     .module
+        //     .get_struct_type("object")
+        //     .unwrap()
+        //     .const_named_struct(&[
+        //         self.context.i8_type().const_int(1, false).into(),
+        //         self.context.bool_type().const_int(1, false).into(),
+        //     ]);
+
+        // self.print(obj.as_basic_value_enum());
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.pop_env();
+        // self.error_block.unwrap().get_terminator().unwrap_or_else(||
+        // //  self.builder.p
+        // );
         if main_fn.verify(true) {
-            self.fpm.run_on(&main_fn);
-                // let main = self.module.add_function("main", main_fn_type, None);
-                // let main_block = self.context.append_basic_block(main, "entry");
-                // self.builder.position_at_end(main_block);
-                // self.module.print_to_stderr();
-                // let error_handling = self.module.get_function("global_error_handling").unwrap();
-                // let result = self.builder.build_call(error_handling, &[], "error handling").try_as_basic_value().expect_left("no error handling").into_int_value();
-                // self.builder.build_return(Some(&result));
-                None
+            // self.fpm.run_on(&main_fn);
+            // let main = self.module.add_function("main", main_fn_type, None);
+            // let main_block = self.context.append_basic_block(main, "entry");
+            // self.builder.position_at_end(main_block);
+            // self.module.print_to_stderr();
+            // let error_handling = self.module.get_function("global_error_handling").unwrap();
+            // let result = self.builder.build_call(error_handling, &[], "error handling").try_as_basic_value().expect_left("no error handling").into_int_value();
+            // self.builder.build_return(Some(&result));
+            None
         } else {
             println!("without optimized");
             main_fn.print_to_stderr();
-            self.fpm.run_on(&main_fn);
+            // self.fpm.run_on(&main_fn);
             println!("with optimized");
             main_fn.print_to_stderr();
 
@@ -777,26 +835,88 @@ gen_defs(context, module, jit.clone());
     pub fn print_ir(&self) {
         self.module.print_to_stderr();
     }
-    pub fn run(&self) -> u64 {
-        let compiled_fn: JitFunction<'_,unsafe extern "C" fn() -> Object> = unsafe { self
-                .jit
-                .get_function("main")
-                .expect("couldn't find top-level function in execution engine") };
-        match   unsafe { exceptions::run_with_global_ex_handler(|| compiled_fn.call()) } {
-            Ok(ok) => return  unsafe {
-                ok.object.number as u64
-            },
-            Err(e) => {
-                println!("Error {:?}", e);
-                1
-            }
+    pub fn run(&self) -> i32 {
+        unsafe {
+            self.jit
+                .run_function_as_main(self.module.get_function("main").unwrap(), &[])
         }
-    
     }
 
-    fn print(&self, args: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
+
+    fn make_print(&mut self) {
+        let old = self.fn_value;
+        let print_fn_ty: FunctionType<'_> = self.kind.fn_type(&[self.kind.into()], false);
+        let print_fn = self.module.add_function("print", print_fn_ty, None);
+        self.fn_value = Some(print_fn);
+        let entry_block = self.context.append_basic_block(print_fn, "entry");
+        let bool_block = self.context.append_basic_block(print_fn, "bool");
+        let number_block = self.context.append_basic_block(print_fn, "number");
+        let string_block = self.context.append_basic_block(print_fn, "string");
+        // let cons_block = self.context.append_basic_block(print_fn, "cons");
+        // let lambda_block = self.context.append_basic_block(print_fn, "lambda");
+        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let args = print_fn.get_first_param().unwrap();
+        self.builder.position_at_end(entry_block);
+        let ty = self
+            .extract_type(args.into_struct_value())
+            .unwrap()
+            .into_int_value();
+        self.builder.build_switch(
+            ty,
+            self.error_block.unwrap(),
+            &[
+                (
+                    self.context
+                        .i8_type()
+                        .const_int(TyprIndex::Boolean as u64, false),
+                    bool_block,
+                ),
+                (
+                    self.context
+                        .i8_type()
+                        .const_int(TyprIndex::Number as u64, false),
+                    number_block,
+                ),
+                (
+                    self.context
+                        .i8_type()
+                        .const_int(TyprIndex::String as u64, false),
+                    string_block,
+                ),
+            ],
+        );
+        self.builder.position_at_end(bool_block);
+        let val = self.extract_bool(args.into_struct_value()).unwrap();
+                let print = self.module.get_function("printf").unwrap();
+
+        let call = self
+            .builder
+            .build_call(print, &[self.builder.build_global_string_ptr("%s", "bool fmt specifier").as_basic_value_enum().into(), val.into()], "print");
+        self.builder.build_unconditional_branch(ret_block);
+
+        self.builder.position_at_end(number_block);
+        let val = self.extract_number(args.into_struct_value()).unwrap();
+        self.builder.build_unconditional_branch(ret_block);
+        self.builder.position_at_end(string_block);
+        let val = self.extract_string(args.into_struct_value()).unwrap();
+        self.builder.build_unconditional_branch(ret_block);
+        self.builder.position_at_end(ret_block);
+        let phi = self.builder.build_phi(self.kind, "print return");
+        phi.add_incoming(&[
+            (&args, bool_block),
+            (&args, number_block),
+            (&args, string_block),
+        ]);
+        self.builder.build_return(Some(&phi.as_basic_value()));
+        self.fn_value = old;
+        print_fn.verify(true);
+    }
+
+    fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
         let print = self.module.get_function("print").unwrap();
-        let call = self.builder.build_call(print, &[args.into()], "print");
-        call.try_as_basic_value().unwrap_left()
+        self.builder
+            .build_call(print, &[val.into()], "print")
+            .try_as_basic_value()
+            .unwrap_left()
     }
 }

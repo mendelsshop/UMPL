@@ -15,7 +15,7 @@ pub mod ast;
 // mod codegen_back;
 // pub mod eval;
 mod codegen;
-mod exceptions;
+
 pub mod lexer;
 pub mod pc;
 #[cfg(feature = "multi-threaded")]
@@ -53,7 +53,7 @@ fn main() {
 
     fpm.initialize();
 
-    let fn_type = umpl_parse("let i 1  (print (sub  5 5  i i i)<)< (print .a.)> ").unwrap();
+    let fn_type = umpl_parse("(print &)<").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
