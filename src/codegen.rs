@@ -1,21 +1,19 @@
-use std::{collections::HashMap, path::{Path, PathBuf}};
+use std::{collections::HashMap, path::PathBuf};
 
 use inkwell::{
-    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     execution_engine::ExecutionEngine,
     module::{Linkage, Module},
     passes::PassManager,
-    types::{BasicType, FunctionType, StructType, VectorType, BasicTypeEnum},
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+    types::{BasicType, BasicTypeEnum, FunctionType, StructType},
     values::{
-        BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
-        StructValue, CallableValue, BasicMetadataValueEnum,
+        BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallableValue, FloatValue,
+        FunctionValue, GlobalValue, IntValue, PointerValue, StructValue,
     },
-    AddressSpace, targets::{Target, InitializationConfig, TargetMachine, CodeModel, RelocMode}, OptimizationLevel,
+    AddressSpace, OptimizationLevel,
 };
-
-use std::io::Write;
 
 use crate::{
     ast::{Boolean, FnKeyword, UMPL2Expr},
@@ -38,10 +36,8 @@ pub struct Compiler<'a, 'ctx> {
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
     kind: StructType<'ctx>,
-    // vec_type: VectorType<'ctx>,
     fn_type: FunctionType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
-    error_block: Option<BasicBlock<'ctx>>,
     jit: ExecutionEngine<'ctx>,
     cons_type: inkwell::types::PointerType<'ctx>,
 }
@@ -68,13 +64,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let kind = context.opaque_struct_type("object");
         // let vec_type = context.opaque_struct_type("vec");
         // let vec_type = kind.ptr_type(AddressSpace::default()).vec_type(1);
-        let fn_type = kind.fn_type(&[kind.into()], false);
+        let fn_type = kind.fn_type(&[kind.into()], true);
         let i8_type = context.i8_type();
         let str_type = i8_type.ptr_type(AddressSpace::default());
         let num_type = context.f64_type();
         let cons_type = kind.array_type(2).ptr_type(AddressSpace::default());
         let bool_type = context.bool_type();
-        module.add_function("exit", context.void_type().fn_type(&[context.i32_type().into()], false), Some(Linkage::External));
+        module.add_function(
+            "exit",
+            context
+                .void_type()
+                .fn_type(&[context.i32_type().into()], false),
+            Some(Linkage::External),
+        );
         module.add_function(
             "printf",
             context.i32_type().fn_type(
@@ -105,10 +107,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             string: HashMap::new(),
             kind,
             fn_value: None,
-            error_block: None,
             jit,
             fn_type,
-            cons_type
+            cons_type,
         }
     }
 
@@ -135,17 +136,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .const_null(),
                 )
                 .into(),
-            cons.unwrap_or(
-                self.cons_type
-                    .const_null(),
-            )
-            .into(),
+            cons.unwrap_or(self.cons_type.const_null()).into(),
             lambda
-                .unwrap_or(
-                    self.fn_type
-                        .ptr_type(AddressSpace::default())
-                        .const_null(),
-                )
+                .unwrap_or(self.fn_type.ptr_type(AddressSpace::default()).const_null())
                 .into(),
         ])
     }
@@ -228,9 +221,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .iter()
             .rev()
             .flatten()
-            .find(|v|  {
-                v.0 == name
-            })
+            .find(|v| v.0 == name)
             .map(|v| v.1.clone())
     }
 
@@ -274,7 +265,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if let Some(ret) = self.compile_scope(body)? {
                     self.builder.build_return(Some(&ret));
                 }
-            
+
                 // reset to previous state (before function) needed for functions in functions
                 if let Some(end) = old_block {
                     self.builder.position_at_end(end);
@@ -283,11 +274,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
-                    // self.fpm.run_on(&fn_value);
+                    self.fpm.run_on(&fn_value);
                     self.pop_env();
 
-                    Ok(Some(self.function(fn_value.as_global_value().as_pointer_value()).as_basic_value_enum()))
-
+                    Ok(Some(
+                        self.function(fn_value.as_global_value().as_pointer_value())
+                            .as_basic_value_enum(),
+                    ))
                 } else {
                     println!();
                     self.print_ir();
@@ -361,7 +354,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
-                let op =return_none!(self.compile_expr(&application.args()[0] )?);
+                let op = return_none!(self.compile_expr(&application.args()[0])?);
                 let args = return_none!(application
                     .args()
                     .iter()
@@ -370,17 +363,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
                 let op = self.extract_function(op.into_struct_value()).unwrap();
                 let function: CallableValue<'_> = op.into_pointer_value().try_into().unwrap();
-                let args= args.iter().map(|a|
-                    {
-                    a.clone().into()
-                    }
-                ).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+                let args = args
+                    .iter()
+                    .map(|a| a.clone().into())
+                    .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
-           
-                let unwrap_left = self.builder.build_call(function, args.as_slice(), "callfn").try_as_basic_value().unwrap_left();
-                Ok(Some(
-                    unwrap_left
-                ))
+                let unwrap_left = self
+                    .builder
+                    .build_call(function, args.as_slice(), "callfn")
+                    .try_as_basic_value()
+                    .unwrap_left();
+                Ok(Some(unwrap_left))
             }
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
@@ -394,8 +387,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 FnKeyword::Mul => todo!(),
                 FnKeyword::Div => todo!(),
                 FnKeyword::Mod => todo!(),
-                FnKeyword::Print => Ok(Some(self.function(self.module.get_function("print").map(|func|func.as_global_value().as_pointer_value()).unwrap()).as_basic_value_enum()))
-            }
+                FnKeyword::Print => Ok(Some(
+                    self.function(
+                        self.module
+                            .get_function("print")
+                            .map(|func| func.as_global_value().as_pointer_value())
+                            .unwrap(),
+                    )
+                    .as_basic_value_enum(),
+                )),
+            },
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.kind;
@@ -425,11 +426,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let ret_block = self.context.append_basic_block(print_fn, "return");
         let args = print_fn.get_first_param().unwrap();
         self.builder.position_at_end(error_block);
-        // self.builder.build_indirect_branch(
-        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-        //     &[],
-        // );
-        self.exit("not a bool", 1, self.context.bool_type().into());
+        self.exit("not a bool\n", 1, self.context.bool_type().into());
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -459,7 +456,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        // self.fpm.run_on(&print_fn);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_bool(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -481,11 +478,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        // self.builder.build_indirect_branch(
-        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-        //     &[],
-        // );
-        self.exit("not a number", 1, self.context.f64_type().into());
+        self.exit("not a number\n", 1, self.context.f64_type().into());
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -515,7 +508,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        // self.fpm.run_on(&print_fn);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_number(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -540,14 +533,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        // self.builder.build_indirect_branch(
-        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-        //     &[],
-        // );
-        self.exit("not a string", 1, self
-        .context
-        .i8_type()
-        .ptr_type(AddressSpace::default()).into());
+        self.exit(
+            "not a string\n",
+            1,
+            self.context
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .into(),
+        );
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -577,7 +570,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        // self.fpm.run_on(&print_fn);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_string(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -601,15 +594,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        // self.builder.build_indirect_branch(
-        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-        //     &[self.error_block.unwrap()],
-        // );
-        self.exit("not a function", 1, self
-        .fn_type
-        .ptr_type(AddressSpace::default()).into());
+        self.exit(
+            "not a function\n",
+            1,
+            self.fn_type.ptr_type(AddressSpace::default()).into(),
+        );
         self.builder.position_at_end(entry_block);
-       
+
         let ty = self
             .extract_type(args.into_struct_value())
             .unwrap()
@@ -638,7 +629,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
-        // self.fpm.run_on(&print_fn);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_function(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -648,7 +639,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .try_as_basic_value()
             .left()
     }
-
 
     fn compile_scope(
         &mut self,
@@ -671,7 +661,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
-        // self.error_block = Some(self.context.append_basic_block(main_fn, "error"));
         // TODO: maybe dont optimize make_* functions b/c indirect call branches
         self.make_extract_bool();
         self.make_extract_number();
@@ -679,15 +668,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_extract_function();
         self.fn_value = Some(main_fn);
         self.make_print();
-
-        // self.builder.position_at_end(self.error_block.unwrap());
-        // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting error", "error").as_basic_value_enum().into()], "error print");
-        // self.builder
-        //     .build_return(Some((&self.context.i32_type().const_int(1, false))));
         self.builder.position_at_end(main_block);
-      
+
         self.new_env();
-        // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting", "error").as_basic_value_enum().into()], "error print");
         for expr in program {
             match self.compile_expr(expr) {
                 Ok(_) => continue,
@@ -697,17 +680,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.pop_env();
-    
+
         let verify = main_fn.verify(true);
 
-        if verify   {
-            // self.fpm.run_on(&main_fn);
+        if verify {
+            self.fpm.run_on(&main_fn);
             println!("done");
             None
         } else {
             println!("without optimized");
             self.print_ir();
-            // self.fpm.run_on(&main_fn);
+            self.fpm.run_on(&main_fn);
             println!("with optimized");
             self.print_ir();
 
@@ -720,14 +703,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub fn print_ir(&self) {
-        // self.module.write_bitcode_to_path(Path::new("main.bc"));
-        // println!("{:?}",self.module.write_bitcode_to_memory().create_object_file());
         self.module.print_to_stderr();
     }
     pub fn run(&self) -> i32 {
         unsafe {
             self.jit
-                .run_function(self.module.get_function("main").unwrap(), &[]).as_int(false) as i32
+                .run_function(self.module.get_function("main").unwrap(), &[])
+                .as_int(false) as i32
         }
     }
 
@@ -743,29 +725,42 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.module.write_bitcode_to_path(&path);
     }
 
-    pub fn export_object(&self, path: impl Into<PathBuf>) {
+    // TODO: split into asm and object functions
+    pub fn export_object_and_asm(&self, path: impl Into<PathBuf>) {
         let mut asm_path: PathBuf = path.into();
         let mut o_path: PathBuf = asm_path.clone();
         o_path.set_extension("o");
         asm_path.set_extension("as");
-        // let o = self.module.write_bitcode_to_memory().create_object_file().expect("failed to generate code");
-        let config = InitializationConfig { asm_parser: true, asm_printer: true, base: true, disassembler: true, info: true, machine_code: true };
-        Target::initialize_native(&config);
+
+        let config = InitializationConfig {
+            asm_parser: true,
+            asm_printer: true,
+            base: true,
+            disassembler: true,
+            info: true,
+            machine_code: true,
+        };
+        Target::initialize_native(&config).unwrap();
         let triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&triple).unwrap();
-    
-        let tm = target.create_target_machine(          &TargetMachine::get_default_triple(),
-        &TargetMachine::get_host_cpu_name().to_string(),
-        &TargetMachine::get_host_cpu_features().to_string(),
-        OptimizationLevel::None,
-        RelocMode::Default,
-        CodeModel::Default,).unwrap();
+
+        let tm = target
+            .create_target_machine(
+                &TargetMachine::get_default_triple(),
+                &TargetMachine::get_host_cpu_name().to_string(),
+                &TargetMachine::get_host_cpu_features().to_string(),
+                OptimizationLevel::Aggressive,
+                RelocMode::Default,
+                CodeModel::Default,
+            )
+            .unwrap();
         tm.add_analysis_passes(self.fpm);
-        
-        
-        tm.write_to_file(self.module, inkwell::targets::FileType::Object, &o_path).expect(" writing to file " );
-                
-        tm.write_to_file(self.module, inkwell::targets::FileType::Assembly, &asm_path).expect(" writing to file " );
+
+        tm.write_to_file(self.module, inkwell::targets::FileType::Object, &o_path)
+            .expect(" writing to file ");
+
+        tm.write_to_file(self.module, inkwell::targets::FileType::Assembly, &asm_path)
+            .expect(" writing to file ");
     }
 
     fn make_print(&mut self) {
@@ -784,15 +779,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
 
-    
-        self.exit("not a valid type", 1, self.kind.into());
+        self.exit("not a valid type\n", 1, self.kind.into());
         self.builder.position_at_end(entry_block);
         let args = print_fn.get_first_param().unwrap().into_struct_value();
 
-        let ty = self
-            .extract_type(args)
-            .unwrap()
-            .into_int_value();
+        let ty = self.extract_type(args).unwrap().into_int_value();
         self.builder.build_switch(
             ty,
             error_block,
@@ -817,10 +808,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ),
             ],
         );
-                let print = self.module.get_function("printf").unwrap();
+        let print = self.module.get_function("printf").unwrap();
         self.builder.position_at_end(bool_block);
         let val = self.extract_bool(args).unwrap();
-
 
         self.builder.build_call(
             print,
@@ -837,7 +827,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.position_at_end(number_block);
         let val = self.extract_number(args).unwrap();
-
 
         self.builder.build_call(
             print,
@@ -877,11 +866,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_return(Some(&phi.as_basic_value()));
         self.fn_value = old;
         print_fn.verify(true);
-        // self.fpm.run_on(&print_fn);
+        self.fpm.run_on(&print_fn);
     }
 
-    fn print<>(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
-        // self.module.ad\\
+    fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
         let print = self.module.get_function("print").unwrap();
         self.builder
             .build_call(print, &[val.into()], "print")
@@ -893,29 +881,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let print = self.module.get_function("printf").unwrap();
         self.builder.build_call(
             print,
-            &[
-                self.builder
-                    .build_global_string_ptr(reason, "error exit")
-                    .as_basic_value_enum()
-                    .into(),
-            ],
+            &[self
+                .builder
+                .build_global_string_ptr(reason, "error exit")
+                .as_basic_value_enum()
+                .into()],
             "print",
         );
         let exit = self.module.get_function("exit").unwrap();
-    self.builder.build_call(
+        self.builder.build_call(
             exit,
             &[self.context.i32_type().const_int(code as u64, false).into()],
-            "exit"
+            "exit",
         );
-    
-    self.builder.build_return(Some(&ty.const_zero()));
+
+        self.builder.build_return(Some(&ty.const_zero()));
     }
 }
-
-
-// pub extern "C" fn exit() -> ! {
-    // println!("exit");
-    // exit!()
-// }
-
-extern  "C" {fn exit(i: i8 ) -> !;}

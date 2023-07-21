@@ -7,10 +7,7 @@
 )]
 #![allow(clippy::similar_names)]
 
-
-
 use inkwell::{context::Context, passes::PassManager};
-
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 
@@ -53,11 +50,10 @@ fn main() {
     fpm.add_promote_memory_to_register_pass();
     fpm.add_instruction_combining_pass();
     fpm.add_reassociate_pass();
-    
 
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
-    let fn_type = umpl_parse(" (1 5)<").unwrap();
+    let fn_type = umpl_parse(" (fanction  2* ᚜ (print '0')< ᚛ 2 fanction  2* ᚜ (print '0')< ᚛ 6)<").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
@@ -65,9 +61,9 @@ fn main() {
             complier.print_ir();
             complier.export_bc("bin/main");
             complier.export_ir("bin/main");
-            complier.export_object("bin/main");
+            complier.export_object_and_asm("bin/main");
             let ret = complier.run();
-            print!("\nret {ret}\n", );
+            print!("\nret {ret}\n",);
         },
         |err| {
             println!("error: {err}");
