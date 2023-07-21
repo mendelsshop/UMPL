@@ -7,7 +7,7 @@ use inkwell::{
     execution_engine::ExecutionEngine,
     module::{Linkage, Module},
     passes::PassManager,
-    types::{BasicType, FunctionType, StructType, VectorType},
+    types::{BasicType, FunctionType, StructType, VectorType, BasicTypeEnum},
     values::{
         BasicValue, BasicValueEnum, FloatValue, FunctionValue, GlobalValue, IntValue, PointerValue,
         StructValue, CallableValue, BasicMetadataValueEnum,
@@ -74,6 +74,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let num_type = context.f64_type();
         let cons_type = kind.array_type(2).ptr_type(AddressSpace::default());
         let bool_type = context.bool_type();
+        module.add_function("exit", context.void_type().fn_type(&[context.i32_type().into()], false), Some(Linkage::External));
         module.add_function(
             "printf",
             context.i32_type().fn_type(
@@ -367,9 +368,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .skip(1)
                     .map(|expr| self.compile_expr(expr))
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
-           
                 let op = self.extract_function(op.into_struct_value()).unwrap();
-                    // self.print_ir();
                 let function: CallableValue<'_> = op.into_pointer_value().try_into().unwrap();
                 let args= args.iter().map(|a|
                     {
@@ -423,13 +422,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let print_fn = self.module.add_function("extract_bool", print_fn_ty, None);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
         let error_block = self.context.append_basic_block(print_fn, "error");
-        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let ret_block = self.context.append_basic_block(print_fn, "return");
         let args = print_fn.get_first_param().unwrap();
         self.builder.position_at_end(error_block);
-        self.builder.build_indirect_branch(
-            unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-            &[],
-        );
+        // self.builder.build_indirect_branch(
+        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
+        //     &[],
+        // );
+        self.exit("not a bool", 1, self.context.bool_type().into());
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -477,14 +477,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .module
             .add_function("extract_number", print_fn_ty, None);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let ret_block = self.context.append_basic_block(print_fn, "return");
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        self.builder.build_indirect_branch(
-            unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-            &[],
-        );
+        // self.builder.build_indirect_branch(
+        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
+        //     &[],
+        // );
+        self.exit("not a number", 1, self.context.f64_type().into());
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -535,14 +536,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .module
             .add_function("extract_string", print_fn_ty, None);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let ret_block = self.context.append_basic_block(print_fn, "return");
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        self.builder.build_indirect_branch(
-            unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-            &[],
-        );
+        // self.builder.build_indirect_branch(
+        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
+        //     &[],
+        // );
+        self.exit("not a string", 1, self
+        .context
+        .i8_type()
+        .ptr_type(AddressSpace::default()).into());
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -592,21 +597,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .module
             .add_function("extract_function", print_fn_ty, None);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let ret_block = self.context.append_basic_block(print_fn, "return");
         let args = print_fn.get_first_param().unwrap();
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        
-
-
-        self.builder.build_indirect_branch(
-            unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-            &[error_block],
-        );
+        // self.builder.build_indirect_branch(
+        //     unsafe { self.error_block.unwrap().get_address() }.unwrap(),
+        //     &[self.error_block.unwrap()],
+        // );
+        self.exit("not a function", 1, self
+        .fn_type
+        .ptr_type(AddressSpace::default()).into());
         self.builder.position_at_end(entry_block);
-        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
-        block_ptr.print_to_stderr();
-        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting  function %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
+       
         let ty = self
             .extract_type(args.into_struct_value())
             .unwrap()
@@ -668,7 +671,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
-        self.error_block = Some(self.context.append_basic_block(main_fn, "error"));
+        // self.error_block = Some(self.context.append_basic_block(main_fn, "error"));
         // TODO: maybe dont optimize make_* functions b/c indirect call branches
         self.make_extract_bool();
         self.make_extract_number();
@@ -677,18 +680,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.fn_value = Some(main_fn);
         self.make_print();
 
-        self.builder.position_at_end(self.error_block.unwrap());
-
-        // self.builder.build_indirect_branch(
-            // unsafe { self.error_block.unwrap().get_address() }.unwrap(),
-            // &[],
-        // );
-        // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting", "error").as_basic_value_enum().into()], "error print");
-        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
-        block_ptr.print_to_stderr();
-        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting print %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
-        self.builder
-            .build_return(Some((&self.context.i32_type().const_int(1, false))));
+        // self.builder.position_at_end(self.error_block.unwrap());
+        // self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting error", "error").as_basic_value_enum().into()], "error print");
+        // self.builder
+        //     .build_return(Some((&self.context.i32_type().const_int(1, false))));
         self.builder.position_at_end(main_block);
       
         self.new_env();
@@ -758,6 +753,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Target::initialize_native(&config);
         let triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&triple).unwrap();
+    
         let tm = target.create_target_machine(          &TargetMachine::get_default_triple(),
         &TargetMachine::get_host_cpu_name().to_string(),
         &TargetMachine::get_host_cpu_features().to_string(),
@@ -765,6 +761,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         RelocMode::Default,
         CodeModel::Default,).unwrap();
         tm.add_analysis_passes(self.fpm);
+        
         
         tm.write_to_file(self.module, inkwell::targets::FileType::Object, &o_path).expect(" writing to file " );
                 
@@ -783,17 +780,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let string_block = self.context.append_basic_block(print_fn, "string");
         // let cons_block = self.context.append_basic_block(print_fn, "cons");
         // let lambda_block = self.context.append_basic_block(print_fn, "lambda");
-        let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let ret_block = self.context.append_basic_block(print_fn, "return");
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
-        let block_ptr = unsafe { self.error_block.unwrap().get_address() }.unwrap();
-        block_ptr.print_to_stderr();
-        self.builder.build_call(self.module.get_function("printf").unwrap(), &[self.builder.build_global_string_ptr("exiting %p", "error").as_basic_value_enum().into(), block_ptr.into()], "error print");
-        self.builder.build_indirect_branch(
-            block_ptr,
-            &[],
-        );
 
+    
+        self.exit("not a valid type", 1, self.kind.into());
         self.builder.position_at_end(entry_block);
         let args = print_fn.get_first_param().unwrap().into_struct_value();
 
@@ -888,11 +880,42 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // self.fpm.run_on(&print_fn);
     }
 
-    fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
+    fn print<>(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        // self.module.ad\\
         let print = self.module.get_function("print").unwrap();
         self.builder
             .build_call(print, &[val.into()], "print")
             .try_as_basic_value()
             .unwrap_left()
     }
+
+    pub fn exit(&self, reason: &str, code: i32, ty: BasicTypeEnum<'a>) {
+        let print = self.module.get_function("printf").unwrap();
+        self.builder.build_call(
+            print,
+            &[
+                self.builder
+                    .build_global_string_ptr(reason, "error exit")
+                    .as_basic_value_enum()
+                    .into(),
+            ],
+            "print",
+        );
+        let exit = self.module.get_function("exit").unwrap();
+    self.builder.build_call(
+            exit,
+            &[self.context.i32_type().const_int(code as u64, false).into()],
+            "exit"
+        );
+    
+    self.builder.build_return(Some(&ty.const_zero()));
+    }
 }
+
+
+// pub extern "C" fn exit() -> ! {
+    // println!("exit");
+    // exit!()
+// }
+
+extern  "C" {fn exit(i: i8 ) -> !;}

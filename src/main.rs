@@ -7,10 +7,10 @@
 )]
 #![allow(clippy::similar_names)]
 
-use std::time::Duration;
+
 
 use inkwell::{context::Context, passes::PassManager};
-use unic_emoji_char::is_emoji_presentation;
+
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 
@@ -66,9 +66,8 @@ fn main() {
             complier.export_bc("bin/main");
             complier.export_ir("bin/main");
             complier.export_object("bin/main");
-            // let ret = complier.run();
-
-            // print!("\nret {ret}\n", );
+            let ret = complier.run();
+            print!("\nret {ret}\n", );
         },
         |err| {
             println!("error: {err}");
