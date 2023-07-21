@@ -598,8 +598,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.context.bool_type().fn_type(&[self.kind.into()], false);
         let print_fn = self.module.add_function("extract_bool", print_fn_ty, None);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
+        let error_block = self.context.append_basic_block(print_fn, "error");
         let ret_block = self.context.append_basic_block(print_fn, "ret");
         let args = print_fn.get_first_param().unwrap();
+        self.builder.position_at_end(error_block);
+        self.builder.build_indirect_branch(unsafe { self.error_block.unwrap().get_address() }.unwrap(), &[]);
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -615,7 +618,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
 
         self.builder
-            .build_conditional_branch(condition, ret_block, self.error_block.unwrap());
+            .build_conditional_branch(condition, ret_block, error_block);
         self.builder.position_at_end(ret_block);
 
         self.builder.build_return(Some(
@@ -625,6 +628,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_bool(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -643,6 +647,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let entry_block = self.context.append_basic_block(print_fn, "entry");
         let ret_block = self.context.append_basic_block(print_fn, "ret");
         let args = print_fn.get_first_param().unwrap();
+        let error_block = self.context.append_basic_block(print_fn, "error");
+        self.builder.position_at_end(error_block);
+        self.builder.build_indirect_branch(unsafe { self.error_block.unwrap().get_address() }.unwrap(), &[]);
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -658,7 +665,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
 
         self.builder
-            .build_conditional_branch(condition, ret_block, self.error_block.unwrap());
+            .build_conditional_branch(condition, ret_block, error_block);
         self.builder.position_at_end(ret_block);
 
         self.builder.build_return(Some(
@@ -668,6 +675,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_number(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -685,6 +693,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let entry_block = self.context.append_basic_block(print_fn, "entry");
         let ret_block = self.context.append_basic_block(print_fn, "ret");
         let args = print_fn.get_first_param().unwrap();
+        let error_block = self.context.append_basic_block(print_fn, "error");
+        self.builder.position_at_end(error_block);
+        self.builder.build_indirect_branch(unsafe { self.error_block.unwrap().get_address() }.unwrap(), &[]);
         self.builder.position_at_end(entry_block);
         let ty = self
             .extract_type(args.into_struct_value())
@@ -700,7 +711,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
 
         self.builder
-            .build_conditional_branch(condition, ret_block, self.error_block.unwrap());
+            .build_conditional_branch(condition, ret_block, error_block);
         self.builder.position_at_end(ret_block);
 
         self.builder.build_return(Some(
@@ -710,6 +721,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap(),
         ));
         print_fn.verify(true);
+        self.fpm.run_on(&print_fn);
     }
 
     fn extract_string(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -769,6 +781,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
         self.error_block = Some(self.context.append_basic_block(main_fn, "error"));
+        // TODO: maybe dont optimize make_* functions b/c indirect call branches
         self.make_extract_bool();
         self.make_extract_number();
         self.make_extract_string();
@@ -808,7 +821,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // //  self.builder.p
         // );
         if main_fn.verify(true) {
-            // self.fpm.run_on(&main_fn);
+            self.fpm.run_on(&main_fn);
             // let main = self.module.add_function("main", main_fn_type, None);
             // let main_block = self.context.append_basic_block(main, "entry");
             // self.builder.position_at_end(main_block);
@@ -855,6 +868,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // let cons_block = self.context.append_basic_block(print_fn, "cons");
         // let lambda_block = self.context.append_basic_block(print_fn, "lambda");
         let ret_block = self.context.append_basic_block(print_fn, "ret");
+        let error_block = self.context.append_basic_block(print_fn, "error");
+        self.builder.position_at_end(error_block);
+        self.builder.build_indirect_branch(unsafe { self.error_block.unwrap().get_address() }.unwrap(), &[]);
         let args = print_fn.get_first_param().unwrap();
         self.builder.position_at_end(entry_block);
         let ty = self
@@ -863,7 +879,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .into_int_value();
         self.builder.build_switch(
             ty,
-            self.error_block.unwrap(),
+            error_block,
             &[
                 (
                     self.context
@@ -891,15 +907,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let call = self
             .builder
-            .build_call(print, &[self.builder.build_global_string_ptr("%s", "bool fmt specifier").as_basic_value_enum().into(), val.into()], "print");
+            .build_call(print, &[self.builder.build_global_string_ptr("%i", "bool fmt specifier").as_basic_value_enum().into(),val.into() ], "print");
         self.builder.build_unconditional_branch(ret_block);
 
         self.builder.position_at_end(number_block);
         let val = self.extract_number(args.into_struct_value()).unwrap();
+        let print = self.module.get_function("printf").unwrap();
+
+        let call = self
+            .builder
+            .build_call(print, &[self.builder.build_global_string_ptr("%d", "number fmt specifier").as_basic_value_enum().into(),val.into() ], "print");
         self.builder.build_unconditional_branch(ret_block);
         self.builder.position_at_end(string_block);
         let val = self.extract_string(args.into_struct_value()).unwrap();
+        let print = self.module.get_function("printf").unwrap();
+
+        let call = self
+            .builder
+            .build_call(print, &[self.builder.build_global_string_ptr("%s", "string fmt specifier").as_basic_value_enum().into(),val.into() ], "print");
         self.builder.build_unconditional_branch(ret_block);
+
         self.builder.position_at_end(ret_block);
         let phi = self.builder.build_phi(self.kind, "print return");
         phi.add_incoming(&[
@@ -910,6 +937,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_return(Some(&phi.as_basic_value()));
         self.fn_value = old;
         print_fn.verify(true);
+        self.fpm.run_on(&print_fn);
     }
 
     fn print(&self, val: BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {

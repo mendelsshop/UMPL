@@ -53,13 +53,15 @@ fn main() {
 
     fpm.initialize();
 
-    let fn_type = umpl_parse("(print &)<").unwrap();
+    let fn_type = umpl_parse("(print .i am mendel.)<").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
         || {
             complier.print_ir();
-            print!("ret {}\n", complier.run());
+            let ret = complier.run();
+            
+            print!("\nret {ret}\n", );
         },
         |err| {
             println!("error: {err}");
