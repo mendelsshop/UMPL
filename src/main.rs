@@ -7,6 +7,8 @@
 )]
 #![allow(clippy::similar_names)]
 
+use std::time::Duration;
+
 use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
@@ -53,7 +55,7 @@ fn main() {
 
     fpm.initialize();
 
-    let fn_type = umpl_parse("(print .i am mendel.)<").unwrap();
+    let fn_type = umpl_parse("let i 4 (print i)<").unwrap();
     println!("{fn_type:?}");
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&fn_type).map_or_else(
