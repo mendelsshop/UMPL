@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::{HashMap, HashSet}, path::PathBuf};
 
 use inkwell::{
     builder::Builder,
@@ -12,7 +12,7 @@ use inkwell::{
         BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallableValue, FloatValue,
         FunctionValue, GlobalValue, IntValue, PointerValue, StructValue,
     },
-    AddressSpace, OptimizationLevel,
+    AddressSpace, OptimizationLevel, basic_block::BasicBlock,
 };
 
 use crate::{
@@ -40,6 +40,7 @@ pub struct Compiler<'a, 'ctx> {
     fn_value: Option<FunctionValue<'ctx>>,
     jit: ExecutionEngine<'ctx>,
     cons_type: inkwell::types::PointerType<'ctx>,
+    links: HashMap<RC<str>, BasicBlock<'ctx>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,6 +111,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             jit,
             fn_type,
             cons_type,
+            links: HashMap::new()
         }
     }
 
@@ -376,7 +378,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(Some(unwrap_left))
             }
             UMPL2Expr::Quoted(_) => todo!(),
-            UMPL2Expr::Label(_) => todo!(),
+            UMPL2Expr::Label(s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
@@ -657,7 +659,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_load(self.get_variable(s).ok_or(format!("{s} not found"))?, s))
     }
 
-    pub fn compile_program(&mut self, program: &[UMPL2Expr]) -> Option<String> {
+    pub fn compile_program(&mut self, program: &[UMPL2Expr], links:HashSet<RC<str>>,) -> Option<String> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
