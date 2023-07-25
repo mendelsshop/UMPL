@@ -53,12 +53,13 @@ fn main() {
 
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
-    let fn_type = umpl_parse(" (fanction  2* ᚜ (print '0')< ᚛ 2 fanction  2* ᚜ (print '0')< ᚛ 6)<").unwrap();
-    
+    let fn_type =
+        umpl_parse(" (fanction  2* ᚜ (print '0')< ᚛ 2 fanction  2* ᚜ (print '0')< ᚛ 6)<").unwrap();
+
     println!("{fn_type:?}");
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
-    complier.compile_program( &program.1, program.0).map_or_else(
+    complier.compile_program(&program.1, program.0).map_or_else(
         || {
             complier.print_ir();
             complier.export_bc("bin/main");

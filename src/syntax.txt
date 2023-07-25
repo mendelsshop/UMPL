@@ -18,7 +18,7 @@ continue-doing = continue-doing scope(loop-expr)
 fn = fanction emoji? [0-9]*'*'|'+' scope(fn-expr) param count is bast 10
 fn-expr = expr | fn-ident
 fn-ident = '|" [0-7]+ '|" ie base8 number surrounded by vertical bars
-link-stmt link label label*
+link-stmt = link label label*
 application = any-bidi-opening expr* any-bidi-closing
 special-start = quoted | label
 quoted = ;expr

@@ -38,6 +38,7 @@ pub enum UMPL2Expr {
     Tree(Tree),
     FnKW(FnKeyword),
     Let(RC<str>, Box<UMPL2Expr>),
+    ComeTo(RC<str>),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FnKeyword {
@@ -157,6 +158,14 @@ impl GoThrough {
     pub fn iter_mut(&mut self) -> &mut UMPL2Expr {
         &mut self.iter
     }
+
+    pub fn scope(&self) -> &[UMPL2Expr] {
+        self.scope.as_ref()
+    }
+
+    pub fn iter(&self) -> &UMPL2Expr {
+        &self.iter
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -177,6 +186,14 @@ impl Until {
 
     pub fn cond_mut(&mut self) -> &mut UMPL2Expr {
         &mut self.cond
+    }
+
+    pub fn cond(&self) -> &UMPL2Expr {
+        &self.cond
+    }
+
+    pub fn scope(&self) -> &[UMPL2Expr] {
+        self.scope.as_ref()
     }
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -243,6 +260,18 @@ impl Unless {
 
     pub fn cond_mut(&mut self) -> &mut UMPL2Expr {
         &mut self.cond
+    }
+
+    pub fn cond(&self) -> &UMPL2Expr {
+        &self.cond
+    }
+
+    pub fn cons(&self) -> &[UMPL2Expr] {
+        self.cons.as_ref()
+    }
+
+    pub fn alt(&self) -> &[UMPL2Expr] {
+        self.alt.as_ref()
     }
 }
 

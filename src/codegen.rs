@@ -1,6 +1,10 @@
-use std::{collections::{HashMap, HashSet}, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use inkwell::{
+    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     execution_engine::ExecutionEngine,
@@ -12,7 +16,7 @@ use inkwell::{
         BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallableValue, FloatValue,
         FunctionValue, GlobalValue, IntValue, PointerValue, StructValue,
     },
-    AddressSpace, OptimizationLevel, basic_block::BasicBlock,
+    AddressSpace, OptimizationLevel,
 };
 
 use crate::{
@@ -111,7 +115,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             jit,
             fn_type,
             cons_type,
-            links: HashMap::new()
+            links: HashMap::new(),
         }
     }
 
@@ -294,7 +298,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
-            UMPL2Expr::Scope(_) => todo!(),
+            UMPL2Expr::Scope(_) => unreachable!(),
             UMPL2Expr::If(if_stmt) => {
                 let parent = self.current_fn_value()?;
                 let cond_struct =
@@ -409,6 +413,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.context.bool_type().const_zero().as_basic_value_enum(),
                 ));
             }
+            UMPL2Expr::ComeTo(_) => todo!(),
         }
     }
 
@@ -659,7 +664,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_load(self.get_variable(s).ok_or(format!("{s} not found"))?, s))
     }
 
-    pub fn compile_program(&mut self, program: &[UMPL2Expr], links:HashSet<RC<str>>,) -> Option<String> {
+    pub fn compile_program(
+        &mut self,
+        program: &[UMPL2Expr],
+        links: HashSet<RC<str>>,
+    ) -> Option<String> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");

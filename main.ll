@@ -17,6 +17,7 @@ excep:
   indirectbr i8* %blk, [label %error]
   ; ret i32 7
 
+; link @error ...
 error:                     
   ret i32 -1
 }
@@ -24,6 +25,7 @@ error:
 define i32 @other() {
 other:
     ; %c = call i32 @rain(i8* null)
+    ; @error
     %c = call i32 @rain(i8* blockaddress(@rain, %error), label %error)
     ret i32 %c
 }
