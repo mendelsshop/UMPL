@@ -332,7 +332,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             |first_instr| self.builder.position_before(&first_instr),
         );
 
-        Ok(self.builder.build_alloca(self.types.object, name))
+        // Ok(self.builder.build_alloca(self.types.object, name))
+        // store everything as a global variable
+        Ok(self.module.add_global(self.types.object, Some(AddressSpace::default()), name).as_pointer_value())
     }
 
     fn new_env(&mut self) {
@@ -519,7 +521,22 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .unwrap_left();
                 Ok(Some(unwrap_left))
             }
-            UMPL2Expr::Quoted(_) => todo!(),
+            // right now the approach for quotation is to codegen the expression and wrap it in a function which will be called with the to get the value of the expression
+            // kinda of doesnt work because quotation should assume nothing about the environment, but since we do a full codegen if a ident is quoted it will attempt to lookup
+            // the variable and error if it doesn't exist (not wanted behavior)
+            // another approach would be to make codegen eitheer return and llvm value or a UMPl2expr
+            UMPL2Expr::Quoted(expr) => {
+                let saved_block = self.builder.get_insert_block();
+                let quoted_fn = self.module.add_function("quoted", self.types.quoted, None);
+                let quote_block = self.context.append_basic_block(quoted_fn, "quoted:entry");
+                self.builder.position_at_end(quote_block);
+                self.builder.build_return(Some(& return_none!(self.compile_expr(expr)?)));
+                if let Some(saved_block) = saved_block {
+                    self.builder.position_at_end(saved_block);
+                }
+                Ok(Some(self.object_builder.quoted(quoted_fn.as_global_value().as_pointer_value()).as_basic_value_enum()))
+
+            },
             UMPL2Expr::Label(_s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => todo!(),
@@ -545,7 +562,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;
-                let ptr = self.builder.build_alloca(ty, i);
+                // let ptr = self.builder.build_alloca(ty, i);
+                let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
                 self.builder.build_store(ptr, v);
                 self.insert_variable(i.clone(), ptr);
                 return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
