@@ -79,7 +79,7 @@ impl Analyzer {
             UMPL2Expr::Fanction(fanction) => {
                 self.find_links(fanction.scope_mut());
             }
-            UMPL2Expr::FnKW(_) => todo!(),
+            UMPL2Expr::FnKW(_) => {},
             UMPL2Expr::Let(_, v) => self.find_link(v),
         });
     }
