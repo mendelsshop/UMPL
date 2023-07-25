@@ -11,7 +11,7 @@ use inkwell::{
     module::{Linkage, Module},
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::{BasicType, BasicTypeEnum, FunctionType, StructType},
+    types::{BasicType, BasicTypeEnum, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
         BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallableValue, FloatValue,
         FunctionValue, GlobalValue, IntValue, PointerValue, StructValue,
@@ -39,23 +39,209 @@ pub struct Compiler<'a, 'ctx> {
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
-    kind: StructType<'ctx>,
-    fn_type: FunctionType<'ctx>,
+    // kind: StructType<'ctx>,
+    // fn_type: FunctionType<'ctx>,
     fn_value: Option<FunctionValue<'ctx>>,
     jit: ExecutionEngine<'ctx>,
-    cons_type: inkwell::types::PointerType<'ctx>,
+    // cons_type: inkwell::types::PointerType<'ctx>,
     links: HashMap<RC<str>, BasicBlock<'ctx>>,
+    // quoted_type: FunctionType<'ctx>,
+    types: Types<'ctx>,
+    object_builder: Object<'ctx>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub enum TyprIndex {
-    String = 2,
-    Number = 1,
-    Boolean = 0,
-    Cons = 3,
-    Lambda = 4,
+    string = 2,
+    number = 1,
+    boolean = 0,
+    cons = 3,
+    lambda = 4,
+    quoted = 5,
+    #[default]
+    Unkown = 100,
 }
+
+macro_rules! builder_object {
+    ($value:ident, $type:ty) => {
+        pub fn $value(&mut self, value: $type) -> StructValue<'ctx> {
+            self.ty = TyprIndex::$value;
+            self.$value = Some(value);
+            self.object()
+        }
+    };
+}
+
+#[derive(Clone, Copy)]
+pub struct Types<'ctx> {
+    pub object: StructType<'ctx>,
+    pub ty: IntType<'ctx>,
+    pub boolean: IntType<'ctx>,
+    pub number: FloatType<'ctx>,
+    pub string: PointerType<'ctx>,
+    pub cons: PointerType<'ctx>,
+    pub lambda: FunctionType<'ctx>,
+    pub quoted: FunctionType<'ctx>,
+    pub lambda_ptr: PointerType<'ctx>,
+    pub quoted_ptr: PointerType<'ctx>,
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct Object<'ctx> {
+    ty: TyprIndex,
+    types: Option<Types<'ctx>>,
+    boolean: Option<IntValue<'ctx>>,
+    number: Option<FloatValue<'ctx>>,
+    string: Option<PointerValue<'ctx>>,
+    cons: Option<PointerValue<'ctx>>,
+    lambda: Option<PointerValue<'ctx>>,
+    quoted: Option<PointerValue<'ctx>>,
+}
+
+impl<'ctx> Object<'ctx> {
+    pub fn new(types: Types<'ctx>) -> Self {
+        Self {
+            types: Some(types),
+            ..Default::default()
+        }
+    }
+
+    builder_object!(boolean, IntValue<'ctx>);
+    builder_object!(number, FloatValue<'ctx>);
+    builder_object!(string, PointerValue<'ctx>);
+    builder_object!(cons, PointerValue<'ctx>);
+    builder_object!(lambda, PointerValue<'ctx>);
+    builder_object!(quoted, PointerValue<'ctx>);
+
+    pub fn object(&mut self) -> StructValue<'ctx> {
+        let types = self.types.unwrap();
+        let result = types.object.const_named_struct(&[
+            types.ty.const_int(self.ty as u64, false).into(),
+            self.boolean
+                .unwrap_or_else(|| types.boolean.const_zero())
+                .into(),
+            self.number
+                .unwrap_or_else(|| types.number.const_zero())
+                .into(),
+            self.string
+                .unwrap_or_else(|| types.string.const_null())
+                .into(),
+            self.cons.unwrap_or_else(|| types.cons.const_null()).into(),
+            self.lambda
+                .unwrap_or_else(|| types.lambda_ptr.const_null())
+                .into(),
+            self.quoted
+                .unwrap_or_else(|| types.quoted_ptr.const_null())
+                .into(),
+        ]);
+        *self = Self::new(types);
+        result
+    }
+
+    fn const_string(
+        &mut self,
+        value: &RC<str>,
+        string_map: Option<&mut HashMap<RC<str>, GlobalValue<'ctx>>>,
+        builder: &Builder<'ctx>,
+    ) -> StructValue<'ctx> {
+        #[allow(clippy::map_unwrap_or)]
+        // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
+        let str = string_map.map_or_else(
+            || {
+                builder
+                    .build_global_string_ptr(value, value)
+                    .as_pointer_value()
+            },
+            |string_map| {
+                string_map.get(value).map_or_else(
+                    || {
+                        builder
+                            .build_global_string_ptr(value, value)
+                            .as_pointer_value()
+                    },
+                    |string| string.as_pointer_value(),
+                )
+            },
+        );
+        self.string(str)
+    }
+
+    fn const_number(&mut self, value: f64) -> StructValue<'ctx> {
+        let types = self.types.unwrap();
+        self.number(types.number.const_float(value))
+    }
+
+    fn const_boolean(&mut self, value: Boolean) -> StructValue<'ctx> {
+        let types = self.types.unwrap();
+        self.boolean(types.boolean.const_int(
+            match value {
+                Boolean::False => 0,
+                Boolean::True => 1,
+                Boolean::Maybee => todo!(),
+            },
+            false,
+        ))
+    }
+}
+
+macro_rules! make_extract {
+    ($self:expr, $type:ident, $o_type: ident, $name:literal) => {{
+        let extract_fn_ty: FunctionType<'_> = $self
+            .types
+            .$type
+            .fn_type(&[$self.types.object.into()], false);
+        let extract_fn =
+            $self
+                .module
+                .add_function(&format!("extract_{}", $name), extract_fn_ty, None);
+        let prefix = |end| format!("extract-{}:{end}", $name);
+        let entry_block = $self
+            .context
+            .append_basic_block(extract_fn, &prefix("entry"));
+        let ret_block = $self
+            .context
+            .append_basic_block(extract_fn, &prefix("return"));
+        let args = extract_fn.get_first_param().unwrap();
+        let error_block = $self
+            .context
+            .append_basic_block(extract_fn, &prefix("error"));
+        $self.builder.position_at_end(error_block);
+        $self.exit(&format!("not a {}\n", $name), 1, $self.types.$type.into());
+        $self.builder.position_at_end(entry_block);
+
+        let ty = $self
+            .extract_type(args.into_struct_value())
+            .unwrap()
+            .into_int_value();
+        let condition = $self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            ty,
+            $self.types.ty.const_int(TyprIndex::$o_type as u64, false),
+            &prefix("cmp-type"),
+        );
+
+        $self
+            .builder
+            .build_conditional_branch(condition, ret_block, error_block);
+        $self.builder.position_at_end(ret_block);
+
+        $self.builder.build_return(Some(
+            &$self
+                .builder
+                .build_extract_value(
+                    args.into_struct_value(),
+                    TyprIndex::$o_type as u32 + 1,
+                    &prefix("return"),
+                )
+                .unwrap(),
+        ));
+        extract_fn.verify(true);
+        $self.fpm.run_on(&extract_fn);
+    }};
+}
+
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn new(
         context: &'ctx Context,
@@ -67,14 +253,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
         let kind = context.opaque_struct_type("object");
-        // let vec_type = context.opaque_struct_type("vec");
-        // let vec_type = kind.ptr_type(AddressSpace::default()).vec_type(1);
-        let fn_type = kind.fn_type(&[kind.into()], true);
-        let i8_type = context.i8_type();
-        let str_type = i8_type.ptr_type(AddressSpace::default());
-        let num_type = context.f64_type();
-        let cons_type = kind.array_type(2).ptr_type(AddressSpace::default());
-        let bool_type = context.bool_type();
+        let lambda = kind.fn_type(&[kind.into()], true);
+        let quoted = kind.fn_type(&[], false);
+        let types = Types {
+            object: kind,
+            ty: context.i8_type(),
+            boolean: context.bool_type(),
+            number: context.f64_type(),
+            string: context.i8_type().ptr_type(AddressSpace::default()),
+            cons: kind
+                .ptr_type(AddressSpace::default())
+                .array_type(3)
+                .ptr_type(AddressSpace::default()),
+            lambda,
+            lambda_ptr: lambda.ptr_type(AddressSpace::default()),
+            quoted,
+            quoted_ptr: quoted.ptr_type(AddressSpace::default()),
+        };
         module.add_function(
             "exit",
             context
@@ -84,25 +279,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         module.add_function(
             "printf",
-            context.i32_type().fn_type(
-                &[context.i8_type().ptr_type(AddressSpace::default()).into()],
-                true,
-            ),
+            context.i32_type().fn_type(&[types.string.into()], true),
             Some(Linkage::External),
         );
         kind.set_body(
             &[
-                i8_type.as_basic_type_enum(),
-                bool_type.as_basic_type_enum(),
-                num_type.as_basic_type_enum(),
-                str_type.as_basic_type_enum(),
-                cons_type.as_basic_type_enum(),
-                fn_type
+                types.ty.as_basic_type_enum(),
+                types.boolean.as_basic_type_enum(),
+                types.number.as_basic_type_enum(),
+                types.string.as_basic_type_enum(),
+                types.cons.as_basic_type_enum(),
+                types
+                    .lambda
+                    .ptr_type(AddressSpace::default())
+                    .as_basic_type_enum(),
+                types
+                    .quoted
                     .ptr_type(AddressSpace::default())
                     .as_basic_type_enum(),
             ],
             false,
         );
+        let object_builder = Object::new(types);
         Self {
             context,
             module,
@@ -110,92 +308,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             builder,
             fpm,
             string: HashMap::new(),
-            kind,
+
             fn_value: None,
             jit,
-            fn_type,
-            cons_type,
+            types,
             links: HashMap::new(),
+            object_builder,
         }
     }
 
-    fn value(
-        &self,
-        ty: TyprIndex,
-        bool: Option<IntValue<'ctx>>,
-        number: Option<FloatValue<'ctx>>,
-        string: Option<PointerValue<'ctx>>,
-        cons: Option<PointerValue<'ctx>>,
-        lambda: Option<PointerValue<'ctx>>,
-    ) -> StructValue<'ctx> {
-        self.kind.const_named_struct(&[
-            self.context.i8_type().const_int(ty as u64, false).into(),
-            bool.unwrap_or(self.context.bool_type().const_zero()).into(),
-            number
-                .unwrap_or(self.context.f64_type().const_zero())
-                .into(),
-            string
-                .unwrap_or(
-                    self.context
-                        .i8_type()
-                        .ptr_type(AddressSpace::default())
-                        .const_null(),
-                )
-                .into(),
-            cons.unwrap_or(self.cons_type.const_null()).into(),
-            lambda
-                .unwrap_or(self.fn_type.ptr_type(AddressSpace::default()).const_null())
-                .into(),
-        ])
-    }
-
-    fn number(&self, value: FloatValue<'ctx>) -> StructValue<'ctx> {
-        self.value(TyprIndex::Number, None, Some(value), None, None, None)
-    }
-
-    fn const_number(&self, value: f64) -> StructValue<'ctx> {
-        self.number(self.context.f64_type().const_float(value))
-    }
-
-    fn bool(&self, value: IntValue<'ctx>) -> StructValue<'ctx> {
-        self.value(TyprIndex::Boolean, Some(value), None, None, None, None)
-    }
-
-    fn const_bool(&self, value: Boolean) -> StructValue<'ctx> {
-        self.bool(self.context.bool_type().const_int(value as u64, false))
-    }
-
-    fn string(&self, value: PointerValue<'ctx>) -> StructValue<'ctx> {
-        self.value(TyprIndex::String, None, None, Some(value), None, None)
-    }
-
-    fn function(&self, value: PointerValue<'ctx>) -> StructValue<'ctx> {
-        self.value(TyprIndex::Lambda, None, None, None, None, Some(value))
-    }
-
-    fn const_string(&mut self, value: RC<str>) -> StructValue<'ctx> {
-        #[allow(clippy::map_unwrap_or)]
-        // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
-        let str = self
-            .string
-            .get(&value)
-            .map(BasicValue::as_basic_value_enum)
-            .unwrap_or_else(|| {
-                let str_ptr = &self.builder.build_global_string_ptr(&value, &value);
-                self.string.insert(value, *str_ptr);
-                str_ptr.as_basic_value_enum()
-            })
-            .into_pointer_value();
-        self.string(str)
-    }
-
     #[inline]
-    fn current_fn_value(&self) -> Result<FunctionValue<'ctx>, String> {
-        self.fn_value
-            .ok_or("could not find current function".to_string())
+    fn current_fn_value(&self) -> Result<FunctionValue<'ctx>, &str> {
+        self.fn_value.ok_or("could not find current function")
     }
     // / Creates a new stack allocation instruction in the entry block of the function.
-    fn create_entry_block_alloca(&self, name: &str) -> Result<PointerValue<'ctx>, String> {
+    fn create_entry_block_alloca(&self, name: &str) -> Result<PointerValue<'ctx>, &str> {
         let fn_value = self.current_fn_value()?;
         // if a function is already allocated it will have an entry block so its fine to unwrap
         let entry = fn_value.get_first_basic_block().unwrap();
@@ -205,7 +332,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             |first_instr| self.builder.position_before(&first_instr),
         );
 
-        Ok(self.builder.build_alloca(self.kind, name))
+        Ok(self.builder.build_alloca(self.types.object, name))
     }
 
     fn new_env(&mut self) {
@@ -228,16 +355,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .rev()
             .flatten()
             .find(|v| v.0 == name)
-            .map(|v| v.1.clone())
+            .map(|v| *v.1)
     }
 
     fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         match expr {
-            UMPL2Expr::Number(value) => Ok(Some(self.const_number(*value).as_basic_value_enum())),
-            UMPL2Expr::Bool(value) => Ok(Some(self.const_bool(*value).as_basic_value_enum())),
-            UMPL2Expr::String(value) => {
-                Ok(Some(self.const_string(value.clone()).as_basic_value_enum()))
-            }
+            UMPL2Expr::Number(value) => Ok(Some(
+                self.object_builder
+                    .const_number(*value)
+                    .as_basic_value_enum(),
+            )),
+            UMPL2Expr::Bool(value) => Ok(Some(
+                self.object_builder
+                    .const_boolean(*value)
+                    .as_basic_value_enum(),
+            )),
+            UMPL2Expr::String(value) => Ok(Some(
+                self.object_builder
+                    .const_string(value, Some(&mut self.string), self.builder)
+                    .as_basic_value_enum(),
+            )),
             UMPL2Expr::Fanction(r#fn) => {
                 let old_fn = self.fn_value;
                 let old_block = self.builder.get_insert_block();
@@ -245,11 +382,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let name = r#fn
                     .name()
                     .map_or("lambda".to_string(), |name| name.to_string());
-                let arg_types: Vec<_> = std::iter::repeat(self.kind)
+                let arg_types: Vec<_> = std::iter::repeat(self.types.object)
                     .take(r#fn.param_count())
                     .map(std::convert::Into::into)
                     .collect();
-                let ret_type = self.kind;
+                let ret_type = self.types.object;
                 let fn_type = ret_type.fn_type(&arg_types, false);
                 let fn_value = self.module.add_function(&name, fn_type, None);
 
@@ -284,7 +421,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.pop_env();
 
                     Ok(Some(
-                        self.function(fn_value.as_global_value().as_pointer_value())
+                        self.object_builder
+                            .lambda(fn_value.as_global_value().as_pointer_value())
                             .as_basic_value_enum(),
                     ))
                 } else {
@@ -309,12 +447,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let cond = self.builder.build_int_compare(
                     inkwell::IntPredicate::NE,
                     object_type,
-                    self.context.i8_type().const_int(2, false),
-                    "ifcond",
+                    self.types.ty.const_int(2, false),
+                    "if:cond:boolean?",
                 );
 
                 // conditinal: either not bool or true
-                self.builder.build_or(bool_val, cond, "ifcond");
+                self.builder.build_or(bool_val, cond, "if:cond:false?");
                 let then_bb = self.context.append_basic_block(parent, "then");
                 let else_bb = self.context.append_basic_block(parent, "else");
                 let cont_bb = self.context.append_basic_block(parent, "ifcont");
@@ -338,7 +476,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 // emit merge block
                 self.builder.position_at_end(cont_bb);
 
-                let phi = self.builder.build_phi(self.kind, "iftmp");
+                let phi = self.builder.build_phi(self.types.object, "if:phi-cont");
                 match (then_val, else_val) {
                     (None, None) => phi.add_incoming(&[]),
                     (None, Some(else_val)) => phi.add_incoming(&[(&else_val, else_bb)]),
@@ -371,18 +509,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let function: CallableValue<'_> = op.into_pointer_value().try_into().unwrap();
                 let args = args
                     .iter()
-                    .map(|a| a.clone().into())
+                    .map(|a| (*a).into())
                     .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
                 let unwrap_left = self
                     .builder
-                    .build_call(function, args.as_slice(), "callfn")
+                    .build_call(function, args.as_slice(), "application:call")
                     .try_as_basic_value()
                     .unwrap_left();
                 Ok(Some(unwrap_left))
             }
             UMPL2Expr::Quoted(_) => todo!(),
-            UMPL2Expr::Label(s) => todo!(),
+            UMPL2Expr::Label(_s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
@@ -394,24 +532,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 FnKeyword::Div => todo!(),
                 FnKeyword::Mod => todo!(),
                 FnKeyword::Print => Ok(Some(
-                    self.function(
-                        self.module
-                            .get_function("print")
-                            .map(|func| func.as_global_value().as_pointer_value())
-                            .unwrap(),
-                    )
-                    .as_basic_value_enum(),
+                    self.object_builder
+                        .lambda(
+                            self.module
+                                .get_function("print")
+                                .map(|func| func.as_global_value().as_pointer_value())
+                                .unwrap(),
+                        )
+                        .as_basic_value_enum(),
                 )),
             },
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
-                let ty = self.kind;
+                let ty = self.types.object;
                 let ptr = self.builder.build_alloca(ty, i);
                 self.builder.build_store(ptr, v);
                 self.insert_variable(i.clone(), ptr);
-                return Ok(Some(
-                    self.context.bool_type().const_zero().as_basic_value_enum(),
-                ));
+                return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
             }
             UMPL2Expr::ComeTo(_) => todo!(),
         }
@@ -423,161 +560,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_extract_value(cond_struct, 0, "get_type")
     }
 
-    // TODO: for all extract_* methods have checked variants that check that what is trying to be obtained is in fact the type of the object
-    fn make_extract_bool(&self) {
-        let print_fn_ty: FunctionType<'_> =
-            self.context.bool_type().fn_type(&[self.kind.into()], false);
-        let print_fn = self.module.add_function("extract_bool", print_fn_ty, None);
-        let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let error_block = self.context.append_basic_block(print_fn, "error");
-        let ret_block = self.context.append_basic_block(print_fn, "return");
-        let args = print_fn.get_first_param().unwrap();
-        self.builder.position_at_end(error_block);
-        self.exit("not a bool\n", 1, self.context.bool_type().into());
-        self.builder.position_at_end(entry_block);
-        let ty = self
-            .extract_type(args.into_struct_value())
-            .unwrap()
-            .into_int_value();
-        let condition = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            ty,
-            self.context
-                .i8_type()
-                .const_int(TyprIndex::Boolean as u64, false),
-            "cmp",
-        );
-
-        self.builder
-            .build_conditional_branch(condition, ret_block, error_block);
-        self.builder.position_at_end(ret_block);
-
-        self.builder.build_return(Some(
-            &self
-                .builder
-                .build_extract_value(
-                    args.into_struct_value(),
-                    TyprIndex::Boolean as u32 + 1,
-                    "extract bool return",
-                )
-                .unwrap(),
-        ));
-        print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
-    }
-
     fn extract_bool(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let print = self.module.get_function("extract_bool").unwrap();
+        let print = self.module.get_function("extract_boolean").unwrap();
         self.builder
-            .build_call(print, &[val.into()], "print")
+            .build_call(print, &[val.into()], "extract-bool")
             .try_as_basic_value()
             .left()
-    }
-
-    fn make_extract_number(&self) {
-        let print_fn_ty: FunctionType<'_> =
-            self.context.f64_type().fn_type(&[self.kind.into()], false);
-        let print_fn = self
-            .module
-            .add_function("extract_number", print_fn_ty, None);
-        let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let ret_block = self.context.append_basic_block(print_fn, "return");
-        let args = print_fn.get_first_param().unwrap();
-        let error_block = self.context.append_basic_block(print_fn, "error");
-        self.builder.position_at_end(error_block);
-        self.exit("not a number\n", 1, self.context.f64_type().into());
-        self.builder.position_at_end(entry_block);
-        let ty = self
-            .extract_type(args.into_struct_value())
-            .unwrap()
-            .into_int_value();
-        let condition = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            ty,
-            self.context
-                .i8_type()
-                .const_int(TyprIndex::Number as u64, false),
-            "cmp",
-        );
-
-        self.builder
-            .build_conditional_branch(condition, ret_block, error_block);
-        self.builder.position_at_end(ret_block);
-
-        self.builder.build_return(Some(
-            &self
-                .builder
-                .build_extract_value(
-                    args.into_struct_value(),
-                    TyprIndex::Number as u32 + 1,
-                    "extract nmber return",
-                )
-                .unwrap(),
-        ));
-        print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
     }
 
     fn extract_number(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        let print = self.module.get_function("extract_number").unwrap();
+        let extract_number_fn = self.module.get_function("extract_number").unwrap();
         self.builder
-            .build_call(print, &[val.into()], "print")
+            .build_call(extract_number_fn, &[val.into()], "extract-number")
             .try_as_basic_value()
             .left()
-    }
-
-    fn make_extract_string(&self) {
-        let print_fn_ty: FunctionType<'_> = self
-            .context
-            .i8_type()
-            .ptr_type(AddressSpace::default())
-            .fn_type(&[self.kind.into()], false);
-        let print_fn = self
-            .module
-            .add_function("extract_string", print_fn_ty, None);
-        let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let ret_block = self.context.append_basic_block(print_fn, "return");
-        let args = print_fn.get_first_param().unwrap();
-        let error_block = self.context.append_basic_block(print_fn, "error");
-        self.builder.position_at_end(error_block);
-        self.exit(
-            "not a string\n",
-            1,
-            self.context
-                .i8_type()
-                .ptr_type(AddressSpace::default())
-                .into(),
-        );
-        self.builder.position_at_end(entry_block);
-        let ty = self
-            .extract_type(args.into_struct_value())
-            .unwrap()
-            .into_int_value();
-        let condition = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            ty,
-            self.context
-                .i8_type()
-                .const_int(TyprIndex::String as u64, false),
-            "cmp",
-        );
-
-        self.builder
-            .build_conditional_branch(condition, ret_block, error_block);
-        self.builder.position_at_end(ret_block);
-
-        self.builder.build_return(Some(
-            &self
-                .builder
-                .build_extract_value(
-                    args.into_struct_value(),
-                    TyprIndex::String as u32 + 1,
-                    "extract string return",
-                )
-                .unwrap(),
-        ));
-        print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
     }
 
     fn extract_string(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -586,57 +582,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_call(print, &[val.into()], "print")
             .try_as_basic_value()
             .left()
-    }
-
-    fn make_extract_function(&self) {
-        let print_fn_ty: FunctionType<'_> = self
-            .fn_type
-            .ptr_type(AddressSpace::default())
-            .fn_type(&[self.kind.into()], false);
-        let print_fn = self
-            .module
-            .add_function("extract_function", print_fn_ty, None);
-        let entry_block = self.context.append_basic_block(print_fn, "entry");
-        let ret_block = self.context.append_basic_block(print_fn, "return");
-        let args = print_fn.get_first_param().unwrap();
-        let error_block = self.context.append_basic_block(print_fn, "error");
-        self.builder.position_at_end(error_block);
-        self.exit(
-            "not a function\n",
-            1,
-            self.fn_type.ptr_type(AddressSpace::default()).into(),
-        );
-        self.builder.position_at_end(entry_block);
-
-        let ty = self
-            .extract_type(args.into_struct_value())
-            .unwrap()
-            .into_int_value();
-        let condition = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            ty,
-            self.context
-                .i8_type()
-                .const_int(TyprIndex::Lambda as u64, false),
-            "cmp",
-        );
-
-        self.builder
-            .build_conditional_branch(condition, ret_block, error_block);
-        self.builder.position_at_end(ret_block);
-
-        self.builder.build_return(Some(
-            &self
-                .builder
-                .build_extract_value(
-                    args.into_struct_value(),
-                    TyprIndex::Lambda as u32 + 1,
-                    "extract function return",
-                )
-                .unwrap(),
-        ));
-        print_fn.verify(true);
-        self.fpm.run_on(&print_fn);
     }
 
     fn extract_function(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
@@ -664,19 +609,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_load(self.get_variable(s).ok_or(format!("{s} not found"))?, s))
     }
 
+    pub fn make_extraction(&mut self) {
+        make_extract!(self, lambda_ptr, lambda, "function");
+        make_extract!(self, string, string, "string");
+        make_extract!(self, boolean, boolean, "boolean");
+        make_extract!(self, number, number, "number");
+    }
+
     pub fn compile_program(
         &mut self,
         program: &[UMPL2Expr],
-        links: HashSet<RC<str>>,
+        _links: HashSet<RC<str>>,
     ) -> Option<String> {
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
         // TODO: maybe dont optimize make_* functions b/c indirect call branches
-        self.make_extract_bool();
-        self.make_extract_number();
-        self.make_extract_string();
-        self.make_extract_function();
+        self.make_extraction();
         self.fn_value = Some(main_fn);
         self.make_print();
         self.builder.position_at_end(main_block);
@@ -776,8 +725,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn make_print(&mut self) {
         let old = self.fn_value;
-        // self.fn_type.
-        let print_fn_ty: FunctionType<'_> = self.kind.fn_type(&[self.kind.into()], false);
+        // self.types.lambda.
+        let print_fn_ty: FunctionType<'_> = self
+            .types
+            .object
+            .fn_type(&[self.types.object.into()], false);
         let print_fn = self.module.add_function("print", print_fn_ty, None);
         self.fn_value = Some(print_fn);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
@@ -790,7 +742,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
 
-        self.exit("not a valid type\n", 1, self.kind.into());
+        self.exit("not a valid type\n", 1, self.types.object.into());
         self.builder.position_at_end(entry_block);
         let args = print_fn.get_first_param().unwrap().into_struct_value();
 
@@ -800,75 +752,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             error_block,
             &[
                 (
-                    self.context
-                        .i8_type()
-                        .const_int(TyprIndex::Boolean as u64, false),
+                    self.types.ty.const_int(TyprIndex::boolean as u64, false),
                     bool_block,
                 ),
                 (
-                    self.context
-                        .i8_type()
-                        .const_int(TyprIndex::Number as u64, false),
+                    self.types.ty.const_int(TyprIndex::number as u64, false),
                     number_block,
                 ),
                 (
-                    self.context
-                        .i8_type()
-                        .const_int(TyprIndex::String as u64, false),
+                    self.types.ty.const_int(TyprIndex::string as u64, false),
                     string_block,
                 ),
             ],
         );
         let print = self.module.get_function("printf").unwrap();
-        self.builder.position_at_end(bool_block);
-        let val = self.extract_bool(args).unwrap();
+        let print_type = |block,
+                          extracter: fn(
+            &Compiler<'a, 'ctx>,
+            StructValue<'ctx>,
+        ) -> Option<BasicValueEnum<'ctx>>,
+                          fmt_spec,
+                          name| {
+            self.builder.position_at_end(block);
+            let val = extracter(self, args).unwrap();
 
-        self.builder.build_call(
-            print,
-            &[
-                self.builder
-                    .build_global_string_ptr("%i", "bool fmt specifier")
-                    .as_basic_value_enum()
-                    .into(),
-                val.into(),
-            ],
-            "print",
-        );
-        self.builder.build_unconditional_branch(ret_block);
-
-        self.builder.position_at_end(number_block);
-        let val = self.extract_number(args).unwrap();
-
-        self.builder.build_call(
-            print,
-            &[
-                self.builder
-                    .build_global_string_ptr("%f", "number fmt specifier")
-                    .as_basic_value_enum()
-                    .into(),
-                val.into(),
-            ],
-            "print",
-        );
-        self.builder.build_unconditional_branch(ret_block);
-        self.builder.position_at_end(string_block);
-        let val = self.extract_string(args).unwrap();
-
-        self.builder.build_call(
-            print,
-            &[
-                self.builder
-                    .build_global_string_ptr("%s", "string fmt specifier")
-                    .as_basic_value_enum()
-                    .into(),
-                val.into(),
-            ],
-            "print",
-        );
-        self.builder.build_unconditional_branch(ret_block);
+            self.builder.build_call(
+                print,
+                &[
+                    self.builder
+                        .build_global_string_ptr(fmt_spec, &format!("{name} fmt specifier"))
+                        .as_basic_value_enum()
+                        .into(),
+                    val.into(),
+                ],
+                &format!("print {name}"),
+            );
+            self.builder.build_unconditional_branch(ret_block);
+        };
+        print_type(bool_block, Self::extract_bool, "%i", "boolean");
+        print_type(number_block, Self::extract_number, "%f", "number");
+        print_type(string_block, Self::extract_string, "%s", "string");
 
         self.builder.position_at_end(ret_block);
-        let phi = self.builder.build_phi(self.kind, "print return");
+        let phi = self.builder.build_phi(self.types.object, "print return");
         phi.add_incoming(&[
             (&args, bool_block),
             (&args, number_block),

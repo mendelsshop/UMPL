@@ -10,10 +10,9 @@ pub struct Analyzer {
 pub struct EvalError {}
 
 impl Analyzer {
+    #[must_use]
     pub fn analyze(input: &[UMPL2Expr]) -> (HashSet<RC<str>>, Vec<UMPL2Expr>) {
-        let mut this = Self {
-            ..Default::default()
-        };
+        let mut this: Self = Self::default();
         let mut input = input.to_vec();
         this.find_links(&mut input);
         this.find_labels(&mut input);
@@ -33,13 +32,13 @@ impl Analyzer {
             // even thougth scope contains more expressions it should not make it into the ast so we just ignore it (arguabbly we should put an unreachable)
             | UMPL2Expr::Scope(_)
             | UMPL2Expr::Skip
-            | UMPL2Expr::Label(_) => {}
+            | UMPL2Expr::Label(_)
+            | UMPL2Expr::ComeTo(_) => {}
 
             UMPL2Expr::Link(label, jump_from) => {
-                self.link_set.insert(label.clone(), jump_from.to_vec());
-                *val = UMPL2Expr::Hempty
+                self.link_set.insert(label.clone(), jump_from.clone());
+                *val = UMPL2Expr::Hempty;
             }
-            UMPL2Expr::Quoted(v) => self.find_link(v),
             UMPL2Expr::Tree(_) => unreachable!(),
             UMPL2Expr::Application(aplication) => self.find_links(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
@@ -48,21 +47,21 @@ impl Analyzer {
             UMPL2Expr::If(if_stmt) => {
                 self.find_links(if_stmt.cons_mut());
                 self.find_links(if_stmt.alt_mut());
-                self.find_link(if_stmt.cond_mut())
+                self.find_link(if_stmt.cond_mut());
             }
             UMPL2Expr::Unless(unless) => {
                 self.find_links(unless.cons_mut());
                 self.find_links(unless.alt_mut());
-                self.find_link(unless.cond_mut())
+                self.find_link(unless.cond_mut());
             }
 
             UMPL2Expr::Until(until) => {
                 self.find_links(until.scope_mut());
-                self.find_link(until.cond_mut())
+                self.find_link(until.cond_mut());
             }
             UMPL2Expr::GoThrough(go_through) => {
                 self.find_links(go_through.scope_mut());
-                self.find_link(go_through.iter_mut())
+                self.find_link(go_through.iter_mut());
             }
             UMPL2Expr::ContiueDoing(scope) => {
                 self.find_links(scope);
@@ -70,8 +69,8 @@ impl Analyzer {
             UMPL2Expr::Fanction(fanction) => {
                 self.find_links(fanction.scope_mut());
             }
-            UMPL2Expr::Let(_, v) => self.find_link(v),
-            UMPL2Expr::ComeTo(_) => {}
+            UMPL2Expr::Let(_, v) | UMPL2Expr::Quoted(v) => self.find_link(v),
+
         }
     }
 
@@ -79,7 +78,7 @@ impl Analyzer {
         input.iter_mut().for_each(|expr| self.find_link(expr));
     }
 
-    /// find_label* methods replace any item in a link stmt label list with the corresponding label
+    /// `find_label`* methods replace any item in a link stmt label list with the corresponding label
     /// and any link first labels get replaced with the cometo stmt
     fn find_label(&mut self, input: &mut UMPL2Expr) {
         match input {
@@ -103,7 +102,7 @@ impl Analyzer {
                         None
                     }
                 ) {
-                    *input = link
+                    *input = link;
                 }
             }
 
@@ -119,21 +118,21 @@ impl Analyzer {
             UMPL2Expr::If(if_stmt) => {
                 self.find_labels(if_stmt.cons_mut());
                 self.find_labels(if_stmt.alt_mut());
-                self.find_label(if_stmt.cond_mut())
+                self.find_label(if_stmt.cond_mut());
             }
             UMPL2Expr::Unless(unless) => {
                 self.find_labels(unless.cons_mut());
                 self.find_labels(unless.alt_mut());
-                self.find_label(unless.cond_mut())
+                self.find_label(unless.cond_mut());
             }
 
             UMPL2Expr::Until(until) => {
                 self.find_labels(until.scope_mut());
-                self.find_label(until.cond_mut())
+                self.find_label(until.cond_mut());
             }
             UMPL2Expr::GoThrough(go_through) => {
                 self.find_labels(go_through.scope_mut());
-                self.find_label(go_through.iter_mut())
+                self.find_label(go_through.iter_mut());
             }
             UMPL2Expr::ContiueDoing(scope) => {
                 self.find_labels(scope);
@@ -151,16 +150,16 @@ impl Analyzer {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{lexer::umpl_parse, analyzer::Analyzer};
+    use crate::{analyzer::Analyzer, lexer::umpl_parse};
 
     #[test]
     fn find_links() {
-        let program = umpl_parse("
+        let program = umpl_parse(
+            "
         @a
         link @foo @bar @baz
         (add 1 2)<
@@ -169,10 +168,15 @@ mod tests {
         @c
         (f link @a @b)<
         @b
-        ").unwrap();
-        println!("{:?}", program);
+        ",
+        )
+        .unwrap();
+        println!("{program:?}");
         let (analyzed, program) = Analyzer::analyze(&program);
-        assert_eq!(analyzed, HashSet::from_iter(vec!["foo".into(), "set".into(), "a".into()]));
-        println!("{:?}", program);
+        assert_eq!(
+            analyzed,
+            HashSet::from_iter(vec!["foo".into(), "set".into(), "a".into()])
+        );
+        println!("{program:?}");
     }
 }

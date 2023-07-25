@@ -470,7 +470,7 @@ mod tests {
                 ],
                 vec![UMPL2Expr::Number(4.0)]
             )))
-        )
+        );
     }
 
     #[test]
@@ -484,7 +484,7 @@ mod tests {
                 vec![UMPL2Expr::Number(4.0)],
                 vec![UMPL2Expr::String("t".into())]
             )))
-        )
+        );
     }
 
     #[test]
@@ -497,7 +497,7 @@ mod tests {
                 UMPL2Expr::Bool(Boolean::False),
                 vec![UMPL2Expr::Ident("ab/".into())]
             )))
-        )
+        );
     }
 
     #[test]
@@ -519,7 +519,7 @@ mod tests {
                 )),
                 vec![UMPL2Expr::String("ab/".into())]
             )))
-        )
+        );
     }
 
     #[test]
@@ -529,7 +529,7 @@ mod tests {
         assert_eq!(
             test_result.unwrap(),
             UMPL2Expr::ContiueDoing(vec![UMPL2Expr::Ident("lg`".into())])
-        )
+        );
     }
 
     #[test]
@@ -544,28 +544,28 @@ mod tests {
                 Some(Varidiac::AtLeast0),
                 vec![UMPL2Expr::Ident("^l".into())]
             ))
-        )
+        );
     }
 
     #[test]
     fn umpl_ident() {
         let test_result = parse_umpl("a===a");
         assert!(test_result.is_ok());
-        assert_eq!(test_result.unwrap(), UMPL2Expr::Ident("a===a".into()))
+        assert_eq!(test_result.unwrap(), UMPL2Expr::Ident("a===a".into()));
     }
 
     #[test]
     fn umpl_number() {
         let test_result = parse_umpl("0xf%9");
         assert!(test_result.is_ok());
-        assert_eq!(test_result.unwrap(), UMPL2Expr::Number(15.5625))
+        assert_eq!(test_result.unwrap(), UMPL2Expr::Number(15.5625));
     }
 
     #[test]
     fn umpl_bool() {
         let test_result = parse_umpl("?");
         assert!(test_result.is_ok());
-        assert_eq!(test_result.unwrap(), UMPL2Expr::Bool(Boolean::Maybee))
+        assert_eq!(test_result.unwrap(), UMPL2Expr::Bool(Boolean::Maybee));
     }
 
     #[test]
@@ -582,14 +582,14 @@ mod tests {
                 ],
                 PrintType::Print
             ))
-        )
+        );
     }
 
     #[test]
     fn umpl_acces_param() {
         let test_result = parse_umpl("'10'");
         assert!(test_result.is_ok());
-        assert_eq!(test_result.unwrap(), UMPL2Expr::FnParam(8))
+        assert_eq!(test_result.unwrap(), UMPL2Expr::FnParam(8));
     }
 
     #[test]
@@ -612,6 +612,6 @@ mod tests {
                 ],
                 PrintType::Print
             ))
-        )
+        );
     }
 }

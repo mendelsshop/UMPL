@@ -159,11 +159,13 @@ impl GoThrough {
         &mut self.iter
     }
 
+    #[must_use]
     pub fn scope(&self) -> &[UMPL2Expr] {
         self.scope.as_ref()
     }
 
-    pub fn iter(&self) -> &UMPL2Expr {
+    #[must_use]
+    pub const fn iter(&self) -> &UMPL2Expr {
         &self.iter
     }
 }
@@ -188,10 +190,12 @@ impl Until {
         &mut self.cond
     }
 
-    pub fn cond(&self) -> &UMPL2Expr {
+    #[must_use]
+    pub const fn cond(&self) -> &UMPL2Expr {
         &self.cond
     }
 
+    #[must_use]
     pub fn scope(&self) -> &[UMPL2Expr] {
         self.scope.as_ref()
     }
@@ -262,14 +266,17 @@ impl Unless {
         &mut self.cond
     }
 
-    pub fn cond(&self) -> &UMPL2Expr {
+    #[must_use]
+    pub const fn cond(&self) -> &UMPL2Expr {
         &self.cond
     }
 
+    #[must_use]
     pub fn cons(&self) -> &[UMPL2Expr] {
         self.cons.as_ref()
     }
 
+    #[must_use]
     pub fn alt(&self) -> &[UMPL2Expr] {
         self.alt.as_ref()
     }
