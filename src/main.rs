@@ -54,7 +54,26 @@ fn main() {
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
     let fn_type =
-        umpl_parse("let cons fanction  2 ᚜ let x '0' let y '1' stop fanction  1 ᚜ if '0' do ᚜x ᚛ otherwise ᚜y   ᚛ ᚛  ᚛").unwrap();
+        umpl_parse("let cons 
+                                fanction  2 ᚜ 
+                                        (print '0')<
+                                        (print '1')<
+                                        let x '0' 
+                                        let y '1' 
+                                        stop fanction  1 ᚜ 
+                                        (print '0')<
+                                            if '0' 
+                                                do ᚜x
+                                            ᚛ 
+                                                otherwise ᚜y
+                                            ᚛
+                                        ᚛
+                                ᚛
+                      
+                      (cons 5 6)< 
+                        
+                        !(z &)<
+                        ").unwrap();
         // umpl_parse("let i 9 (print i)<").unwrap();
     println!("{fn_type:?}");
     let program = analyzer::Analyzer::analyze(&fn_type);
@@ -72,4 +91,65 @@ fn main() {
             println!("error: {err}");
         },
     );
+}
+
+#[test]
+fn insert() {
+    use inkwell::context::Context;
+
+    let context = Context::create();
+    let module = context.create_module("av");
+    let void_type = context.void_type();
+    let f32_type = context.f32_type();
+    let i32_type = context.i32_type();
+    let struct_type = context.struct_type(&[i32_type.into()], false);
+    let array_type = struct_type.array_type(3);
+    let fn_type = void_type.fn_type(&[], false);
+    let fn_value = module.add_function("av_fn", fn_type, None);
+    let builder = context.create_builder();
+    let entry = context.append_basic_block(fn_value, "entry");
+
+    builder.position_at_end(entry);
+
+    let array_alloca = builder.build_alloca(array_type, "array_alloca");
+
+    // #[cfg(any(
+    //     feature = "llvm4-0",
+    //     feature = "llvm5-0",
+    //     feature = "llvm6-0",
+    //     feature = "llvm7-0",
+    //     feature = "llvm8-0",
+    //     feature = "llvm9-0",
+    //     feature = "llvm10-0",
+    //     feature = "llvm11-0",
+    //     feature = "llvm12-0",
+    //     feature = "llvm13-0",
+    //     feature = "llvm14-0"
+    // ))]
+    // let array = builder.build_load(array_alloca, "array_load").into_array_value();
+    // #[cfg(any(feature = "llvm15-0", feature = "llvm16-0"))]
+    let array = builder
+        .build_load(array_type, array_alloca, "array_load")
+        .into_array_value();
+
+    let const_int1 = struct_type.const_named_struct(&[i32_type.const_int(2, false).into()]);
+    let const_int2 = struct_type.const_named_struct(&[i32_type.const_int(5, false).into()]);
+    let const_int3 = struct_type.const_named_struct(&[i32_type.const_int(6, false).into()]);
+
+    assert!(builder
+        .build_insert_value(array, const_int1, 0, "insert")
+        .is_some());
+    assert!(builder
+        .build_insert_value(array, const_int2, 1, "insert")
+        .is_some());
+    assert!(builder
+        .build_insert_value(array, const_int3, 2, "insert")
+        .is_some());
+    assert!(builder
+        .build_insert_value(array, const_int3, 3, "insert")
+        .is_none());
+    builder.build_return(None);
+    if fn_value.verify(true) {
+        module.print_to_stderr()
+    }
 }
