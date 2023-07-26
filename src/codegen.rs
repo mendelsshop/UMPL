@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::PathBuf, iter,
 };
 
 use inkwell::{
@@ -11,10 +11,10 @@ use inkwell::{
     module::{Linkage, Module},
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::{BasicType, BasicTypeEnum, FloatType, FunctionType, IntType, PointerType, StructType},
+    types::{BasicType, BasicTypeEnum, FloatType, FunctionType, IntType, PointerType, StructType, ArrayType},
     values::{
         BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FloatValue,
-        FunctionValue, GlobalValue, IntValue, PointerValue, StructValue,
+        FunctionValue, GlobalValue, IntValue, PointerValue, StructValue, ArrayValue, AnyValue,
     },
     AddressSpace, OptimizationLevel,
 };
@@ -35,7 +35,7 @@ macro_rules! return_none {
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     module: &'a Module<'ctx>,
-    variables: Vec<HashMap<RC<str>, PointerValue<'ctx>>>,
+    variables: Vec<(HashMap<RC<str>, PointerValue<'ctx>>, Vec<RC<str>>)>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     string: HashMap<RC<str>, GlobalValue<'ctx>>,
@@ -82,10 +82,11 @@ pub struct Types<'ctx> {
     pub number: FloatType<'ctx>,
     pub string: PointerType<'ctx>,
     pub cons: PointerType<'ctx>,
-    pub lambda: FunctionType<'ctx>,
+    pub lambda: StructType<'ctx>,
     pub quoted: FunctionType<'ctx>,
     pub lambda_ptr: PointerType<'ctx>,
     pub quoted_ptr: PointerType<'ctx>,
+    pub lambda_ty: FunctionType<'ctx>,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -96,7 +97,7 @@ pub struct Object<'ctx> {
     number: Option<FloatValue<'ctx>>,
     string: Option<PointerValue<'ctx>>,
     cons: Option<PointerValue<'ctx>>,
-    lambda: Option<PointerValue<'ctx>>,
+    lambda: Option<StructValue<'ctx>>,
     quoted: Option<PointerValue<'ctx>>,
 }
 
@@ -112,7 +113,7 @@ impl<'ctx> Object<'ctx> {
     builder_object!(number, FloatValue<'ctx>);
     builder_object!(string, PointerValue<'ctx>);
     builder_object!(cons, PointerValue<'ctx>);
-    builder_object!(lambda, PointerValue<'ctx>);
+    builder_object!(lambda, StructValue<'ctx>);
     builder_object!(quoted, PointerValue<'ctx>);
 
     pub fn object(&mut self) -> StructValue<'ctx> {
@@ -130,7 +131,7 @@ impl<'ctx> Object<'ctx> {
                 .into(),
             self.cons.unwrap_or_else(|| types.cons.const_null()).into(),
             self.lambda
-                .unwrap_or_else(|| types.lambda_ptr.const_null())
+                .unwrap_or_else(|| types.lambda.const_zero())
                 .into(),
             self.quoted
                 .unwrap_or_else(|| types.quoted_ptr.const_null())
@@ -252,8 +253,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let jit = module
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
+        let env_ptr: PointerType<'ctx> = context.struct_type(&[], false).ptr_type(AddressSpace::default()).into();
         let kind = context.opaque_struct_type("object");
-        let lambda = kind.fn_type(&[kind.into()], true);
+        let fn_type = kind.fn_type(&[env_ptr.into(), kind.into()], true);
+
+        let lambda = context.struct_type(&[fn_type.ptr_type(AddressSpace::default()).into(), env_ptr.into()] , false);
         let quoted = kind.fn_type(&[], false);
         let types = Types {
             object: kind,
@@ -269,6 +273,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             lambda_ptr: lambda.ptr_type(AddressSpace::default()),
             quoted,
             quoted_ptr: quoted.ptr_type(AddressSpace::default()),
+            lambda_ty: fn_type,
         };
         module.add_function(
             "exit",
@@ -338,7 +343,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn new_env(&mut self) {
-        self.variables.push(HashMap::new());
+        self.variables.push((HashMap::new(), vec![]));
     }
 
     fn pop_env(&mut self) {
@@ -347,17 +352,36 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn insert_variable(&mut self, name: RC<str>, value: PointerValue<'ctx>) {
         if let Some(scope) = self.variables.last_mut() {
-            scope.insert(name, value);
+            scope.0.insert(name.clone(), value);
+            scope.1.push(name);
         }
+    }
+
+    pub fn get_scope(&self) -> (StructType<'ctx>, StructValue<'ctx> ) {
+        let prev = self.get_current_env_name();
+
+        let value: Vec<_> = prev.collect();
+        let env_struct_type = self.context.struct_type(&iter::repeat(self.types.object.as_basic_type_enum()).take(value.len()).collect::<Vec<_>>(), false);
+        let env_struct = env_struct_type.const_zero();
+        for (i, v) in value.iter().enumerate() {
+            let value = self.get_var(*v).unwrap();
+            self.builder.build_insert_value(env_struct, value, i as u32, "");
+        }
+        // let array = array_type.const_array(&values);
+        (env_struct.get_type(), env_struct)
+    }
+
+    pub fn get_current_env_name(&self) ->impl Iterator<Item = &RC<str>> {
+        self.variables.last().unwrap().1.iter()
     }
 
     fn get_variable(&self, name: &RC<str>) -> Option<PointerValue<'ctx>> {
         self.variables
             .iter()
-            .rev()
+            .rev().cloned().map(|v|v.0)
             .flatten()
-            .find(|v| v.0 == name)
-            .map(|v| *v.1)
+            .find(|v| v.0 == name.clone())
+            .map(|v| v.1)
     }
 
     fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<Option<BasicValueEnum<'ctx>>, String> {
@@ -378,27 +402,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .as_basic_value_enum(),
             )),
             UMPL2Expr::Fanction(r#fn) => {
+                let env = self.get_scope();
                 let old_fn = self.fn_value;
                 let old_block = self.builder.get_insert_block();
                 let body = r#fn.scope();
                 let name = r#fn
                     .name()
                     .map_or("lambda".to_string(), |name| name.to_string());
-                let arg_types: Vec<_> = std::iter::repeat(self.types.object)
+                let mut arg_types: Vec<_> = std::iter::repeat(self.types.object)
                     .take(r#fn.param_count())
                     .map(std::convert::Into::into)
                     .collect();
+                arg_types.insert(0, env.0.into());
                 let ret_type = self.types.object;
                 let fn_type = ret_type.fn_type(&arg_types, false);
                 let fn_value = self.module.add_function(&name, fn_type, None);
+                let envs = fn_value.get_first_param().unwrap().into_struct_value();
 
-                for (name, arg) in fn_value.get_param_iter().enumerate() {
+                for (name, arg) in fn_value.get_param_iter().skip(1).enumerate() {
                     arg.set_name(&name.to_string());
                 }
                 let entry = self.context.append_basic_block(fn_value, "entry");
                 self.fn_value = Some(fn_value);
                 self.builder.position_at_end(entry);
+                let env_iter = self.get_current_env_name().cloned().collect::<Vec<_>>();
                 self.new_env();
+                for i in 0..env.0.count_fields() {
+                    let cn=  env_iter[i as usize].clone();
+                    let alloca = self.create_entry_block_alloca(&cn)?;
+                    let arg = self.builder.build_extract_value(envs, i.try_into().unwrap(), "load captured").unwrap();
+                    self.builder.build_store(alloca, arg);
+                    self.insert_variable(cn.clone(), alloca);
+                }
                 for (i, arg) in fn_value.get_param_iter().enumerate() {
                     let arg_name: RC<str> = i.to_string().into();
                     let alloca = self.create_entry_block_alloca(&arg_name)?;
@@ -419,12 +454,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 // return the whole thing after verification and optimization
                 if fn_value.verify(true) {
-                    self.fpm.run_on(&fn_value);
+                    // self.fpm.run_on(&fn_value);
                     self.pop_env();
 
                     Ok(Some(
                         self.object_builder
-                            .lambda(fn_value.as_global_value().as_pointer_value())
+                            .lambda(self.types.lambda.const_named_struct(&[fn_value.as_global_value().as_pointer_value().into(), env.1.into()]))
                             .as_basic_value_enum(),
                     ))
                 } else {
@@ -508,9 +543,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .map(|expr| self.compile_expr(expr))
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
 
-                let op = self.extract_function(op.into_struct_value()).unwrap();
+                let op = self.extract_function(op.into_struct_value()).unwrap().into_struct_value();
 
-                let function_pointer = op.into_pointer_value();
+                let function_pointer = self.builder.build_extract_value(op, 0, "function load").unwrap().as_any_value_enum().into_pointer_value();
+            
                 let args = args
                     .iter()
                     .map(|a| (*a).into())
@@ -518,7 +554,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 let unwrap_left = self
                     .builder
-                    .build_indirect_call(self.types.lambda, function_pointer,args.as_slice(), "application:call")
+                    .build_indirect_call(self.types.lambda_ty, function_pointer,args.as_slice(), "application:call")
                     .try_as_basic_value()
                     .unwrap_left();
                 Ok(Some(unwrap_left))
@@ -550,16 +586,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 FnKeyword::Mul => todo!(),
                 FnKeyword::Div => todo!(),
                 FnKeyword::Mod => todo!(),
-                FnKeyword::Print => Ok(Some(
-                    self.object_builder
-                        .lambda(
-                            self.module
-                                .get_function("print")
-                                .map(|func| func.as_global_value().as_pointer_value())
-                                .unwrap(),
-                        )
-                        .as_basic_value_enum(),
-                )),
+                FnKeyword::Print => todo!()
+                //  Ok(Some(
+                //     self.object_builder
+                //         .lambda(
+                //             self.module
+                //                 .get_function("print")
+                //                 .map(|func| func.as_global_value().as_pointer_value())
+                //                 .unwrap(),
+                //         )
+                //         .as_basic_value_enum(),
+                // )),
             },
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
@@ -624,7 +661,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         res.map(Some)
     }
 
-    fn get_var(&mut self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
+    fn get_var(&self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
         Ok(self
             .builder
             .build_load(self.types.object ,self.get_variable(s).ok_or(format!("{s} not found"))?, s))
