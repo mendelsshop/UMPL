@@ -13,7 +13,7 @@ use inkwell::{
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{BasicType, BasicTypeEnum, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
-        BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallableValue, FloatValue,
+        BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FloatValue,
         FunctionValue, GlobalValue, IntValue, PointerValue, StructValue,
     },
     AddressSpace, OptimizationLevel,
@@ -332,9 +332,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             |first_instr| self.builder.position_before(&first_instr),
         );
 
-        // Ok(self.builder.build_alloca(self.types.object, name))
+        Ok(self.builder.build_alloca(self.types.object, name))
         // store everything as a global variable
-        Ok(self.module.add_global(self.types.object, Some(AddressSpace::default()), name).as_pointer_value())
+        // Ok(self.module.add_global(self.types.object, Some(AddressSpace::default()), name).as_pointer_value())
     }
 
     fn new_env(&mut self) {
@@ -507,8 +507,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .skip(1)
                     .map(|expr| self.compile_expr(expr))
                     .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, _>>()?);
+
                 let op = self.extract_function(op.into_struct_value()).unwrap();
-                let function: CallableValue<'_> = op.into_pointer_value().try_into().unwrap();
+
+                let function_pointer = op.into_pointer_value();
                 let args = args
                     .iter()
                     .map(|a| (*a).into())
@@ -516,7 +518,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 let unwrap_left = self
                     .builder
-                    .build_call(function, args.as_slice(), "application:call")
+                    .build_indirect_call(self.types.lambda, function_pointer,args.as_slice(), "application:call")
                     .try_as_basic_value()
                     .unwrap_left();
                 Ok(Some(unwrap_left))
@@ -562,10 +564,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;
-                // let ptr = self.builder.build_alloca(ty, i);
-                let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
+                let ptr = self.builder.build_alloca(ty, i);
+                // let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
                 self.builder.build_store(ptr, v);
                 self.insert_variable(i.clone(), ptr);
+                // self.context.o
                 return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
             }
             UMPL2Expr::ComeTo(_) => todo!(),
@@ -624,7 +627,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn get_var(&mut self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
         Ok(self
             .builder
-            .build_load(self.get_variable(s).ok_or(format!("{s} not found"))?, s))
+            .build_load(self.types.object ,self.get_variable(s).ok_or(format!("{s} not found"))?, s))
     }
 
     pub fn make_extraction(&mut self) {

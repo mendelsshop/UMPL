@@ -1,17 +1,16 @@
 fn main() {
-    let yzzz = 1;
-    let ooo = 2;
-    let u = || yzzz + ooo;
-    
-    let z = |a| {
-      let xyz =   yzzz + ooo;
-    //   let yy= || xyz + ooo + a;
+    let cons = |x, y| {
+        move |z: i32| {
+            if z == 0 {
+                x
+            } else if z == 1 {
+                y
+            } else {
+                panic!("Invalid")
+            }
 
-    //   ooo;
-    //   yy();
-        xyz
+        }
     };
-    z(1);
-    u();
-    
+    let x = cons(5, 6);
+    x(0);
 }

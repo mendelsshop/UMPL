@@ -55,7 +55,7 @@ fn main() {
     // fanction  1* ᚜ (print '0')< ᚛
     let fn_type =
         umpl_parse("let cons fanction  2 ᚜ let x '0' let y '1' stop fanction  1 ᚜ if '0' do ᚜x ᚛ otherwise ᚜y   ᚛ ᚛  ᚛").unwrap();
-
+        // umpl_parse("let i 9 (print i)<").unwrap();
     println!("{fn_type:?}");
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
