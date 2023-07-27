@@ -53,8 +53,8 @@ fn main() {
 
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
-    let fn_type =
-        umpl_parse("let cons 
+    let fn_type = umpl_parse(
+        "let cons 
                                 fanction  2 ᚜ 
                                         let x '0' 
                                         let y '1' 
@@ -70,8 +70,10 @@ fn main() {
                      let k (cons 5 6)< 
                         
                         (print (k &)<)<
-                        ").unwrap();
-        // umpl_parse("let i 9 (print i)<").unwrap();
+                        ",
+    )
+    .unwrap();
+    // umpl_parse("let i 9 (print i)<").unwrap();
     println!("{fn_type:?}");
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
@@ -130,8 +132,6 @@ fn insert() {
         .into_array_value();
 
     // let z = context.opaque_struct_type("hi");
-
-
 
     let const_int1 = struct_type.const_named_struct(&[i32_type.const_int(2, false).into()]);
     let const_int2 = struct_type.const_named_struct(&[i32_type.const_int(5, false).into()]);

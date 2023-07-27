@@ -373,29 +373,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub fn get_scope(&self) -> (ArrayType<'ctx>, PointerValue<'ctx>) {
+    pub fn get_scope(&self) -> (StructType<'ctx>, PointerValue<'ctx>) {
         let prev = self.get_current_env_name();
 
         let value: Vec<_> = prev.collect();
-        let env_struct_type = self
-            .types
-            .object
-            .array_type(value.len().try_into().unwrap());
-        let env_pointer = self
-            .module
-            .add_global(env_struct_type, None, "globalsb")
-            .as_pointer_value();
-        let env_struct = self
-            .builder
-            .build_load(env_struct_type, env_pointer, "env create")
-            .into_array_value();
+        let env_struct_type = self.context.struct_type(
+            &std::iter::repeat(self.types.object)
+                .take(value.len())
+                .map(|s| s.into())
+                .collect::<Vec<_>>(),
+            false,
+        );
+        let global_save = self.module.add_global(env_struct_type, None, "");
+        global_save.set_initializer(&env_struct_type.const_zero());
+        let env_pointer = global_save.as_pointer_value();
+
         for (i, v) in value.iter().enumerate() {
+            println!("{i} {v}");
             let value = self.get_var(*v).unwrap();
-            self.builder
-                .build_insert_value(env_struct, value, i as u32, "env insert");
+            let gep = self
+                .builder
+                .build_struct_gep(env_struct_type, env_pointer, i as u32, "save env")
+                .unwrap();
+            self.builder.build_store(gep, value);
         }
-        // let array = array_type.const_array(&values);
-        (env_struct.get_type(), env_pointer)
+        (env_struct_type, env_pointer)
     }
 
     pub fn get_current_env_name(&self) -> impl Iterator<Item = &RC<str>> {
@@ -455,12 +457,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.fn_value = Some(fn_value);
                 self.builder.position_at_end(entry);
                 let env_iter = self.get_current_env_name().cloned().collect::<Vec<_>>();
+                // right now even though we take the first parameter to be the "envoirnment" we don't actully use it, maybee remove that parameter
                 let envs = self
                     .builder
                     .build_load(env.0, envs, "load env")
-                    .into_array_value();
+                    .into_struct_value();
                 self.new_env();
-                for i in 0..env.0.len() {
+                for i in 0..env.0.count_fields() {
                     let cn = env_iter[i as usize].clone();
                     let alloca = self.builder.build_alloca(self.types.object, &cn);
                     let arg = self
@@ -498,7 +501,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         self.object_builder
                             .lambda(self.types.lambda.const_named_struct(&[
                                 fn_value.as_global_value().as_pointer_value().into(),
-                                env.0.ptr_type(AddressSpace::default()).const_null().into()
+                                env.0.ptr_type(AddressSpace::default()).const_null().into(),
                             ]))
                             .as_basic_value_enum(),
                     ))
@@ -529,7 +532,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 );
 
                 // conditinal: either not bool or true
-                self.builder.build_or(bool_val, cond, "if:cond:false?");
+                let cond = self.builder.build_or(bool_val, cond, "if:cond:false?");
                 let then_bb = self.context.append_basic_block(parent, "then");
                 let else_bb = self.context.append_basic_block(parent, "else");
                 let cont_bb = self.context.append_basic_block(parent, "ifcont");
@@ -586,7 +589,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let val = op.into_struct_value();
 
                 let op = self.extract_function(val).unwrap();
-
                 let function_pointer = self
                     .builder
                     .build_extract_value(op.into_struct_value(), 0, "function load")
@@ -604,6 +606,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .map(|a| (*a).into())
                     .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
                 args.insert(0, env_pointer.into());
+                // should probavly figure out that actual param count of function cause supposedly tail calls dont work on varidiac aargument function
                 let unwrap_left = self
                     .builder
                     .build_indirect_call(
@@ -827,7 +830,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         Target::initialize_native(&config).unwrap();
         let triple = TargetMachine::get_default_triple();
-    
+
         let target = Target::from_triple(&triple).unwrap();
 
         let tm = target
