@@ -11,10 +11,7 @@ use inkwell::{
     module::{Linkage, Module},
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::{
-        ArrayType, BasicType, BasicTypeEnum, FloatType, FunctionType, IntType, PointerType,
-        StructType,
-    },
+    types::{BasicType, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
         AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue,
         GlobalValue, IntValue, PointerValue, StructValue,
@@ -218,7 +215,7 @@ macro_rules! make_extract {
             .context
             .append_basic_block(extract_fn, &prefix("error"));
         $self.builder.position_at_end(error_block);
-        $self.exit(&format!("not a {}\n", $name), 1, $self.types.$type.into());
+        $self.exit(&format!("not a {}\n", $name), 1);
         $self.builder.position_at_end(entry_block);
 
         let ty = $self
@@ -871,7 +868,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
 
-        self.exit("not a valid type\n", 1, self.types.object.into());
+        self.exit("not a valid type\n", 1);
         self.builder.position_at_end(entry_block);
         let args = print_fn.get_nth_param(1).unwrap().into_struct_value();
 
@@ -943,7 +940,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap_left()
     }
 
-    pub fn exit(&self, reason: &str, code: i32, ty: BasicTypeEnum<'a>) {
+    pub fn exit(&self, reason: &str, code: i32) {
         let print = self.module.get_function("printf").unwrap();
         self.builder.build_call(
             print,
