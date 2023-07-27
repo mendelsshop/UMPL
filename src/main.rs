@@ -56,12 +56,9 @@ fn main() {
     let fn_type =
         umpl_parse("let cons 
                                 fanction  2 ᚜ 
-                                        (print '0')<
-                                        (print '1')<
                                         let x '0' 
                                         let y '1' 
-                                        stop fanction  1 ᚜ 
-                                        (print '0')<
+                                        fanction  1 ᚜ 
                                             if '0' 
                                                 do ᚜x
                                             ᚛ 
@@ -70,9 +67,9 @@ fn main() {
                                         ᚛
                                 ᚛
                       
-                      (cons 5 6)< 
+                     let k (cons 5 6)< 
                         
-                        !(z &)<
+                        (print (k &)<)<
                         ").unwrap();
         // umpl_parse("let i 9 (print i)<").unwrap();
     println!("{fn_type:?}");
@@ -131,6 +128,10 @@ fn insert() {
     let array = builder
         .build_load(array_type, array_alloca, "array_load")
         .into_array_value();
+
+    // let z = context.opaque_struct_type("hi");
+
+
 
     let const_int1 = struct_type.const_named_struct(&[i32_type.const_int(2, false).into()]);
     let const_int2 = struct_type.const_named_struct(&[i32_type.const_int(5, false).into()]);

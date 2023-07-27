@@ -383,7 +383,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .array_type(value.len().try_into().unwrap());
         let env_pointer = self
             .module
-            .add_global(env_struct_type, Some(AddressSpace::default()), "")
+            .add_global(env_struct_type, None, "globalsb")
             .as_pointer_value();
         let env_struct = self
             .builder
@@ -392,7 +392,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         for (i, v) in value.iter().enumerate() {
             let value = self.get_var(*v).unwrap();
             self.builder
-                .build_insert_value(env_struct, value, i as u32, "");
+                .build_insert_value(env_struct, value, i as u32, "env insert");
         }
         // let array = array_type.const_array(&values);
         (env_struct.get_type(), env_pointer)
@@ -446,7 +446,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let ret_type = self.types.object;
                 let fn_type = ret_type.fn_type(&arg_types, false);
                 let fn_value = self.module.add_function(&name, fn_type, None);
-                let envs = fn_value.get_first_param().unwrap().into_pointer_value();
+                let envs = env.1;
 
                 for (name, arg) in fn_value.get_param_iter().skip(1).enumerate() {
                     arg.set_name(&name.to_string());
@@ -470,7 +470,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.builder.build_store(alloca, arg);
                     self.insert_variable(cn.clone(), alloca);
                 }
-                for (i, arg) in fn_value.get_param_iter().enumerate() {
+                for (i, arg) in fn_value.get_param_iter().skip(1).enumerate() {
                     let arg_name: RC<str> = i.to_string().into();
                     let alloca = self.create_entry_block_alloca(&arg_name)?;
                     self.builder.build_store(alloca, arg);
@@ -498,7 +498,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         self.object_builder
                             .lambda(self.types.lambda.const_named_struct(&[
                                 fn_value.as_global_value().as_pointer_value().into(),
-                                env.1.into(),
+                                env.0.ptr_type(AddressSpace::default()).const_null().into()
                             ]))
                             .as_basic_value_enum(),
                     ))
@@ -524,7 +524,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let cond = self.builder.build_int_compare(
                     inkwell::IntPredicate::NE,
                     object_type,
-                    self.types.ty.const_int(2, false),
+                    self.types.ty.const_int(TyprIndex::boolean as u64, false),
                     "if:cond:boolean?",
                 );
 
@@ -536,7 +536,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder
                     .build_conditional_branch(cond, then_bb, else_bb);
                 self.builder.position_at_end(then_bb);
-                let then_val = self.compile_scope(if_stmt.cons())?;
+                let then_val = self.compile_scope(if_stmt.alt())?;
                 if then_val.is_some() {
                     self.builder.build_unconditional_branch(cont_bb);
                 }
@@ -544,7 +544,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 // build else block
                 self.builder.position_at_end(else_bb);
-                let else_val = self.compile_scope(if_stmt.alt())?;
+                let else_val = self.compile_scope(if_stmt.cons())?;
                 if else_val.is_some() {
                     self.builder.build_unconditional_branch(cont_bb);
                 }
@@ -824,8 +824,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             info: true,
             machine_code: true,
         };
+
         Target::initialize_native(&config).unwrap();
         let triple = TargetMachine::get_default_triple();
+    
         let target = Target::from_triple(&triple).unwrap();
 
         let tm = target

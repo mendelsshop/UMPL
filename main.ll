@@ -5,15 +5,16 @@ target triple = "x86_64-unknown-linux-gnu"
 
 %"[closure@std::panicking::begin_panic<&str>::{closure#0}]" = type { { ptr, i64 }, ptr }
 %"core::ptr::metadata::PtrRepr<[u8]>" = type { [2 x i64] }
-%"[closure@main.rs:2:16: 2:22]" = type {}
+%"alloc::alloc::Global" = type {}
+%"[closure@main.rs:10:5: 10:16]" = type {}
 
 @vtable.0 = private unnamed_addr constant <{ ptr, [16 x i8], ptr, ptr, ptr }> <{ ptr @"_ZN4core3ptr85drop_in_place$LT$std..rt..lang_start$LT$$LP$$RP$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$17h756d60ec90e7c756E", [16 x i8] c"\08\00\00\00\00\00\00\00\08\00\00\00\00\00\00\00", ptr @"_ZN4core3ops8function6FnOnce40call_once$u7b$$u7b$vtable.shim$u7d$$u7d$17h979775d0aae1eef3E", ptr @"_ZN3std2rt10lang_start28_$u7b$$u7b$closure$u7d$$u7d$17he697d9003afb7fa4E", ptr @"_ZN3std2rt10lang_start28_$u7b$$u7b$closure$u7d$$u7d$17he697d9003afb7fa4E" }>, align 8
 @vtable.1 = private unnamed_addr constant <{ ptr, [16 x i8], ptr, ptr }> <{ ptr @"_ZN4core3ptr77drop_in_place$LT$std..panicking..begin_panic..PanicPayload$LT$$RF$str$GT$$GT$17h98ec173019425cd4E", [16 x i8] c"\10\00\00\00\00\00\00\00\08\00\00\00\00\00\00\00", ptr @"_ZN91_$LT$std..panicking..begin_panic..PanicPayload$LT$A$GT$$u20$as$u20$core..panic..BoxMeUp$GT$8take_box17h43490f8286e094afE", ptr @"_ZN91_$LT$std..panicking..begin_panic..PanicPayload$LT$A$GT$$u20$as$u20$core..panic..BoxMeUp$GT$3get17hee53d1ba89b46797E" }>, align 8
 @alloc_38a9d1c1fccd92e612dd2762da060982 = private unnamed_addr constant <{}> zeroinitializer, align 1
 @vtable.2 = private unnamed_addr constant <{ ptr, [16 x i8], ptr }> <{ ptr @"_ZN4core3ptr28drop_in_place$LT$$RF$str$GT$17haf9df91e3d7aa365E", [16 x i8] c"\10\00\00\00\00\00\00\00\08\00\00\00\00\00\00\00", ptr @"_ZN36_$LT$T$u20$as$u20$core..any..Any$GT$7type_id17hb784056a2873a728E" }>, align 8
-@alloc_6693e43df3406efcf64b4ab3d59228bb = private unnamed_addr constant <{ [7 x i8] }> <{ [7 x i8] c"Invalid" }>, align 1
+@vtable.3 = private unnamed_addr constant <{ ptr, [16 x i8], ptr, ptr, ptr }> <{ ptr @"_ZN4core3ptr94drop_in_place$LT$main..make_cons..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$17h16b5f2836d0a6ad5E", [16 x i8] c"\08\00\00\00\00\00\00\00\04\00\00\00\00\00\00\00", ptr @"_ZN4core3ops8function6FnOnce40call_once$u7b$$u7b$vtable.shim$u7d$$u7d$17h4ca6d55d54bd5006E", ptr @"_ZN4main9make_cons28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17hb7f43345f2840025E", ptr @"_ZN4main9make_cons28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17hb7f43345f2840025E" }>, align 8
 @alloc_4693327ca9c5449cec9b739948ccbb5e = private unnamed_addr constant <{ [7 x i8] }> <{ [7 x i8] c"main.rs" }>, align 1
-@alloc_ac5dd9007237a70c5b66c47dfaef5c6d = private unnamed_addr constant <{ ptr, [16 x i8] }> <{ ptr @alloc_4693327ca9c5449cec9b739948ccbb5e, [16 x i8] c"\07\00\00\00\00\00\00\00\09\00\00\00\11\00\00\00" }>, align 8
+@alloc_fc2f35c7a64cbd3dfe6f8f4c1fe1e19d = private unnamed_addr constant <{ ptr, [16 x i8] }> <{ ptr @alloc_4693327ca9c5449cec9b739948ccbb5e, [16 x i8] c"\07\00\00\00\00\00\00\00\0F\00\00\00\16\00\00\00" }>, align 8
 
 ; <T as core::any::Any>::type_id
 ; Function Attrs: nonlazybind uwtable
@@ -29,7 +30,7 @@ start:
 define internal void @_ZN3std10sys_common9backtrace26__rust_end_short_backtrace17hf76cb85beb787c78E(ptr %f) unnamed_addr #1 {
 start:
 ; call std::panicking::begin_panic::{{closure}}
-  call void @"_ZN3std9panicking11begin_panic28_$u7b$$u7b$closure$u7d$$u7d$17hc331590cba3d1ab6E"(ptr %f) #14
+  call void @"_ZN3std9panicking11begin_panic28_$u7b$$u7b$closure$u7d$$u7d$17hc331590cba3d1ab6E"(ptr %f) #16
   call void asm sideeffect "", "~{memory}"(), !srcloc !3
   call void @llvm.trap()
   unreachable
@@ -91,7 +92,7 @@ start:
   %5 = getelementptr inbounds %"[closure@std::panicking::begin_panic<&str>::{closure#0}]", ptr %_3, i32 0, i32 1
   store ptr %loc, ptr %5, align 8
 ; invoke std::sys_common::backtrace::__rust_end_short_backtrace
-  invoke void @_ZN3std10sys_common9backtrace26__rust_end_short_backtrace17hf76cb85beb787c78E(ptr %_3) #14
+  invoke void @_ZN3std10sys_common9backtrace26__rust_end_short_backtrace17hf76cb85beb787c78E(ptr %_3) #16
           to label %unreachable unwind label %cleanup
 
 bb3:                                              ; preds = %cleanup
@@ -166,7 +167,7 @@ start:
   %4 = getelementptr inbounds %"[closure@std::panicking::begin_panic<&str>::{closure#0}]", ptr %_1, i32 0, i32 1
   %_8 = load ptr, ptr %4, align 8, !nonnull !4, !align !5, !noundef !4
 ; invoke std::panicking::rust_panic_with_hook
-  invoke void @_ZN3std9panicking20rust_panic_with_hook17hafdc493a79370062E(ptr align 1 %_5, ptr align 8 @vtable.1, ptr align 8 null, ptr align 8 %_8, i1 zeroext true) #14
+  invoke void @_ZN3std9panicking20rust_panic_with_hook17hafdc493a79370062E(ptr align 1 %_5, ptr align 8 @vtable.1, ptr align 8 null, ptr align 8 %_8, i1 zeroext true) #16
           to label %unreachable unwind label %cleanup
 
 bb2:                                              ; preds = %cleanup
@@ -203,6 +204,22 @@ start:
   store i64 %_1, ptr %1, align 8
   %2 = load i64, ptr %1, align 8, !noundef !4
   ret i64 %2
+}
+
+; core::ops::function::FnOnce::call_once{{vtable.shim}}
+; Function Attrs: inlinehint nonlazybind uwtable
+define internal i32 @"_ZN4core3ops8function6FnOnce40call_once$u7b$$u7b$vtable.shim$u7d$$u7d$17h4ca6d55d54bd5006E"(ptr %_1, i8 %0) unnamed_addr #3 {
+start:
+  %_2 = alloca i8, align 1
+  store i8 %0, ptr %_2, align 1
+  %1 = getelementptr inbounds { i32, i32 }, ptr %_1, i32 0, i32 0
+  %2 = load i32, ptr %1, align 4, !noundef !4
+  %3 = getelementptr inbounds { i32, i32 }, ptr %_1, i32 0, i32 1
+  %4 = load i32, ptr %3, align 4, !noundef !4
+  %5 = load i8, ptr %_2, align 1, !noundef !4
+; call core::ops::function::FnOnce::call_once
+  %6 = call i32 @_ZN4core3ops8function6FnOnce9call_once17hbae91bc822aaa9feE(i32 %2, i32 %4, i8 %5)
+  ret i32 %6
 }
 
 ; core::ops::function::FnOnce::call_once{{vtable.shim}}
@@ -260,6 +277,117 @@ start:
   ret void
 }
 
+; core::ops::function::FnOnce::call_once
+; Function Attrs: inlinehint nonlazybind uwtable
+define internal i32 @_ZN4core3ops8function6FnOnce9call_once17hbae91bc822aaa9feE(i32 %0, i32 %1, i8 %2) unnamed_addr #3 personality ptr @rust_eh_personality {
+start:
+  %3 = alloca { ptr, i32 }, align 8
+  %_2 = alloca i8, align 1
+  %_1 = alloca { i32, i32 }, align 4
+  %4 = getelementptr inbounds { i32, i32 }, ptr %_1, i32 0, i32 0
+  store i32 %0, ptr %4, align 4
+  %5 = getelementptr inbounds { i32, i32 }, ptr %_1, i32 0, i32 1
+  store i32 %1, ptr %5, align 4
+  store i8 %2, ptr %_2, align 1
+  %6 = load i8, ptr %_2, align 1, !noundef !4
+; invoke main::make_cons::{{closure}}::{{closure}}
+  %7 = invoke i32 @"_ZN4main9make_cons28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17hb7f43345f2840025E"(ptr align 4 %_1, i8 %6)
+          to label %bb1 unwind label %cleanup
+
+bb3:                                              ; preds = %cleanup
+  %8 = load ptr, ptr %3, align 8, !noundef !4
+  %9 = getelementptr inbounds { ptr, i32 }, ptr %3, i32 0, i32 1
+  %10 = load i32, ptr %9, align 8, !noundef !4
+  %11 = insertvalue { ptr, i32 } poison, ptr %8, 0
+  %12 = insertvalue { ptr, i32 } %11, i32 %10, 1
+  resume { ptr, i32 } %12
+
+cleanup:                                          ; preds = %start
+  %13 = landingpad { ptr, i32 }
+          cleanup
+  %14 = extractvalue { ptr, i32 } %13, 0
+  %15 = extractvalue { ptr, i32 } %13, 1
+  %16 = getelementptr inbounds { ptr, i32 }, ptr %3, i32 0, i32 0
+  store ptr %14, ptr %16, align 8
+  %17 = getelementptr inbounds { ptr, i32 }, ptr %3, i32 0, i32 1
+  store i32 %15, ptr %17, align 8
+  br label %bb3
+
+bb1:                                              ; preds = %start
+  ret i32 %7
+}
+
+; core::ptr::drop_in_place<dyn core::ops::function::Fn<(i8,)>+Output = i32>
+; Function Attrs: nonlazybind uwtable
+define internal void @"_ZN4core3ptr102drop_in_place$LT$dyn$u20$core..ops..function..Fn$LT$$LP$i8$C$$RP$$GT$$u2b$Output$u20$$u3d$$u20$i32$GT$17h81d89b2a6c42168cE"(ptr %_1.0, ptr align 8 %_1.1) unnamed_addr #0 {
+start:
+  %0 = getelementptr inbounds ptr, ptr %_1.1, i64 0
+  %1 = load ptr, ptr %0, align 8, !invariant.load !4, !nonnull !4
+  call void %1(ptr %_1.0)
+  ret void
+}
+
+; core::ptr::drop_in_place<alloc::boxed::Box<dyn core::ops::function::Fn<(i8,)>+Output = i32>>
+; Function Attrs: nonlazybind uwtable
+define internal void @"_ZN4core3ptr127drop_in_place$LT$alloc..boxed..Box$LT$dyn$u20$core..ops..function..Fn$LT$$LP$i8$C$$RP$$GT$$u2b$Output$u20$$u3d$$u20$i32$GT$$GT$17hcf6867f069c55f34E"(ptr %_1) unnamed_addr #0 personality ptr @rust_eh_personality {
+start:
+  %0 = alloca { ptr, i32 }, align 8
+  %1 = getelementptr inbounds { ptr, ptr }, ptr %_1, i32 0, i32 0
+  %_4.0 = load ptr, ptr %1, align 8, !noundef !4
+  %2 = getelementptr inbounds { ptr, ptr }, ptr %_1, i32 0, i32 1
+  %_4.1 = load ptr, ptr %2, align 8, !nonnull !4, !align !5, !noundef !4
+  %3 = getelementptr inbounds ptr, ptr %_4.1, i64 0
+  %4 = load ptr, ptr %3, align 8, !invariant.load !4, !nonnull !4
+  invoke void %4(ptr %_4.0)
+          to label %bb3 unwind label %cleanup
+
+bb4:                                              ; preds = %cleanup
+  %5 = getelementptr inbounds { ptr, ptr }, ptr %_1, i32 0, i32 0
+  %6 = load ptr, ptr %5, align 8, !nonnull !4, !noundef !4
+  %7 = getelementptr inbounds { ptr, ptr }, ptr %_1, i32 0, i32 1
+  %8 = load ptr, ptr %7, align 8, !nonnull !4, !align !5, !noundef !4
+; invoke alloc::alloc::box_free
+  invoke void @_ZN5alloc5alloc8box_free17h9b227edd08e64daaE(ptr %6, ptr align 8 %8) #17
+          to label %bb2 unwind label %terminate
+
+cleanup:                                          ; preds = %start
+  %9 = landingpad { ptr, i32 }
+          cleanup
+  %10 = extractvalue { ptr, i32 } %9, 0
+  %11 = extractvalue { ptr, i32 } %9, 1
+  %12 = getelementptr inbounds { ptr, i32 }, ptr %0, i32 0, i32 0
+  store ptr %10, ptr %12, align 8
+  %13 = getelementptr inbounds { ptr, i32 }, ptr %0, i32 0, i32 1
+  store i32 %11, ptr %13, align 8
+  br label %bb4
+
+bb3:                                              ; preds = %start
+  %14 = getelementptr inbounds { ptr, ptr }, ptr %_1, i32 0, i32 0
+  %15 = load ptr, ptr %14, align 8, !nonnull !4, !noundef !4
+  %16 = getelementptr inbounds { ptr, ptr }, ptr %_1, i32 0, i32 1
+  %17 = load ptr, ptr %16, align 8, !nonnull !4, !align !5, !noundef !4
+; call alloc::alloc::box_free
+  call void @_ZN5alloc5alloc8box_free17h9b227edd08e64daaE(ptr %15, ptr align 8 %17)
+  ret void
+
+terminate:                                        ; preds = %bb4
+  %18 = landingpad { ptr, i32 }
+          cleanup
+  %19 = extractvalue { ptr, i32 } %18, 0
+  %20 = extractvalue { ptr, i32 } %18, 1
+; call core::panicking::panic_cannot_unwind
+  call void @_ZN4core9panicking19panic_cannot_unwind17hfaa00866a3a05433E() #18
+  unreachable
+
+bb2:                                              ; preds = %bb4
+  %21 = load ptr, ptr %0, align 8, !noundef !4
+  %22 = getelementptr inbounds { ptr, i32 }, ptr %0, i32 0, i32 1
+  %23 = load i32, ptr %22, align 8, !noundef !4
+  %24 = insertvalue { ptr, i32 } poison, ptr %21, 0
+  %25 = insertvalue { ptr, i32 } %24, i32 %23, 1
+  resume { ptr, i32 } %25
+}
+
 ; core::ptr::drop_in_place<&str>
 ; Function Attrs: inlinehint nonlazybind uwtable
 define internal void @"_ZN4core3ptr28drop_in_place$LT$$RF$str$GT$17haf9df91e3d7aa365E"(ptr %_1) unnamed_addr #3 {
@@ -277,6 +405,13 @@ start:
 ; core::ptr::drop_in_place<std::rt::lang_start<()>::{{closure}}>
 ; Function Attrs: inlinehint nonlazybind uwtable
 define internal void @"_ZN4core3ptr85drop_in_place$LT$std..rt..lang_start$LT$$LP$$RP$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$17h756d60ec90e7c756E"(ptr %_1) unnamed_addr #3 {
+start:
+  ret void
+}
+
+; core::ptr::drop_in_place<main::make_cons::{{closure}}::{{closure}}>
+; Function Attrs: inlinehint nonlazybind uwtable
+define internal void @"_ZN4core3ptr94drop_in_place$LT$main..make_cons..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$17h16b5f2836d0a6ad5E"(ptr %_1) unnamed_addr #3 {
 start:
   ret void
 }
@@ -327,7 +462,7 @@ bb1:                                              ; preds = %start
   %14 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 1
   %15 = load i64, ptr %14, align 8, !range !7, !noundef !4
 ; call alloc::alloc::handle_alloc_error
-  call void @_ZN5alloc5alloc18handle_alloc_error17h90b7f1836babe573E(i64 %13, i64 %15) #14
+  call void @_ZN5alloc5alloc18handle_alloc_error17h90b7f1836babe573E(i64 %13, i64 %15) #16
   unreachable
 
 bb2:                                              ; No predecessors!
@@ -428,7 +563,7 @@ bb4:                                              ; preds = %bb1
   call void @llvm.assume(i1 %_56)
   %_57 = icmp ule i64 1, %_55
   call void @llvm.assume(i1 %_57)
-  %31 = call ptr @__rust_alloc(i64 %_49, i64 %_55) #15
+  %31 = call ptr @__rust_alloc(i64 %_49, i64 %_55) #19
   store ptr %31, ptr %raw_ptr, align 8
   br label %bb5
 
@@ -450,7 +585,7 @@ bb3:                                              ; preds = %bb1
   call void @llvm.assume(i1 %_47)
   %_48 = icmp ule i64 1, %_46
   call void @llvm.assume(i1 %_48)
-  %39 = call ptr @__rust_alloc_zeroed(i64 %_40, i64 %_46) #15
+  %39 = call ptr @__rust_alloc_zeroed(i64 %_40, i64 %_46) #19
   store ptr %39, ptr %raw_ptr, align 8
   br label %bb5
 
@@ -563,6 +698,130 @@ bb10:                                             ; preds = %bb2, %bb7, %bb9
   ret { ptr, i64 } %75
 }
 
+; alloc::alloc::box_free
+; Function Attrs: inlinehint nonlazybind uwtable
+define internal void @_ZN5alloc5alloc8box_free17h9b227edd08e64daaE(ptr %0, ptr align 8 %1) unnamed_addr #3 personality ptr @rust_eh_personality {
+start:
+  %2 = alloca { ptr, i32 }, align 8
+  %3 = alloca i64, align 8
+  %4 = alloca i64, align 8
+  %pointer = alloca ptr, align 8
+  %unique = alloca ptr, align 8
+  %_15 = alloca ptr, align 8
+  %layout = alloca { i64, i64 }, align 8
+  %alloc = alloca %"alloc::alloc::Global", align 1
+  %ptr = alloca { ptr, ptr }, align 8
+  %5 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 0
+  store ptr %0, ptr %5, align 8
+  %6 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 1
+  store ptr %1, ptr %6, align 8
+  %7 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 0
+  %self.0 = load ptr, ptr %7, align 8, !nonnull !4, !noundef !4
+  %8 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 1
+  %self.1 = load ptr, ptr %8, align 8, !nonnull !4, !align !5, !noundef !4
+  %9 = getelementptr inbounds i64, ptr %self.1, i64 1
+  %10 = load i64, ptr %9, align 8, !range !8, !invariant.load !4
+  %11 = getelementptr inbounds i64, ptr %self.1, i64 2
+  %12 = load i64, ptr %11, align 8, !range !9, !invariant.load !4
+  store i64 %10, ptr %4, align 8
+  %size = load i64, ptr %4, align 8, !noundef !4
+  %13 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 0
+  %self.01 = load ptr, ptr %13, align 8, !nonnull !4, !noundef !4
+  %14 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 1
+  %self.12 = load ptr, ptr %14, align 8, !nonnull !4, !align !5, !noundef !4
+  %15 = getelementptr inbounds i64, ptr %self.12, i64 1
+  %16 = load i64, ptr %15, align 8, !range !8, !invariant.load !4
+  %17 = getelementptr inbounds i64, ptr %self.12, i64 2
+  %18 = load i64, ptr %17, align 8, !range !9, !invariant.load !4
+  store i64 %18, ptr %3, align 8
+  %align = load i64, ptr %3, align 8, !noundef !4
+  store i64 %size, ptr %layout, align 8
+  %19 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 1
+  store i64 %align, ptr %19, align 8
+  %20 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 0
+  %self.03 = load ptr, ptr %20, align 8, !nonnull !4, !noundef !4
+  %21 = getelementptr inbounds { ptr, ptr }, ptr %ptr, i32 0, i32 1
+  %self.14 = load ptr, ptr %21, align 8, !nonnull !4, !align !5, !noundef !4
+  store ptr %self.03, ptr %pointer, align 8
+  %22 = load ptr, ptr %pointer, align 8, !nonnull !4, !noundef !4
+  store ptr %22, ptr %unique, align 8
+  %self = load ptr, ptr %unique, align 8, !nonnull !4, !noundef !4
+  store ptr %self, ptr %_15, align 8
+  %23 = load ptr, ptr %_15, align 8, !nonnull !4, !noundef !4
+  %24 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 0
+  %25 = load i64, ptr %24, align 8, !noundef !4
+  %26 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 1
+  %27 = load i64, ptr %26, align 8, !range !7, !noundef !4
+; invoke <alloc::alloc::Global as core::alloc::Allocator>::deallocate
+  invoke void @"_ZN63_$LT$alloc..alloc..Global$u20$as$u20$core..alloc..Allocator$GT$10deallocate17h77db645068ec1748E"(ptr align 1 %alloc, ptr %23, i64 %25, i64 %27)
+          to label %bb3 unwind label %cleanup
+
+bb5:                                              ; preds = %cleanup
+  %28 = load ptr, ptr %2, align 8, !noundef !4
+  %29 = getelementptr inbounds { ptr, i32 }, ptr %2, i32 0, i32 1
+  %30 = load i32, ptr %29, align 8, !noundef !4
+  %31 = insertvalue { ptr, i32 } poison, ptr %28, 0
+  %32 = insertvalue { ptr, i32 } %31, i32 %30, 1
+  resume { ptr, i32 } %32
+
+cleanup:                                          ; preds = %start
+  %33 = landingpad { ptr, i32 }
+          cleanup
+  %34 = extractvalue { ptr, i32 } %33, 0
+  %35 = extractvalue { ptr, i32 } %33, 1
+  %36 = getelementptr inbounds { ptr, i32 }, ptr %2, i32 0, i32 0
+  store ptr %34, ptr %36, align 8
+  %37 = getelementptr inbounds { ptr, i32 }, ptr %2, i32 0, i32 1
+  store i32 %35, ptr %37, align 8
+  br label %bb5
+
+bb3:                                              ; preds = %start
+  ret void
+}
+
+; <alloc::alloc::Global as core::alloc::Allocator>::deallocate
+; Function Attrs: inlinehint nonlazybind uwtable
+define internal void @"_ZN63_$LT$alloc..alloc..Global$u20$as$u20$core..alloc..Allocator$GT$10deallocate17h77db645068ec1748E"(ptr align 1 %self, ptr %ptr, i64 %0, i64 %1) unnamed_addr #3 {
+start:
+  %_14 = alloca i64, align 8
+  %layout1 = alloca { i64, i64 }, align 8
+  %layout = alloca { i64, i64 }, align 8
+  %2 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 0
+  store i64 %0, ptr %2, align 8
+  %3 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 1
+  store i64 %1, ptr %3, align 8
+  %_4 = load i64, ptr %layout, align 8, !noundef !4
+  %4 = icmp eq i64 %_4, 0
+  br i1 %4, label %bb2, label %bb1
+
+bb2:                                              ; preds = %start
+  br label %bb3
+
+bb1:                                              ; preds = %start
+  %5 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 0
+  %6 = load i64, ptr %5, align 8, !noundef !4
+  %7 = getelementptr inbounds { i64, i64 }, ptr %layout, i32 0, i32 1
+  %8 = load i64, ptr %7, align 8, !range !7, !noundef !4
+  %9 = getelementptr inbounds { i64, i64 }, ptr %layout1, i32 0, i32 0
+  store i64 %6, ptr %9, align 8
+  %10 = getelementptr inbounds { i64, i64 }, ptr %layout1, i32 0, i32 1
+  store i64 %8, ptr %10, align 8
+  %_9 = load i64, ptr %layout1, align 8, !noundef !4
+  %11 = getelementptr inbounds { i64, i64 }, ptr %layout1, i32 0, i32 1
+  %self2 = load i64, ptr %11, align 8, !range !7, !noundef !4
+  store i64 %self2, ptr %_14, align 8
+  %_15 = load i64, ptr %_14, align 8, !range !7, !noundef !4
+  %_16 = icmp uge i64 -9223372036854775808, %_15
+  call void @llvm.assume(i1 %_16)
+  %_17 = icmp ule i64 1, %_15
+  call void @llvm.assume(i1 %_17)
+  call void @__rust_dealloc(ptr %ptr, i64 %_9, i64 %_15) #19
+  br label %bb3
+
+bb3:                                              ; preds = %bb2, %bb1
+  ret void
+}
+
 ; <std::panicking::begin_panic::PanicPayload<A> as core::panic::BoxMeUp>::get
 ; Function Attrs: nonlazybind uwtable
 define internal { ptr, ptr } @"_ZN91_$LT$std..panicking..begin_panic..PanicPayload$LT$A$GT$$u20$as$u20$core..panic..BoxMeUp$GT$3get17hee53d1ba89b46797E"(ptr align 8 %self) unnamed_addr #0 {
@@ -576,7 +835,7 @@ start:
 
 bb1:                                              ; preds = %start
 ; call std::process::abort
-  call void @_ZN3std7process5abort17h96a864b26eb4d7f5E() #14
+  call void @_ZN3std7process5abort17h96a864b26eb4d7f5E() #16
   unreachable
 
 bb3:                                              ; preds = %start
@@ -628,7 +887,7 @@ start:
 
 bb1:                                              ; preds = %start
 ; call std::process::abort
-  call void @_ZN3std7process5abort17h96a864b26eb4d7f5E() #14
+  call void @_ZN3std7process5abort17h96a864b26eb4d7f5E() #16
   unreachable
 
 bb3:                                              ; preds = %start
@@ -716,10 +975,11 @@ bb5:                                              ; preds = %bb3
 ; Function Attrs: nonlazybind uwtable
 define internal void @_ZN4main4main17hac82363469e1a7a2E() unnamed_addr #0 {
 start:
-  %_7 = alloca i32, align 4
   %_4 = alloca { i32, i32 }, align 4
-  %x = alloca { i32, i32 }, align 4
-  %_1 = alloca %"[closure@main.rs:2:16: 2:22]", align 1
+  %_2 = alloca { ptr, ptr }, align 8
+  %_1 = alloca %"[closure@main.rs:10:5: 10:16]", align 1
+; call main::make_cons
+  call void @_ZN4main9make_cons17h7f1e7fa40903caaaE()
   store i32 5, ptr %_4, align 4
   %0 = getelementptr inbounds { i32, i32 }, ptr %_4, i32 0, i32 1
   store i32 6, ptr %0, align 4
@@ -727,64 +987,91 @@ start:
   %2 = load i32, ptr %1, align 4, !noundef !4
   %3 = getelementptr inbounds { i32, i32 }, ptr %_4, i32 0, i32 1
   %4 = load i32, ptr %3, align 4, !noundef !4
-; call main::main::{{closure}}
-  %5 = call { i32, i32 } @"_ZN4main4main28_$u7b$$u7b$closure$u7d$$u7d$17h9e297fd7656f4f09E"(ptr align 1 %_1, i32 %2, i32 %4)
-  store { i32, i32 } %5, ptr %x, align 4
-  store i32 0, ptr %_7, align 4
-  %6 = load i32, ptr %_7, align 4, !noundef !4
-; call main::main::{{closure}}::{{closure}}
-  %_5 = call i32 @"_ZN4main4main28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17h4037cbaa6363c5f0E"(ptr align 4 %x, i32 %6)
+; call main::make_cons::{{closure}}
+  %5 = call { ptr, ptr } @"_ZN4main9make_cons28_$u7b$$u7b$closure$u7d$$u7d$17heebac8efa7907e9cE"(ptr align 1 %_1, i32 %2, i32 %4)
+  store { ptr, ptr } %5, ptr %_2, align 8
+; call core::ptr::drop_in_place<alloc::boxed::Box<dyn core::ops::function::Fn<(i8,)>+Output = i32>>
+  call void @"_ZN4core3ptr127drop_in_place$LT$alloc..boxed..Box$LT$dyn$u20$core..ops..function..Fn$LT$$LP$i8$C$$RP$$GT$$u2b$Output$u20$$u3d$$u20$i32$GT$$GT$17hcf6867f069c55f34E"(ptr %_2)
   ret void
 }
 
-; main::main::{{closure}}
-; Function Attrs: inlinehint nonlazybind uwtable
-define internal { i32, i32 } @"_ZN4main4main28_$u7b$$u7b$closure$u7d$$u7d$17h9e297fd7656f4f09E"(ptr align 1 %_1, i32 %x, i32 %y) unnamed_addr #3 {
+; main::make_cons
+; Function Attrs: nonlazybind uwtable
+define internal void @_ZN4main9make_cons17h7f1e7fa40903caaaE() unnamed_addr #0 {
 start:
-  %0 = alloca { i32, i32 }, align 4
-  store i32 %x, ptr %0, align 4
-  %1 = getelementptr inbounds { i32, i32 }, ptr %0, i32 0, i32 1
-  store i32 %y, ptr %1, align 4
-  %2 = getelementptr inbounds { i32, i32 }, ptr %0, i32 0, i32 0
-  %3 = load i32, ptr %2, align 4, !noundef !4
-  %4 = getelementptr inbounds { i32, i32 }, ptr %0, i32 0, i32 1
-  %5 = load i32, ptr %4, align 4, !noundef !4
-  %6 = insertvalue { i32, i32 } poison, i32 %3, 0
-  %7 = insertvalue { i32, i32 } %6, i32 %5, 1
-  ret { i32, i32 } %7
+  ret void
 }
 
-; main::main::{{closure}}::{{closure}}
+; main::make_cons::{{closure}}
 ; Function Attrs: inlinehint nonlazybind uwtable
-define internal i32 @"_ZN4main4main28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17h4037cbaa6363c5f0E"(ptr align 4 %_1, i32 %z) unnamed_addr #3 {
+define internal { ptr, ptr } @"_ZN4main9make_cons28_$u7b$$u7b$closure$u7d$$u7d$17heebac8efa7907e9cE"(ptr align 1 %_1, i32 %x, i32 %y) unnamed_addr #3 personality ptr @rust_eh_personality {
+start:
+  %0 = alloca { ptr, i32 }, align 8
+  %_5 = alloca { i32, i32 }, align 4
+  store i32 %x, ptr %_5, align 4
+  %1 = getelementptr inbounds { i32, i32 }, ptr %_5, i32 0, i32 1
+  store i32 %y, ptr %1, align 4
+  %2 = getelementptr inbounds { i32, i32 }, ptr %_5, i32 0, i32 0
+  %3 = load i32, ptr %2, align 4, !noundef !4
+  %4 = getelementptr inbounds { i32, i32 }, ptr %_5, i32 0, i32 1
+  %5 = load i32, ptr %4, align 4, !noundef !4
+; invoke alloc::alloc::exchange_malloc
+  %_4.i = invoke ptr @_ZN5alloc5alloc15exchange_malloc17h2fa50198c7588fe7E(i64 8, i64 4)
+          to label %"_ZN5alloc5boxed12Box$LT$T$GT$3new17h19f22ae4f91a8982E.exit" unwind label %cleanup.i
+
+cleanup.i:                                        ; preds = %start
+  %6 = landingpad { ptr, i32 }
+          cleanup
+  %7 = extractvalue { ptr, i32 } %6, 0
+  %8 = extractvalue { ptr, i32 } %6, 1
+  store ptr %7, ptr %0, align 8
+  %9 = getelementptr inbounds { ptr, i32 }, ptr %0, i32 0, i32 1
+  store i32 %8, ptr %9, align 8
+  %10 = load ptr, ptr %0, align 8, !noundef !4
+  %11 = getelementptr inbounds { ptr, i32 }, ptr %0, i32 0, i32 1
+  %12 = load i32, ptr %11, align 8, !noundef !4
+  %13 = insertvalue { ptr, i32 } poison, ptr %10, 0
+  %14 = insertvalue { ptr, i32 } %13, i32 %12, 1
+  resume { ptr, i32 } %14
+
+"_ZN5alloc5boxed12Box$LT$T$GT$3new17h19f22ae4f91a8982E.exit": ; preds = %start
+  store i32 %3, ptr %_4.i, align 4
+  %15 = getelementptr inbounds { i32, i32 }, ptr %_4.i, i32 0, i32 1
+  store i32 %5, ptr %15, align 4
+  %16 = insertvalue { ptr, ptr } poison, ptr %_4.i, 0
+  %17 = insertvalue { ptr, ptr } %16, ptr @vtable.3, 1
+  ret { ptr, ptr } %17
+}
+
+; main::make_cons::{{closure}}::{{closure}}
+; Function Attrs: inlinehint nonlazybind uwtable
+define internal i32 @"_ZN4main9make_cons28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17hb7f43345f2840025E"(ptr align 4 %_1, i8 %z) unnamed_addr #3 {
 start:
   %0 = alloca i32, align 4
-  %1 = icmp eq i32 %z, 0
-  br i1 %1, label %bb1, label %bb2
+  switch i8 %z, label %bb1 [
+    i8 0, label %bb2
+    i8 1, label %bb3
+  ]
 
 bb1:                                              ; preds = %start
-  %2 = load i32, ptr %_1, align 4, !noundef !4
-  store i32 %2, ptr %0, align 4
-  br label %bb5
-
-bb2:                                              ; preds = %start
-  %3 = icmp eq i32 %z, 1
-  br i1 %3, label %bb3, label %bb4
-
-bb3:                                              ; preds = %bb2
-  %4 = getelementptr inbounds { i32, i32 }, ptr %_1, i32 0, i32 1
-  %5 = load i32, ptr %4, align 4, !noundef !4
-  store i32 %5, ptr %0, align 4
-  br label %bb5
-
-bb4:                                              ; preds = %bb2
 ; call std::panicking::begin_panic
-  call void @_ZN3std9panicking11begin_panic17hdb4e07896ccaaa43E(ptr align 1 @alloc_6693e43df3406efcf64b4ab3d59228bb, i64 7, ptr align 8 @alloc_ac5dd9007237a70c5b66c47dfaef5c6d) #14
+  call void @_ZN3std9panicking11begin_panic17hdb4e07896ccaaa43E(ptr align 1 @alloc_38a9d1c1fccd92e612dd2762da060982, i64 0, ptr align 8 @alloc_fc2f35c7a64cbd3dfe6f8f4c1fe1e19d) #16
   unreachable
 
-bb5:                                              ; preds = %bb1, %bb3
-  %6 = load i32, ptr %0, align 4, !noundef !4
-  ret i32 %6
+bb2:                                              ; preds = %start
+  %1 = load i32, ptr %_1, align 4, !noundef !4
+  store i32 %1, ptr %0, align 4
+  br label %bb4
+
+bb3:                                              ; preds = %start
+  %2 = getelementptr inbounds { i32, i32 }, ptr %_1, i32 0, i32 1
+  %3 = load i32, ptr %2, align 4, !noundef !4
+  store i32 %3, ptr %0, align 4
+  br label %bb4
+
+bb4:                                              ; preds = %bb2, %bb3
+  %4 = load i32, ptr %0, align 4, !noundef !4
+  ret i32 %4
 }
 
 ; Function Attrs: cold noreturn nounwind
@@ -801,28 +1088,35 @@ declare i32 @rust_eh_personality(i32, i32, i64, ptr, ptr) unnamed_addr #0
 ; Function Attrs: noreturn nonlazybind uwtable
 declare void @_ZN3std9panicking20rust_panic_with_hook17hafdc493a79370062E(ptr align 1, ptr align 8, ptr align 8, ptr align 8, i1 zeroext) unnamed_addr #7
 
+; core::panicking::panic_cannot_unwind
+; Function Attrs: cold noinline noreturn nounwind nonlazybind uwtable
+declare void @_ZN4core9panicking19panic_cannot_unwind17hfaa00866a3a05433E() unnamed_addr #8
+
 ; alloc::alloc::handle_alloc_error
 ; Function Attrs: cold noreturn nonlazybind uwtable
-declare void @_ZN5alloc5alloc18handle_alloc_error17h90b7f1836babe573E(i64, i64) unnamed_addr #8
+declare void @_ZN5alloc5alloc18handle_alloc_error17h90b7f1836babe573E(i64, i64) unnamed_addr #9
 
 ; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: readwrite)
-declare void @llvm.assume(i1 noundef) #9
+declare void @llvm.assume(i1 noundef) #10
 
 ; Function Attrs: nounwind nonlazybind allockind("alloc,zeroed,aligned") allocsize(0) uwtable
-declare noalias ptr @__rust_alloc_zeroed(i64, i64 allocalign) unnamed_addr #10
+declare noalias ptr @__rust_alloc_zeroed(i64, i64 allocalign) unnamed_addr #11
 
 ; Function Attrs: nounwind nonlazybind allockind("alloc,uninitialized,aligned") allocsize(0) uwtable
-declare noalias ptr @__rust_alloc(i64, i64 allocalign) unnamed_addr #11
+declare noalias ptr @__rust_alloc(i64, i64 allocalign) unnamed_addr #12
+
+; Function Attrs: nounwind nonlazybind allockind("free") uwtable
+declare void @__rust_dealloc(ptr allocptr, i64, i64) unnamed_addr #13
 
 ; std::process::abort
 ; Function Attrs: cold noreturn nonlazybind uwtable
-declare void @_ZN3std7process5abort17h96a864b26eb4d7f5E() unnamed_addr #8
+declare void @_ZN3std7process5abort17h96a864b26eb4d7f5E() unnamed_addr #9
 
 ; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)
-declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg) #12
+declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg) #14
 
 ; Function Attrs: nonlazybind
-define i32 @main(i32 %0, ptr %1) unnamed_addr #13 {
+define i32 @main(i32 %0, ptr %1) unnamed_addr #15 {
 top:
   %2 = sext i32 %0 to i64
 ; call std::rt::lang_start
@@ -839,22 +1133,28 @@ attributes #4 = { cold noinline noreturn nonlazybind uwtable "probe-stack"="inli
 attributes #5 = { inlinehint noreturn nonlazybind uwtable "probe-stack"="inline-asm" "target-cpu"="x86-64" }
 attributes #6 = { cold noreturn nounwind }
 attributes #7 = { noreturn nonlazybind uwtable "probe-stack"="inline-asm" "target-cpu"="x86-64" }
-attributes #8 = { cold noreturn nonlazybind uwtable "probe-stack"="inline-asm" "target-cpu"="x86-64" }
-attributes #9 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: readwrite) }
-attributes #10 = { nounwind nonlazybind allockind("alloc,zeroed,aligned") allocsize(0) uwtable "alloc-family"="__rust_alloc" "probe-stack"="inline-asm" "target-cpu"="x86-64" }
-attributes #11 = { nounwind nonlazybind allockind("alloc,uninitialized,aligned") allocsize(0) uwtable "alloc-family"="__rust_alloc" "probe-stack"="inline-asm" "target-cpu"="x86-64" }
-attributes #12 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
-attributes #13 = { nonlazybind "target-cpu"="x86-64" }
-attributes #14 = { noreturn }
-attributes #15 = { nounwind }
+attributes #8 = { cold noinline noreturn nounwind nonlazybind uwtable "probe-stack"="inline-asm" "target-cpu"="x86-64" }
+attributes #9 = { cold noreturn nonlazybind uwtable "probe-stack"="inline-asm" "target-cpu"="x86-64" }
+attributes #10 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: readwrite) }
+attributes #11 = { nounwind nonlazybind allockind("alloc,zeroed,aligned") allocsize(0) uwtable "alloc-family"="__rust_alloc" "probe-stack"="inline-asm" "target-cpu"="x86-64" }
+attributes #12 = { nounwind nonlazybind allockind("alloc,uninitialized,aligned") allocsize(0) uwtable "alloc-family"="__rust_alloc" "probe-stack"="inline-asm" "target-cpu"="x86-64" }
+attributes #13 = { nounwind nonlazybind allockind("free") uwtable "alloc-family"="__rust_alloc" "probe-stack"="inline-asm" "target-cpu"="x86-64" }
+attributes #14 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
+attributes #15 = { nonlazybind "target-cpu"="x86-64" }
+attributes #16 = { noreturn }
+attributes #17 = { noinline }
+attributes #18 = { noinline noreturn nounwind }
+attributes #19 = { nounwind }
 
 !llvm.module.flags = !{!0, !1, !2}
 
 !0 = !{i32 8, !"PIC Level", i32 2}
 !1 = !{i32 7, !"PIE Level", i32 2}
 !2 = !{i32 2, !"RtLibUseGOT", i32 1}
-!3 = !{i32 1359297}
+!3 = !{i32 1880918}
 !4 = !{}
 !5 = !{i64 8}
 !6 = !{i64 1}
 !7 = !{i64 1, i64 -9223372036854775807}
+!8 = !{i64 0, i64 -9223372036854775808}
+!9 = !{i64 1, i64 0}
