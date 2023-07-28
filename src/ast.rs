@@ -7,6 +7,8 @@ pub struct Tree {
     pub inner: RC<MUTEX<(UMPL2Expr, UMPL2Expr, UMPL2Expr)>>,
 }
 
+// TODO: flatten trait for quotation
+
 #[derive(Clone, Default, PartialEq)]
 pub enum UMPL2Expr {
     Bool(Boolean),
@@ -35,7 +37,6 @@ pub enum UMPL2Expr {
     #[default]
     Hempty,
     Link(RC<str>, Vec<RC<str>>),
-    Tree(Tree),
     FnKW(FnKeyword),
     Let(RC<str>, Box<UMPL2Expr>),
     ComeTo(RC<str>),
@@ -63,7 +64,6 @@ impl core::fmt::Debug for UMPL2Expr {
             UMPL2Expr::FnParam(f0) => f.debug_tuple("FnParam").field(&f0).finish(),
             UMPL2Expr::Hempty => f.write_str("Hempty"),
             UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::Tree(f0) => f.debug_tuple("Tree").field(&f0).finish(),
             UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
             UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
             UMPL2Expr::ComeTo(f0) => f.debug_tuple("ComeTo").field(&f0).finish(),
@@ -93,7 +93,6 @@ impl core::fmt::Display for UMPL2Expr {
             UMPL2Expr::FnParam(f0) => write!(f, "'{}", f0),
             UMPL2Expr::Hempty => write!(f, "hempty"),
             UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::Tree(f0) => f.debug_tuple("Tree").field(&f0).finish(),
             UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
             UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
             UMPL2Expr::ComeTo(f0) => write!(f, "Come to {}", f0),

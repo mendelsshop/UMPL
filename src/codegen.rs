@@ -20,7 +20,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Boolean, FnKeyword, UMPL2Expr},
+    ast::{Boolean, UMPL2Expr, FnKeyword},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -59,7 +59,8 @@ pub enum TyprIndex {
     boolean = 0,
     cons = 3,
     lambda = 4,
-    quoted = 5,
+    symbol = 5,
+    thunk = 6,
     #[default]
     Unkown = 100,
 }
@@ -83,10 +84,9 @@ pub struct Types<'ctx> {
     pub string: PointerType<'ctx>,
     pub cons: PointerType<'ctx>,
     pub lambda: StructType<'ctx>,
-    pub quoted: FunctionType<'ctx>,
     pub lambda_ptr: PointerType<'ctx>,
-    pub quoted_ptr: PointerType<'ctx>,
     pub lambda_ty: FunctionType<'ctx>,
+    pub symbol_type: PointerType<'ctx>,
     pub generic_pointer: PointerType<'ctx>,
 }
 
@@ -99,7 +99,8 @@ pub struct Object<'ctx> {
     string: Option<PointerValue<'ctx>>,
     cons: Option<PointerValue<'ctx>>,
     lambda: Option<StructValue<'ctx>>,
-    quoted: Option<PointerValue<'ctx>>,
+    symbol: Option<PointerValue<'ctx>>,
+    thunk: Option<PointerValue<'ctx>>,
 }
 
 impl<'ctx> Object<'ctx> {
@@ -115,7 +116,8 @@ impl<'ctx> Object<'ctx> {
     builder_object!(string, PointerValue<'ctx>);
     builder_object!(cons, PointerValue<'ctx>);
     builder_object!(lambda, StructValue<'ctx>);
-    builder_object!(quoted, PointerValue<'ctx>);
+    builder_object!(thunk, PointerValue<'ctx>);
+    builder_object!(symbol, PointerValue<'ctx>);
 
     pub fn object(&mut self) -> StructValue<'ctx> {
         let types = self.types.unwrap();
@@ -139,8 +141,8 @@ impl<'ctx> Object<'ctx> {
                     ])
                 })
                 .into(),
-            self.quoted
-                .unwrap_or_else(|| types.quoted_ptr.const_null())
+            self.thunk
+                .unwrap_or_else(|| types.generic_pointer.const_null())
                 .into(),
         ]);
         *self = Self::new(types);
@@ -273,7 +275,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ],
             false,
         );
-        let quoted = kind.fn_type(&[], false);
         let types = Types {
             object: kind,
             ty: context.i8_type(),
@@ -286,9 +287,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .ptr_type(AddressSpace::default()),
             lambda,
             lambda_ptr: lambda.ptr_type(AddressSpace::default()),
-            quoted,
-            quoted_ptr: quoted.ptr_type(AddressSpace::default()),
             lambda_ty: fn_type,
+            symbol_type: context.i8_type().ptr_type(AddressSpace::default()),
             generic_pointer: context.i8_type().ptr_type(AddressSpace::default()),
         };
         module.add_function(
@@ -311,10 +311,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 types.string.as_basic_type_enum(),
                 types.cons.as_basic_type_enum(),
                 types.lambda.as_basic_type_enum(),
-                types
-                    .quoted
-                    .ptr_type(AddressSpace::default())
-                    .as_basic_type_enum(),
+                types.symbol_type.as_basic_type_enum(),
             ],
             false,
         );
@@ -430,6 +427,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .as_basic_value_enum(),
             )),
             UMPL2Expr::Fanction(r#fn) => {
+                // if its var arg dont make it var arg, just make it arg_count+1  number of parameters
                 let env = self.get_scope();
                 let old_fn = self.fn_value;
                 let old_block = self.builder.get_insert_block();
@@ -575,6 +573,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
+                // TODO
                 let op = return_none!(self.compile_expr(&application.args()[0])?);
                 let args = return_none!(application
                     .args()
@@ -620,27 +619,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // kinda of doesnt work because quotation should assume nothing about the environment, but since we do a full codegen if a ident is quoted it will attempt to lookup
             // the variable and error if it doesn't exist (not wanted behavior)
             // another approach would be to make codegen eitheer return and llvm value or a UMPl2expr
-            UMPL2Expr::Quoted(expr) => {
-                let saved_block = self.builder.get_insert_block();
-                let quoted_fn = self.module.add_function("quoted", self.types.quoted, None);
-                let quote_block = self.context.append_basic_block(quoted_fn, "quoted:entry");
-                self.builder.position_at_end(quote_block);
-                self.builder
-                    .build_return(Some(&return_none!(self.compile_expr(expr)?)));
-                if let Some(saved_block) = saved_block {
-                    self.builder.position_at_end(saved_block);
-                }
-                Ok(Some(
-                    self.object_builder
-                        .quoted(quoted_fn.as_global_value().as_pointer_value())
-                        .as_basic_value_enum(),
-                ))
-            }
+
+            // note the above comment and code below is wrong we just need to convert to appropriate literal types either tree, number, bool, string, or symbol (needs to be added to object struct)
+            UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
-            UMPL2Expr::Tree(_) => todo!(),
+            // UMPL2Expr::Tree(_) => todo!(),
+            UMPL2Expr::Let(i, v) => {
+                let v = return_none!(self.compile_expr(v)?);
+                let ty = self.types.object;
+                let ptr = self.builder.build_alloca(ty, i);
+                // let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
+                self.builder.build_store(ptr, v);
+                self.insert_variable(i.clone(), ptr);
+                // self.context.o
+                return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
+            }
+            UMPL2Expr::ComeTo(_) => todo!(),
             UMPL2Expr::FnKW(kw) => match kw {
                 FnKeyword::Add => todo!(),
                 FnKeyword::Sub => todo!(),
@@ -662,17 +659,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .as_basic_value_enum(),
                 )),
             },
-            UMPL2Expr::Let(i, v) => {
-                let v = return_none!(self.compile_expr(v)?);
-                let ty = self.types.object;
-                let ptr = self.builder.build_alloca(ty, i);
-                // let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
-                self.builder.build_store(ptr, v);
-                self.insert_variable(i.clone(), ptr);
-                // self.context.o
-                return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
-            }
-            UMPL2Expr::ComeTo(_) => todo!(),
         }
     }
 

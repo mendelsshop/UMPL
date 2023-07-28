@@ -39,7 +39,6 @@ impl Analyzer {
                 self.link_set.insert(label.clone(), jump_from.clone());
                 *val = UMPL2Expr::Hempty;
             }
-            UMPL2Expr::Tree(_) => unreachable!(),
             UMPL2Expr::Application(aplication) => self.find_links(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_link(s);
@@ -110,7 +109,6 @@ impl Analyzer {
               unreachable!()
             }
             UMPL2Expr::Quoted(v) => self.find_label(v),
-            UMPL2Expr::Tree(_) => unreachable!(),
             UMPL2Expr::Application(aplication) => self.find_labels(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_label(s);
