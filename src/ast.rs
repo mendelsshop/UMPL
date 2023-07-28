@@ -1,6 +1,11 @@
 use std::{fmt::Display, str::FromStr};
 
-use crate::interior_mut::{MUTEX, RC};
+use inkwell::values::StructValue;
+
+use crate::{
+    codegen::Compiler,
+    interior_mut::{MUTEX, RC},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tree {
@@ -8,6 +13,9 @@ pub struct Tree {
 }
 
 // TODO: flatten trait for quotation
+pub trait FlattenAst<'a, 'ctx> {
+    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx>;
+}
 
 #[derive(Clone, Default, PartialEq)]
 pub enum UMPL2Expr {
@@ -40,6 +48,82 @@ pub enum UMPL2Expr {
     FnKW(FnKeyword),
     Let(RC<str>, Box<UMPL2Expr>),
     ComeTo(RC<str>),
+}
+
+impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
+    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
+        match self {
+            UMPL2Expr::Bool(b) => compiler.object_builder.const_boolean(b),
+            UMPL2Expr::Number(n) => compiler.object_builder.const_number(n),
+            UMPL2Expr::String(c) => compiler.object_builder.const_string(
+                &c,
+                Some(&mut compiler.string),
+                compiler.builder,
+            ),
+            UMPL2Expr::Scope(_) => unreachable!(),
+            UMPL2Expr::Ident(i) => compiler.object_builder.const_symbol(
+                &i,
+                Some(&mut compiler.ident),
+                compiler.builder,
+            ),
+            UMPL2Expr::If(_) => todo!(),
+            UMPL2Expr::Unless(_) => todo!(),
+            UMPL2Expr::Stop(_) => todo!(),
+            UMPL2Expr::Skip => todo!(),
+            UMPL2Expr::Until(_) => todo!(),
+            UMPL2Expr::GoThrough(_) => todo!(),
+            UMPL2Expr::ContiueDoing(_) => todo!(),
+            UMPL2Expr::Fanction(_) => todo!(),
+            UMPL2Expr::Application(a) => a.flatten(compiler), 
+            UMPL2Expr::Quoted(_) => todo!(),
+            UMPL2Expr::Label(_) => todo!(),
+            UMPL2Expr::FnParam(p) => compiler.object_builder.const_symbol(
+                &format!("'{p}'").into(),
+                Some(&mut compiler.ident),
+                compiler.builder,
+            ),
+            UMPL2Expr::Hempty => compiler.object_builder.hempty(),
+            UMPL2Expr::Link(_, _) => todo!(),
+            UMPL2Expr::FnKW(_) => todo!(),
+            UMPL2Expr::Let(_, _) => todo!(),
+            UMPL2Expr::ComeTo(_) => todo!(),
+        }
+    }
+}
+
+impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
+    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
+        fn fun_name<'a, 'ctx>(
+            list: Vec<UMPL2Expr>,
+            compiler: &mut Compiler<'a, 'ctx>,
+            n: usize,
+        ) -> (StructValue<'ctx>, Vec<UMPL2Expr>) {
+            if n == 0 {
+                (compiler.object_builder.hempty(), list)
+            } else {
+                let left_size = (n - 1) / 2;
+                let (left_tree, mut non_left_tree) = fun_name(list, compiler, left_size);
+
+                let this = non_left_tree.remove(0).flatten(compiler);
+
+                let right_size = n - (left_size + 1);
+                let (right_tree, remaining) = fun_name(non_left_tree, compiler, right_size);
+                (
+                    compiler.object_builder.const_cons(
+                        compiler.builder,
+                        left_tree,
+                        this,
+                        right_tree,
+                    ),
+                    remaining,
+                )
+            }
+        }
+        let n = self.len();
+        let partial_tree = fun_name(self, compiler, n);
+
+        partial_tree.0
+    }
 }
 
 impl core::fmt::Debug for UMPL2Expr {
@@ -180,6 +264,15 @@ impl Fanction {
 pub struct Application {
     args: Vec<UMPL2Expr>,
     print: PrintType,
+}
+
+impl<'ctx, 'a> FlattenAst<'a, 'ctx> for Application {
+    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
+        let left_tree = self.args.flatten(compiler);
+        let this = compiler.object_builder.const_symbol(&format!("{:?}", self.print).into(),Some(&mut compiler.ident), compiler.builder);
+        let right_tree = compiler.object_builder.hempty();
+        compiler.object_builder.const_cons(compiler.builder, left_tree, this, right_tree)
+    }
 }
 
 impl Application {

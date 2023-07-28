@@ -20,7 +20,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Boolean, UMPL2Expr, FnKeyword},
+    ast::{Boolean, FnKeyword, UMPL2Expr, FlattenAst},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -31,23 +31,22 @@ macro_rules! return_none {
         }
     };
 }
-
+#[derive(Clone, Debug)]
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     module: &'a Module<'ctx>,
     variables: Vec<(HashMap<RC<str>, PointerValue<'ctx>>, Vec<RC<str>>)>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
-    string: HashMap<RC<str>, GlobalValue<'ctx>>,
-    // kind: StructType<'ctx>,
-    // fn_type: FunctionType<'ctx>,
+    pub(crate) string: HashMap<RC<str>, GlobalValue<'ctx>>,
+    // ident stores all used identifiers that were turned in a llvm string literal
+    // so we don't store multiple sof the same identifiers
+    pub(crate) ident: HashMap<RC<str>, GlobalValue<'ctx>>,
     fn_value: Option<FunctionValue<'ctx>>,
     jit: ExecutionEngine<'ctx>,
-    // cons_type: inkwell::types::PointerType<'ctx>,
     links: HashMap<RC<str>, BasicBlock<'ctx>>,
-    // quoted_type: FunctionType<'ctx>,
-    types: Types<'ctx>,
-    object_builder: Object<'ctx>,
+    pub(crate) types: Types<'ctx>,
+    pub(crate) object_builder: Object<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -61,6 +60,7 @@ pub enum TyprIndex {
     lambda = 4,
     symbol = 5,
     thunk = 6,
+    hempty = 7,
     #[default]
     Unkown = 100,
 }
@@ -75,22 +75,23 @@ macro_rules! builder_object {
     };
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Types<'ctx> {
     pub object: StructType<'ctx>,
     pub ty: IntType<'ctx>,
     pub boolean: IntType<'ctx>,
     pub number: FloatType<'ctx>,
     pub string: PointerType<'ctx>,
-    pub cons: PointerType<'ctx>,
+    pub cons: StructType<'ctx>,
     pub lambda: StructType<'ctx>,
     pub lambda_ptr: PointerType<'ctx>,
     pub lambda_ty: FunctionType<'ctx>,
     pub symbol_type: PointerType<'ctx>,
     pub generic_pointer: PointerType<'ctx>,
+    pub hempty: StructType<'ctx>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct Object<'ctx> {
     ty: TyprIndex,
     types: Option<Types<'ctx>>,
@@ -118,6 +119,10 @@ impl<'ctx> Object<'ctx> {
     builder_object!(lambda, StructValue<'ctx>);
     builder_object!(thunk, PointerValue<'ctx>);
     builder_object!(symbol, PointerValue<'ctx>);
+    pub fn hempty(&mut self) -> StructValue<'ctx> {
+        self.ty = TyprIndex::hempty;
+        self.object()
+    }
 
     pub fn object(&mut self) -> StructValue<'ctx> {
         let types = self.types.unwrap();
@@ -132,7 +137,9 @@ impl<'ctx> Object<'ctx> {
             self.string
                 .unwrap_or_else(|| types.string.const_null())
                 .into(),
-            self.cons.unwrap_or_else(|| types.cons.const_null()).into(),
+            self.cons
+                .unwrap_or_else(|| types.generic_pointer.const_null())
+                .into(),
             self.lambda
                 .unwrap_or_else(|| {
                     types.lambda.const_named_struct(&[
@@ -144,20 +151,77 @@ impl<'ctx> Object<'ctx> {
             self.thunk
                 .unwrap_or_else(|| types.generic_pointer.const_null())
                 .into(),
+            types.hempty.const_zero().into(),
         ]);
         *self = Self::new(types);
         result
     }
 
-    fn const_string(
+    pub(crate) fn const_string(
         &mut self,
         value: &RC<str>,
         string_map: Option<&mut HashMap<RC<str>, GlobalValue<'ctx>>>,
         builder: &Builder<'ctx>,
     ) -> StructValue<'ctx> {
+        let str = Self::make_string(string_map, builder, value);
+        self.string(str)
+    }
+
+    pub(crate) fn const_symbol(
+        &mut self,
+        value: &RC<str>,
+        string_map: Option<&mut HashMap<RC<str>, GlobalValue<'ctx>>>,
+        builder: &Builder<'ctx>,
+    ) -> StructValue<'ctx> {
+        let str = Self::make_string(string_map, builder, value);
+        self.symbol(str)
+    }
+    
+
+    pub(crate) fn const_cons(
+        &mut self,
+        builder: &Builder<'ctx>,
+        left_tree: StructValue<'ctx>,
+        this: StructValue<'ctx>,
+        right_tree: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        let types = self.types.unwrap();
+        let left_ptr = builder.build_alloca(types.object, "cdr");
+        builder.build_store(left_ptr, left_tree);
+        let this_ptr = builder.build_alloca(types.object, "car");
+        builder.build_store(this_ptr, this);
+        let right_ptr = builder.build_alloca(types.object, "cgr");
+        builder.build_store(right_ptr, right_tree);
+        let tree_type =
+            types
+                .cons
+                .const_named_struct(&[left_ptr.into(), this_ptr.into(), right_ptr.into()]);
+        let tree_ptr = builder.build_alloca(types.cons, "tree");
+        builder.build_store(tree_ptr, tree_type);
+        self.cons(tree_ptr)
+    }
+
+    pub(crate) fn const_number(&mut self, value: f64) -> StructValue<'ctx> {
+        let types = self.types.unwrap();
+        self.number(types.number.const_float(value))
+    }
+
+    pub(crate) fn const_boolean(&mut self, value: Boolean) -> StructValue<'ctx> {
+        let types = self.types.unwrap();
+        self.boolean(types.boolean.const_int(
+            match value {
+                Boolean::False => 0,
+                Boolean::True => 1,
+                Boolean::Maybee => todo!(),
+            },
+            false,
+        ))
+    }
+
+    fn make_string(string_map: Option<&mut HashMap<std::rc::Rc<str>, GlobalValue<'ctx>>>, builder: &Builder<'ctx>, value: &std::rc::Rc<str>) -> PointerValue<'ctx> {
         #[allow(clippy::map_unwrap_or)]
         // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
-        let str = string_map.map_or_else(
+        string_map.map_or_else(
             || {
                 builder
                     .build_global_string_ptr(value, value)
@@ -173,27 +237,11 @@ impl<'ctx> Object<'ctx> {
                     |string| string.as_pointer_value(),
                 )
             },
-        );
-        self.string(str)
-    }
-
-    fn const_number(&mut self, value: f64) -> StructValue<'ctx> {
-        let types = self.types.unwrap();
-        self.number(types.number.const_float(value))
-    }
-
-    fn const_boolean(&mut self, value: Boolean) -> StructValue<'ctx> {
-        let types = self.types.unwrap();
-        self.boolean(types.boolean.const_int(
-            match value {
-                Boolean::False => 0,
-                Boolean::True => 1,
-                Boolean::Maybee => todo!(),
-            },
-            false,
-        ))
+        )
     }
 }
+
+
 
 macro_rules! make_extract {
     ($self:expr, $type:ident, $o_type: ident, $name:literal) => {{
@@ -281,15 +329,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             boolean: context.bool_type(),
             number: context.f64_type(),
             string: context.i8_type().ptr_type(AddressSpace::default()),
-            cons: kind
-                .ptr_type(AddressSpace::default())
-                .array_type(3)
-                .ptr_type(AddressSpace::default()),
+            cons: context.struct_type(&[kind.into(), kind.into(), kind.into()], false),
+
             lambda,
             lambda_ptr: lambda.ptr_type(AddressSpace::default()),
             lambda_ty: fn_type,
             symbol_type: context.i8_type().ptr_type(AddressSpace::default()),
             generic_pointer: context.i8_type().ptr_type(AddressSpace::default()),
+            hempty: context.struct_type(&[], false),
         };
         module.add_function(
             "exit",
@@ -309,7 +356,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 types.boolean.as_basic_type_enum(),
                 types.number.as_basic_type_enum(),
                 types.string.as_basic_type_enum(),
-                types.cons.as_basic_type_enum(),
+                types.generic_pointer.as_basic_type_enum(),
                 types.lambda.as_basic_type_enum(),
                 types.symbol_type.as_basic_type_enum(),
             ],
@@ -323,7 +370,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             builder,
             fpm,
             string: HashMap::new(),
-
+            ident: HashMap::new(),
             fn_value: None,
             jit,
             types,
@@ -621,7 +668,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // another approach would be to make codegen eitheer return and llvm value or a UMPl2expr
 
             // note the above comment and code below is wrong we just need to convert to appropriate literal types either tree, number, bool, string, or symbol (needs to be added to object struct)
-            UMPL2Expr::Quoted(_) => todo!(),
+            UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
             UMPL2Expr::Label(_s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => todo!(),

@@ -11,8 +11,8 @@ use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 
-pub mod ast;
 pub mod analyzer;
+pub mod ast;
 mod codegen;
 
 pub mod lexer;
@@ -53,7 +53,8 @@ fn main() {
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
     let fn_type = umpl_parse(
-        "let cons 
+        ";t
+        let cons 
                                 fanction  2 ᚜ 
                                         let x '0' 
                                         let y '1' 
