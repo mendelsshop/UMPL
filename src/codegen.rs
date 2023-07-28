@@ -20,7 +20,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Boolean, FnKeyword, UMPL2Expr},
+    ast::{Boolean, UMPL2Expr},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -514,67 +514,69 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
             UMPL2Expr::Scope(_) => unreachable!(),
-            UMPL2Expr::If(if_stmt) => {
-                let parent = self.current_fn_value()?;
-                let cond_struct =
-                    return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
-                let bool_val = self.extract_bool(cond_struct).unwrap().into_int_value();
-                let object_type = self.extract_type(cond_struct).unwrap().into_int_value();
-                // if its not a bool type
-                let cond = self.builder.build_int_compare(
-                    inkwell::IntPredicate::NE,
-                    object_type,
-                    self.types.ty.const_int(TyprIndex::boolean as u64, false),
-                    "if:cond:boolean?",
-                );
+            // UMPL2Expr::If(if_stmt) => {
+            //     let parent = self.current_fn_value()?;
+            //     let cond_struct =
+            //         return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
+            //     let bool_val = self.extract_bool(cond_struct).unwrap().into_int_value();
+            //     let object_type = self.extract_type(cond_struct).unwrap().into_int_value();
+            //     // if its not a bool type
+            //     let cond = self.builder.build_int_compare(
+            //         inkwell::IntPredicate::NE,
+            //         object_type,
+            //         self.types.ty.const_int(TyprIndex::boolean as u64, false),
+            //         "if:cond:boolean?",
+            //     );
 
-                // conditinal: either not bool or true
-                let cond = self.builder.build_or(bool_val, cond, "if:cond:false?");
-                let then_bb = self.context.append_basic_block(parent, "then");
-                let else_bb = self.context.append_basic_block(parent, "else");
-                let cont_bb = self.context.append_basic_block(parent, "ifcont");
-                self.builder
-                    .build_conditional_branch(cond, then_bb, else_bb);
-                self.builder.position_at_end(then_bb);
-                let then_val = self.compile_scope(if_stmt.alt())?;
-                if then_val.is_some() {
-                    self.builder.build_unconditional_branch(cont_bb);
-                }
-                let then_bb = self.builder.get_insert_block().unwrap();
+            //     // conditinal: either not bool or true
+            //     let cond = self.builder.build_or(bool_val, cond, "if:cond:false?");
+            //     let then_bb = self.context.append_basic_block(parent, "then");
+            //     let else_bb = self.context.append_basic_block(parent, "else");
+            //     let cont_bb = self.context.append_basic_block(parent, "ifcont");
+            //     self.builder
+            //         .build_conditional_branch(cond, then_bb, else_bb);
+            //     self.builder.position_at_end(then_bb);
+            //     let then_val = self.compile_scope(if_stmt.alt())?;
+            //     if then_val.is_some() {
+            //         self.builder.build_unconditional_branch(cont_bb);
+            //     }
+            //     let then_bb = self.builder.get_insert_block().unwrap();
 
-                // build else block
-                self.builder.position_at_end(else_bb);
-                let else_val = self.compile_scope(if_stmt.cons())?;
-                if else_val.is_some() {
-                    self.builder.build_unconditional_branch(cont_bb);
-                }
-                let else_bb = self.builder.get_insert_block().unwrap();
+            //     // build else block
+            //     self.builder.position_at_end(else_bb);
+            //     let else_val = self.compile_scope(if_stmt.cons())?;
+            //     if else_val.is_some() {
+            //         self.builder.build_unconditional_branch(cont_bb);
+            //     }
+            //     let else_bb = self.builder.get_insert_block().unwrap();
 
-                // emit merge block
-                self.builder.position_at_end(cont_bb);
+            //     // emit merge block
+            //     self.builder.position_at_end(cont_bb);
 
-                let phi = self.builder.build_phi(self.types.object, "if:phi-cont");
-                match (then_val, else_val) {
-                    (None, None) => phi.add_incoming(&[]),
-                    (None, Some(else_val)) => phi.add_incoming(&[(&else_val, else_bb)]),
-                    (Some(then_val), None) => phi.add_incoming(&[(&then_val, then_bb)]),
-                    (Some(then_val), Some(else_val)) => {
-                        phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
-                    }
-                }
-                Ok(Some(phi.as_basic_value()))
-            }
-            UMPL2Expr::Unless(_) => todo!(),
+            //     let phi = self.builder.build_phi(self.types.object, "if:phi-cont");
+            //     match (then_val, else_val) {
+            //         (None, None) => phi.add_incoming(&[]),
+            //         (None, Some(else_val)) => phi.add_incoming(&[(&else_val, else_bb)]),
+            //         (Some(then_val), None) => phi.add_incoming(&[(&then_val, then_bb)]),
+            //         (Some(then_val), Some(else_val)) => {
+            //             phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
+            //         }
+            //     }
+            //     Ok(Some(phi.as_basic_value()))
+            // }
+            // // UMPL2Expr::Unless(_) => todo!(),
             UMPL2Expr::Stop(s) => {
                 let res = return_none!(self.compile_expr(s)?);
                 self.builder.build_return(Some(&res));
                 Ok(None)
             }
             UMPL2Expr::Skip => todo!(),
-            UMPL2Expr::Until(_) => todo!(),
-            UMPL2Expr::GoThrough(_) => todo!(),
+            // UMPL2Expr::Until(_) => todo!(),
+            // UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
+
+                // TODO
                 let op = return_none!(self.compile_expr(&application.args()[0])?);
                 let args = return_none!(application
                     .args()
@@ -620,6 +622,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // kinda of doesnt work because quotation should assume nothing about the environment, but since we do a full codegen if a ident is quoted it will attempt to lookup
             // the variable and error if it doesn't exist (not wanted behavior)
             // another approach would be to make codegen eitheer return and llvm value or a UMPl2expr
+            
+            // note the above comment and code below is wrong we just need to convert to appropriate literal types either tree, number, bool, string, or symbol (needs to be added to object struct)
+
             UMPL2Expr::Quoted(expr) => {
                 let saved_block = self.builder.get_insert_block();
                 let quoted_fn = self.module.add_function("quoted", self.types.quoted, None);
@@ -641,27 +646,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Hempty => todo!(),
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::Tree(_) => todo!(),
-            UMPL2Expr::FnKW(kw) => match kw {
-                FnKeyword::Add => todo!(),
-                FnKeyword::Sub => todo!(),
-                FnKeyword::Mul => todo!(),
-                FnKeyword::Div => todo!(),
-                FnKeyword::Mod => todo!(),
-                FnKeyword::Print => Ok(Some(
-                    self.object_builder
-                        .lambda(
-                            self.types.lambda.const_named_struct(&[
-                                self.module
-                                    .get_function("print")
-                                    .map(|func| func.as_global_value().as_pointer_value())
-                                    .unwrap()
-                                    .into(),
-                                self.types.generic_pointer.const_null().into(),
-                            ]),
-                        )
-                        .as_basic_value_enum(),
-                )),
-            },
+            // UMPL2Expr::FnKW(kw) => match kw {
+            //     FnKeyword::Add => todo!(),
+            //     FnKeyword::Sub => todo!(),
+            //     FnKeyword::Mul => todo!(),
+            //     FnKeyword::Div => todo!(),
+            //     FnKeyword::Mod => todo!(),
+            //     FnKeyword::Print => Ok(Some(
+            //         self.object_builder
+            //             .lambda(
+            //                 self.types.lambda.const_named_struct(&[
+            //                     self.module
+            //                         .get_function("print")
+            //                         .map(|func| func.as_global_value().as_pointer_value())
+            //                         .unwrap()
+            //                         .into(),
+            //                     self.types.generic_pointer.const_null().into(),
+            //                 ]),
+            //             )
+            //             .as_basic_value_enum(),
+            //     )),
+            // },
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;

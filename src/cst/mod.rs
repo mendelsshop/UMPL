@@ -1,5 +1,5 @@
 use std::{fmt::Display, str::FromStr};
-
+pub mod lexer;
 use crate::interior_mut::{MUTEX, RC};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -371,6 +371,17 @@ pub enum Varidiac {
     /// in form of tree (requires at least 0 args)
     AtLeast0,
 }
+
+impl Varidiac {
+   pub const fn from_char(c: char) -> Option<Self> {
+        match c {
+            '*' => Some(Self::AtLeast0),
+            '+' => Some(Self::AtLeast1),
+            _ => None,
+        }
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PrintType {

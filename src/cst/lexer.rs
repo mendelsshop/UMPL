@@ -5,7 +5,7 @@ use std::{iter, str::FromStr};
 use parse_int::parse;
 
 use crate::{
-    ast::{
+    cst::{
         Application, Boolean, Fanction, FnKeyword, GoThrough, If, PrintType, UMPL2Expr, Unless,
         Until, Varidiac,
     },
@@ -15,16 +15,6 @@ use crate::{
         Parser,
     },
 };
-
-impl Varidiac {
-    const fn from_char(c: char) -> Option<Self> {
-        match c {
-            '*' => Some(Self::AtLeast0),
-            '+' => Some(Self::AtLeast1),
-            _ => None,
-        }
-    }
-}
 
 fn ws_or_comment() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
     map(
@@ -440,8 +430,8 @@ fn stlib_kewyword() -> Box<Parser<UMPL2Expr>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ast::{Application, Fanction, GoThrough, If, Unless, Until},
+    use crate::cst::{
+        {Application, Fanction, GoThrough, If, Unless, Until},
         lexer::{parse_umpl, Boolean, PrintType, UMPL2Expr, Varidiac},
     };
 
