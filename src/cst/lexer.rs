@@ -431,8 +431,8 @@ fn stlib_kewyword() -> Box<Parser<UMPL2Expr>> {
 #[cfg(test)]
 mod tests {
     use crate::cst::{
-        {Application, Fanction, GoThrough, If, Unless, Until},
         lexer::{parse_umpl, Boolean, PrintType, UMPL2Expr, Varidiac},
+        {Application, Fanction, GoThrough, If, Unless, Until},
     };
 
     #[test]

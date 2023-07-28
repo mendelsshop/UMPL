@@ -7,68 +7,39 @@ pub struct Tree {
     pub inner: RC<MUTEX<(UMPL2Expr, UMPL2Expr, UMPL2Expr)>>,
 }
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Debug)]
 pub enum UMPL2Expr {
+    /// literals
     Bool(Boolean),
     Number(f64),
     String(RC<str>),
-    Scope(Vec<UMPL2Expr>),
-    Ident(RC<str>),
-    // second 2 are scopes
-    If(Box<If>),
-    // second 2 are scopes
-    Unless(Box<Unless>),
-    Stop(Box<UMPL2Expr>),
-    Skip,
-    // last one is scope
-    Until(Box<Until>),
-    // last one is scope
-    GoThrough(Box<GoThrough>),
-    // last one is scope
-    ContiueDoing(Vec<UMPL2Expr>),
-    // last one is scope
-    Fanction(Fanction),
-    Application(Application),
-    Quoted(Box<UMPL2Expr>),
-    Label(RC<str>),
-    FnParam(usize),
     #[default]
     Hempty,
-    Link(RC<str>, Vec<RC<str>>),
-    Tree(Tree),
+    Ident(RC<str>),
+    Label(RC<str>),
+    FnParam(usize),
     FnKW(FnKeyword),
-    Let(RC<str>, Box<UMPL2Expr>),
-    ComeTo(RC<str>),
-}
 
-impl core::fmt::Debug for UMPL2Expr {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            UMPL2Expr::Bool(f0) => f.debug_tuple("Bool").field(&f0).finish(),
-            UMPL2Expr::Number(f0) => f.debug_tuple("Number").field(&f0).finish(),
-            UMPL2Expr::String(f0) => f.debug_tuple("String").field(&f0).finish(),
-            UMPL2Expr::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
-            UMPL2Expr::Ident(f0) => f.debug_tuple("Ident").field(&f0).finish(),
-            UMPL2Expr::If(f0) => f.debug_tuple("If").field(&f0).finish(),
-            UMPL2Expr::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
-            UMPL2Expr::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
-            UMPL2Expr::Skip => f.write_str("Skip"),
-            UMPL2Expr::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
-            UMPL2Expr::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
-            UMPL2Expr::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
-            UMPL2Expr::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
-            UMPL2Expr::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
-            UMPL2Expr::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
-            UMPL2Expr::Label(f0) => f.debug_tuple("Label").field(&f0).finish(),
-            UMPL2Expr::FnParam(f0) => f.debug_tuple("FnParam").field(&f0).finish(),
-            UMPL2Expr::Hempty => f.write_str("Hempty"),
-            UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::Tree(f0) => f.debug_tuple("Tree").field(&f0).finish(),
-            UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
-            UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
-            UMPL2Expr::ComeTo(f0) => f.debug_tuple("ComeTo").field(&f0).finish(),
-        }
-    }
+    Scope(Vec<UMPL2Expr>),
+    Comment(RC<str>),
+    WhiteSpace(RC<str>),
+    /// control flow
+    Skip,
+    Stop(Box<UMPL2Expr>),
+    ComeTo(RC<str>),
+
+    Application(Application),
+
+    /// technically fall under application but in the cst they get their own type
+    Fanction(Fanction),
+    If(Box<If>),
+    Unless(Box<Unless>),
+    Until(Box<Until>),
+    GoThrough(Box<GoThrough>),
+    ContiueDoing(Vec<UMPL2Expr>),
+    Quoted(Box<UMPL2Expr>),
+    Let(RC<str>, Box<UMPL2Expr>),
+    Link(RC<str>, Vec<RC<str>>),
 }
 
 impl core::fmt::Display for UMPL2Expr {
@@ -93,10 +64,12 @@ impl core::fmt::Display for UMPL2Expr {
             UMPL2Expr::FnParam(f0) => write!(f, "'{}", f0),
             UMPL2Expr::Hempty => write!(f, "hempty"),
             UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::Tree(f0) => f.debug_tuple("Tree").field(&f0).finish(),
+            // UMPL2Expr::Tree(f0) => f.debug_tuple("Tree").field(&f0).finish(),
             UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
             UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
             UMPL2Expr::ComeTo(f0) => write!(f, "Come to {}", f0),
+            UMPL2Expr::Comment(_) => todo!(),
+            UMPL2Expr::WhiteSpace(_) => todo!(),
         }
     }
 }
@@ -373,7 +346,7 @@ pub enum Varidiac {
 }
 
 impl Varidiac {
-   pub const fn from_char(c: char) -> Option<Self> {
+    pub const fn from_char(c: char) -> Option<Self> {
         match c {
             '*' => Some(Self::AtLeast0),
             '+' => Some(Self::AtLeast1),
@@ -382,8 +355,7 @@ impl Varidiac {
     }
 }
 
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PrintType {
     None,
     Print,

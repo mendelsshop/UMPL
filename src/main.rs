@@ -9,12 +9,12 @@
 
 use inkwell::{context::Context, passes::PassManager};
 
-use crate::{codegen::Compiler, ast::lexer::umpl_parse};
+use crate::{ast::lexer::umpl_parse, codegen::Compiler};
 
-pub mod cst;
-pub mod ast;
 pub mod analyzer;
+pub mod ast;
 mod codegen;
+pub mod cst;
 
 // pub mod lexer;
 pub mod pc;
@@ -73,7 +73,7 @@ fn main() {
                         ",
     )
     .unwrap();
-    // umpl_parse("let i 9 (print i)<").unwrap();
+    // umpl_parse("let i 9").unwrap();
     println!("{fn_type:?}");
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);

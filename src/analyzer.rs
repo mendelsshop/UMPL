@@ -37,18 +37,15 @@ impl Analyzer {
                 self.link_set.insert(label.clone(), jump_from.clone());
                 *val = UMPL2Expr::Hempty;
             }
-            UMPL2Expr::Tree(_) => unreachable!(),
+            // UMPL2Expr::Tree(_) => unreachable!(),
             UMPL2Expr::Application(aplication) => self.find_links(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_link(s);
             }
-            UMPL2Expr::ContiueDoing(scope) => {
-                self.find_links(scope);
-            }
-            UMPL2Expr::Fanction(fanction) => {
-                self.find_links(fanction.scope_mut());
-            }
-            UMPL2Expr::Let(_, v) | UMPL2Expr::Quoted(v) => self.find_link(v),
+            // UMPL2Expr::Fanction(fanction) => {
+            //     self.find_links(fanction.scope_mut());
+            // }
+            // UMPL2Expr::Let(_, v)  => self.find_link(v),
             UMPL2Expr::Scope(scope) => self.find_links(scope),
 
         }
@@ -87,19 +84,15 @@ impl Analyzer {
             UMPL2Expr::Link(_, _) => {
               unreachable!()
             }
-            UMPL2Expr::Quoted(v) => self.find_label(v),
-            UMPL2Expr::Tree(_) => unreachable!(),
+            // UMPL2Expr::Quoted(v) => self.find_label(v),
             UMPL2Expr::Application(aplication) => self.find_labels(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_label(s);
             }
-            UMPL2Expr::ContiueDoing(scope) => {
-                self.find_labels(scope);
-            }
-            UMPL2Expr::Fanction(fanction) => {
-                self.find_labels(fanction.scope_mut());
-            }
-            UMPL2Expr::Let(_, v) => self.find_label(v),
+            // UMPL2Expr::Fanction(fanction) => {
+            //     self.find_labels(fanction.scope_mut());
+            // }
+            // UMPL2Expr::Let(_, v) => self.find_label(v),
             UMPL2Expr::ComeTo(_) => todo!(),
             UMPL2Expr::Scope(scope) => self.find_labels(scope),
         }
