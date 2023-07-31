@@ -20,7 +20,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Boolean, FnKeyword, UMPL2Expr, FlattenAst},
+    ast::{Boolean, FlattenAst, FnKeyword, UMPL2Expr},
     interior_mut::RC,
 };
 macro_rules! return_none {
@@ -34,7 +34,7 @@ macro_rules! return_none {
 #[derive(Clone, Debug)]
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
-    module: &'a Module<'ctx>,
+    pub(crate) module: &'a Module<'ctx>,
     variables: Vec<(HashMap<RC<str>, PointerValue<'ctx>>, Vec<RC<str>>)>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
@@ -176,29 +176,31 @@ impl<'ctx> Object<'ctx> {
         let str = Self::make_string(string_map, builder, value);
         self.symbol(str)
     }
-    
 
     pub(crate) fn const_cons(
         &mut self,
         builder: &Builder<'ctx>,
+        module: &Module<'ctx>,
         left_tree: StructValue<'ctx>,
         this: StructValue<'ctx>,
         right_tree: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
         let types = self.types.unwrap();
-        let left_ptr = builder.build_alloca(types.object, "cdr");
-        builder.build_store(left_ptr, left_tree);
-        let this_ptr = builder.build_alloca(types.object, "car");
-        builder.build_store(this_ptr, this);
-        let right_ptr = builder.build_alloca(types.object, "cgr");
-        builder.build_store(right_ptr, right_tree);
+        // let left_ptr = builder.build_alloca(types.object, "cdr");
+        // builder.build_store(left_ptr, left_tree);
+        // let this_ptr = builder.build_alloca(types.object, "car");
+        // builder.build_store(this_ptr, this);
+        // let right_ptr = builder.build_alloca(types.object, "cgr");
+        // builder.build_store(right_ptr, right_tree);
         let tree_type =
             types
                 .cons
-                .const_named_struct(&[left_ptr.into(), this_ptr.into(), right_ptr.into()]);
-        let tree_ptr = builder.build_alloca(types.cons, "tree");
-        builder.build_store(tree_ptr, tree_type);
-        self.cons(tree_ptr)
+                .const_named_struct(&[left_tree.into(), this.into(), right_tree.into()]);
+
+        let tree_ptr = module.add_global(tree_type.get_type(), None, "cons");
+        tree_ptr.set_initializer(&types.cons.const_zero());
+        builder.build_store(tree_ptr.as_pointer_value(), tree_type);
+        self.cons(tree_ptr.as_pointer_value())
     }
 
     pub(crate) fn const_number(&mut self, value: f64) -> StructValue<'ctx> {
@@ -218,7 +220,11 @@ impl<'ctx> Object<'ctx> {
         ))
     }
 
-    fn make_string(string_map: Option<&mut HashMap<std::rc::Rc<str>, GlobalValue<'ctx>>>, builder: &Builder<'ctx>, value: &std::rc::Rc<str>) -> PointerValue<'ctx> {
+    fn make_string(
+        string_map: Option<&mut HashMap<std::rc::Rc<str>, GlobalValue<'ctx>>>,
+        builder: &Builder<'ctx>,
+        value: &std::rc::Rc<str>,
+    ) -> PointerValue<'ctx> {
         #[allow(clippy::map_unwrap_or)]
         // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
         string_map.map_or_else(
@@ -240,8 +246,6 @@ impl<'ctx> Object<'ctx> {
         )
     }
 }
-
-
 
 macro_rules! make_extract {
     ($self:expr, $type:ident, $o_type: ident, $name:literal) => {{
@@ -394,7 +398,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             |first_instr| self.builder.position_before(&first_instr),
         );
 
-        Ok(self.builder.build_alloca(self.types.object, name))
+        let build_alloca = self.builder.build_alloca(self.types.object, name);
+        Ok(build_alloca)
         // store everything as a global variable
         // Ok(self.module.add_global(self.types.object, Some(AddressSpace::default()), name).as_pointer_value())
     }
@@ -507,6 +512,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.new_env();
                 for i in 0..env.0.count_fields() {
                     let cn = env_iter[i as usize].clone();
+                    // self.module.add_global(type_, address_space, name)
                     let alloca = self.builder.build_alloca(self.types.object, &cn);
                     let arg = self
                         .builder

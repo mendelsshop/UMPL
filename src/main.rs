@@ -53,7 +53,8 @@ fn main() {
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
     let fn_type = umpl_parse(
-        ";t
+        "let x 1111
+        ;(1 23 45 (x)< 6)>
         let cons 
                                 fanction  2 ᚜ 
                                         let x '0' 
