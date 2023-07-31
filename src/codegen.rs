@@ -53,16 +53,17 @@ pub struct Compiler<'a, 'ctx> {
 #[repr(C)]
 #[allow(non_camel_case_types)]
 pub enum TyprIndex {
-    string = 2,
-    number = 1,
-    boolean = 0,
-    cons = 3,
-    lambda = 4,
-    symbol = 5,
-    thunk = 6,
-    hempty = 7,
     #[default]
     Unkown = 100,
+    boolean = 0,
+    cons = 3,
+    // TODO: make hempty be 0 so object will be zeroinitilizer if its hempty
+    hempty = 7,
+    lambda = 4,
+    number = 1,
+    string = 2,
+    symbol = 5,
+    thunk = 6,
 }
 
 macro_rules! builder_object {
@@ -334,7 +335,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             number: context.f64_type(),
             string: context.i8_type().ptr_type(AddressSpace::default()),
             cons: context.struct_type(&[kind.into(), kind.into(), kind.into()], false),
-
             lambda,
             lambda_ptr: lambda.ptr_type(AddressSpace::default()),
             lambda_ty: fn_type,
@@ -745,12 +745,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .left()
     }
 
+    fn extract_symbol(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        let print = self.module.get_function("extract_symbol").unwrap();
+        self.builder
+            .build_call(print, &[val.into()], "extract-symbol")
+            .try_as_basic_value()
+            .left()
+    }
+
     fn extract_function(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
         let print = self.module.get_function("extract_function").unwrap();
         self.builder
             .build_call(print, &[val.into()], "extract-function")
             .try_as_basic_value()
             .left()
+    }
+
+    fn extract_cons(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        let cons_extract = self.module.get_function("extract_cons").unwrap();
+        self.builder
+            .build_call(cons_extract, &[val.into()], "extract-cons")
+            .try_as_basic_value()
+            .left()
+            .map(|pointer| {
+                self.builder
+                    .build_load(self.types.cons, pointer.into_pointer_value(), "loadcons")
+            })
     }
 
     fn compile_scope(
@@ -777,6 +797,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         make_extract!(self, string, string, "string");
         make_extract!(self, boolean, boolean, "boolean");
         make_extract!(self, number, number, "number");
+        make_extract!(self, string, symbol, "symbol");
+        make_extract!(self, generic_pointer, cons, "cons");
     }
 
     pub fn compile_program(
@@ -784,16 +806,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         program: &[UMPL2Expr],
         _links: HashSet<RC<str>>,
     ) -> Option<String> {
+        self.new_env();
+        self.make_extraction();
+        self.make_accesors();
+        self.make_print();
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
         // TODO: maybe dont optimize make_* functions b/c indirect call branches
-        self.make_extraction();
+
         self.fn_value = Some(main_fn);
-        self.make_print();
+
         self.builder.position_at_end(main_block);
 
-        self.new_env();
+        
         for expr in program {
             match self.compile_expr(expr) {
                 Ok(_) => continue,
@@ -889,6 +915,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn make_print(&mut self) {
+        // maybe make print should turn into make string 
         let old = self.fn_value;
         // self.types.lambda.
         let print_fn_ty: FunctionType<'_> = self.types.object.fn_type(
@@ -901,8 +928,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let bool_block = self.context.append_basic_block(print_fn, "bool");
         let number_block = self.context.append_basic_block(print_fn, "number");
         let string_block = self.context.append_basic_block(print_fn, "string");
-        // let cons_block = self.context.append_basic_block(print_fn, "cons");
+        let cons_block = self.context.append_basic_block(print_fn, "cons");
         // let lambda_block = self.context.append_basic_block(print_fn, "lambda");
+        let symbol_block = self.context.append_basic_block(print_fn, "hempty");
+        let hempty_block = self.context.append_basic_block(print_fn, "symbol");
         let ret_block = self.context.append_basic_block(print_fn, "return");
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(error_block);
@@ -927,6 +956,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 (
                     self.types.ty.const_int(TyprIndex::string as u64, false),
                     string_block,
+                ),
+                (
+                    self.types.ty.const_int(TyprIndex::cons as u64, false),
+                    cons_block,
+                ),
+                (
+                    self.types.ty.const_int(TyprIndex::hempty as u64, false),
+                    hempty_block,
+                ),
+                (
+                    self.types.ty.const_int(TyprIndex::symbol as u64, false),
+                    symbol_block,
                 ),
             ],
         );
@@ -957,13 +998,72 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         print_type(bool_block, Self::extract_bool, "%i", "boolean");
         print_type(number_block, Self::extract_number, "%f", "number");
         print_type(string_block, Self::extract_string, "%s", "string");
+        print_type(symbol_block, Self::extract_symbol, "%s", "symbol");
+        self.builder.position_at_end(cons_block);
+        // let val = self.extract_cons( args).unwrap();
+        self.builder.build_call(
+            print,
+            &[
+                self.builder
+                    .build_global_string_ptr("(", "open paren")
+                    .as_basic_value_enum()
+                    .into(),
 
+            ],
+            &format!("print open"),
+        );
+        let val = self.builder.build_call(self.module.get_function("car").unwrap(), &[self.types.generic_pointer.const_null().into(), args.into()], "getcar").try_as_basic_value().unwrap_left();
+        self.builder.build_call(self.module.get_function("print").unwrap(), &[self.types.generic_pointer.const_null().into(), val.into()], "printcar");
+        self.builder.build_call(
+            print,
+            &[
+                self.builder
+                    .build_global_string_ptr(" ", "space")
+                    .as_basic_value_enum()
+                    .into(),
+
+            ],
+            &format!("print space"),
+        );
+        let val = self.builder.build_call(self.module.get_function("cdr").unwrap(), &[self.types.generic_pointer.const_null().into(), args.into()], "getcar").try_as_basic_value().unwrap_left();
+        self.builder.build_call(self.module.get_function("print").unwrap(), &[self.types.generic_pointer.const_null().into(), val.into()], "printcar");
+        self.builder.build_call(
+            print,
+            &[
+                self.builder
+                    .build_global_string_ptr(" ", "space")
+                    .as_basic_value_enum()
+                    .into(),
+
+            ],
+            &format!("print space"),
+        );
+        let val = self.builder.build_call(self.module.get_function("cgr").unwrap(), &[self.types.generic_pointer.const_null().into(), args.into()], "getcar").try_as_basic_value().unwrap_left();
+        self.builder.build_call(self.module.get_function("print").unwrap(), &[self.types.generic_pointer.const_null().into(), val.into()], "printcar");
+        self.builder.build_call(
+            print,
+            &[
+                self.builder
+                    .build_global_string_ptr(")", "open paren")
+                    .as_basic_value_enum()
+                    .into(),
+
+            ],
+            &format!("print open"),
+        );
+        self.builder.build_unconditional_branch(ret_block);
+        self.builder.position_at_end(hempty_block);
+        self.builder.build_call(print, &[self.builder.build_global_string_ptr("hempty", "hempty").as_pointer_value().into()], "printcar");
+           self.builder.build_unconditional_branch(ret_block);
         self.builder.position_at_end(ret_block);
         let phi = self.builder.build_phi(self.types.object, "print return");
         phi.add_incoming(&[
             (&args, bool_block),
             (&args, number_block),
             (&args, string_block),
+            (&args, cons_block),
+            (&args, hempty_block),
+            (&args, symbol_block),
         ]);
         self.builder.build_return(Some(&phi.as_basic_value()));
         self.fn_value = old;
@@ -977,6 +1077,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_call(print, &[val.into()], "print")
             .try_as_basic_value()
             .unwrap_left()
+    }
+
+    fn make_accesors(&mut self) {
+        let fn_ty = self.types.lambda_ty;
+        let mut accesor = |idx, name| {
+            let func = self.module.add_function(name, fn_ty, None);
+            let entry = self.context.append_basic_block(func, name);
+            self.builder.position_at_end(entry);
+            // we can ignore envoirment, just needed for compatibility with other procedures
+            let cons_object = func.get_nth_param(1).unwrap().into_struct_value();
+            let cons_object = self.extract_cons(cons_object).unwrap().into_struct_value();
+            let car = self
+                .builder
+                .build_extract_value(cons_object, idx, &format!("get-{name}"))
+                .unwrap();
+            self.builder.build_return(Some(&car));
+            let value = self.object_builder.lambda( self.types.lambda.const_named_struct(&[self.types.generic_pointer.const_null().into(), func.as_global_value().as_pointer_value().into()]));
+            let g = self.module.add_global(value.get_type(), None, name);
+
+            g.set_initializer(&value);
+            self.insert_variable(name.into(), g.as_pointer_value())
+        };
+        accesor(0, "car");
+        accesor(1, "cdr");
+        accesor(2, "cgr");
+        // println!("variables{:?}", self.variables);
+        // self.print_ir();
     }
 
     pub fn exit(&self, reason: &str, code: i32) {

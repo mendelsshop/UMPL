@@ -54,23 +54,47 @@ fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
 
 fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
     // needs to be its own new closure so that we don't have infinite recursion while creating the parser (so we add a level of indirection)
-    Box::new(|input| {
-        keep_right(
-            ws_or_comment(),
-            choice(
-                [
-                    literal(),
-                    stmt(),
-                    stlib_kewyword(),
-                    terminal_umpl(),
-                    ident_umpl(),
-                    application(),
-                    special_start(),
-                ]
-                .to_vec(),
-            ),
-        )(input)
-    })
+    map(
+        chain(
+            Box::new(|input| {
+                keep_right(
+                    ws_or_comment(),
+                    choice(
+                        [
+                            literal(),
+                            stmt(),
+                            stlib_kewyword(),
+                            terminal_umpl(),
+                            ident_umpl(),
+                            application(),
+                            special_start(),
+                        ]
+                        .to_vec(),
+                    ),
+                )(input)
+            }),
+            many(keep_right(
+                char('^'),
+                choice(vec![string("car"), string("cdr"), string("cgr")]),
+            )),
+        ),
+        |r| {
+            if let Some(mut accesors) = r.1 {
+                let first_acces = accesors.next().unwrap();
+                let new_acces= |accesor: String, expr|UMPL2Expr::Application(Application::new(
+                    vec![UMPL2Expr::Ident(accesor.into()), expr],
+                    PrintType::None,
+                ));
+                let mut base = new_acces(first_acces, r.0);
+                for accesor in accesors {
+                    base = new_acces(accesor, base);
+                }
+                base
+            } else {
+                r.0
+            }
+        },
+    )
 }
 
 fn application() -> Box<Parser<UMPL2Expr>> {
@@ -369,7 +393,8 @@ fn ident_umpl() -> Box<Parser<UMPL2Expr>> {
 
 const fn special_char() -> &'static [char] {
     &[
-        '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t', '<', '>',
+        '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t', '<',
+        '>', '^',
     ]
 }
 

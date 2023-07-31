@@ -54,23 +54,9 @@ fn main() {
     // fanction  1* ᚜ (print '0')< ᚛
     let fn_type = umpl_parse(
         "let x 1111
-        ;(1 23 45 (x)< 6)>
-        let cons 
-                                fanction  2 ᚜ 
-                                        let x '0' 
-                                        let y '1' 
-                                        fanction  1 ᚜ 
-                                            if '0' 
-                                                do ᚜x
-                                            ᚛ 
-                                                otherwise ᚜y
-                                            ᚛
-                                        ᚛
-                                ᚛
-                      
-                     let k (cons 5 6)< 
-                        
-                        (print (k &)<)<
+       let s ;()>
+       s^car
+
                         ",
     )
     .unwrap();

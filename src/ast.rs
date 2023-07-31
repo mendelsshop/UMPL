@@ -52,6 +52,7 @@ pub enum UMPL2Expr {
 
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
+        println!("flatten {self:?}");
         match self {
             UMPL2Expr::Bool(b) => compiler.object_builder.const_boolean(b),
             UMPL2Expr::Number(n) => compiler.object_builder.const_number(n),
