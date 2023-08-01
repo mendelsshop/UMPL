@@ -28,7 +28,6 @@ impl Analyzer {
             | UMPL2Expr::Ident(_)
             | UMPL2Expr::FnParam(_)
             | UMPL2Expr::Hempty
-            | UMPL2Expr::FnKW(_)
             // even thougth scope contains more expressions it should not make it into the ast so we just ignore it (arguabbly we should put an unreachable)
             | UMPL2Expr::Scope(_)
             | UMPL2Expr::Skip
@@ -87,7 +86,6 @@ impl Analyzer {
             | UMPL2Expr::Ident(_)
             | UMPL2Expr::FnParam(_)
             | UMPL2Expr::Hempty
-            | UMPL2Expr::FnKW(_)
             // even thougth scope contains more expressions it should not make it into the ast so we just ignore it (arguabbly we should put an unreachable)
             | UMPL2Expr::Scope(_)
             | UMPL2Expr::Skip  => {}

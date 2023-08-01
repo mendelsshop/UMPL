@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-use std::{iter, str::FromStr};
+use std::iter;
 
 use parse_int::parse;
 
 use crate::{
     ast::{
-        Application, Boolean, Fanction, FnKeyword, GoThrough, If, PrintType, UMPL2Expr, Unless,
-        Until, Varidiac,
+        Application, Boolean, Fanction, GoThrough, If, PrintType, UMPL2Expr, Unless, Until,
+        Varidiac,
     },
     pc::{
         alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
@@ -63,7 +63,6 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                         [
                             literal(),
                             stmt(),
-                            stlib_kewyword(),
                             terminal_umpl(),
                             ident_umpl(),
                             application(),
@@ -456,12 +455,6 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
             |res| UMPL2Expr::FnParam(parse(&format!("0o{}", res.collect::<String>())).unwrap()),
         ),
         opt(any_of(['\'', '"'])),
-    )
-}
-fn stlib_kewyword() -> Box<Parser<UMPL2Expr>> {
-    map(
-        choice(vec![string("add"), string("sub"), string("print")]),
-        |kw| UMPL2Expr::FnKW(FnKeyword::from_str(&kw).unwrap()),
     )
 }
 

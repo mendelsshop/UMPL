@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::fmt::Display;
 
 use inkwell::values::StructValue;
 
@@ -17,7 +17,7 @@ pub trait FlattenAst<'a, 'ctx> {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx>;
 }
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Debug)]
 pub enum UMPL2Expr {
     Bool(Boolean),
     Number(f64),
@@ -45,14 +45,12 @@ pub enum UMPL2Expr {
     #[default]
     Hempty,
     Link(RC<str>, Vec<RC<str>>),
-    FnKW(FnKeyword),
     Let(RC<str>, Box<UMPL2Expr>),
     ComeTo(RC<str>),
 }
 
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        println!("flatten {self:?}");
         match self {
             UMPL2Expr::Bool(b) => compiler.const_boolean(b),
             UMPL2Expr::Number(n) => compiler.const_number(n),
@@ -73,7 +71,6 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
             UMPL2Expr::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
             UMPL2Expr::Hempty => compiler.hempty(),
             UMPL2Expr::Link(_, _) => todo!(),
-            UMPL2Expr::FnKW(_) => todo!(),
             UMPL2Expr::Let(_, _) => todo!(),
             UMPL2Expr::ComeTo(_) => todo!(),
         }
@@ -107,35 +104,6 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
     }
 }
 
-impl core::fmt::Debug for UMPL2Expr {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            UMPL2Expr::Bool(f0) => f.debug_tuple("Bool").field(&f0).finish(),
-            UMPL2Expr::Number(f0) => f.debug_tuple("Number").field(&f0).finish(),
-            UMPL2Expr::String(f0) => f.debug_tuple("String").field(&f0).finish(),
-            UMPL2Expr::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
-            UMPL2Expr::Ident(f0) => f.debug_tuple("Ident").field(&f0).finish(),
-            UMPL2Expr::If(f0) => f.debug_tuple("If").field(&f0).finish(),
-            UMPL2Expr::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
-            UMPL2Expr::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
-            UMPL2Expr::Skip => f.write_str("Skip"),
-            UMPL2Expr::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
-            UMPL2Expr::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
-            UMPL2Expr::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
-            UMPL2Expr::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
-            UMPL2Expr::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
-            UMPL2Expr::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
-            UMPL2Expr::Label(f0) => f.debug_tuple("Label").field(&f0).finish(),
-            UMPL2Expr::FnParam(f0) => f.debug_tuple("FnParam").field(&f0).finish(),
-            UMPL2Expr::Hempty => f.write_str("Hempty"),
-            UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
-            UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
-            UMPL2Expr::ComeTo(f0) => f.debug_tuple("ComeTo").field(&f0).finish(),
-        }
-    }
-}
-
 impl core::fmt::Display for UMPL2Expr {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -158,35 +126,8 @@ impl core::fmt::Display for UMPL2Expr {
             UMPL2Expr::FnParam(f0) => write!(f, "'{}", f0),
             UMPL2Expr::Hempty => write!(f, "hempty"),
             UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
             UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
             UMPL2Expr::ComeTo(f0) => write!(f, "Come to {}", f0),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FnKeyword {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Print,
-}
-
-impl FromStr for FnKeyword {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "add" => Ok(Self::Add),
-            "div" => Ok(Self::Div),
-            "sub" => Ok(Self::Sub),
-            "mul" => Ok(Self::Mul),
-            "mod" => Ok(Self::Mod),
-            "print" => Ok(Self::Print),
-            other => Err(format!("not a function keyword {other}")),
         }
     }
 }
