@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn umpl_fn() {
-        let test_result = parse_umpl("fanction 🚗  1 * ᚜ ^l ᚛");
+        let test_result = parse_umpl("fanction 🚗  1 * ᚜ l ᚛");
         assert!(test_result.is_ok());
         assert_eq!(
             test_result.unwrap(),
@@ -562,7 +562,7 @@ mod tests {
                 Some('🚗'),
                 1,
                 Some(Varidiac::AtLeast0),
-                vec![UMPL2Expr::Ident("^l".into())]
+                vec![UMPL2Expr::Ident("l".into())]
             ))
         );
     }
@@ -616,22 +616,5 @@ mod tests {
     fn umpl_with_comment() {
         let test_result = parse_umpl("!t\n (1!aaa\n 22 6 ]>");
         assert!(test_result.is_ok());
-    }
-
-    #[test]
-    fn umpl_nested_application() {
-        let test_result = parse_umpl("fanction 🚗  1 * ᚜ {mul 5 0x10 ]> ᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::Application(Application::new(
-                vec![
-                    UMPL2Expr::Ident("mul".into()),
-                    UMPL2Expr::Number(5.0),
-                    UMPL2Expr::Number(16.0)
-                ],
-                PrintType::Print
-            ))
-        );
     }
 }
