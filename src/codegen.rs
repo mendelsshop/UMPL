@@ -16,7 +16,7 @@ use inkwell::{
         AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue,
         GlobalValue, IntValue, PointerValue, StructValue,
     },
-    AddressSpace, OptimizationLevel,
+    AddressSpace, OptimizationLevel, intrinsics::Intrinsic,
 };
 
 use crate::{
@@ -46,6 +46,8 @@ pub struct Compiler<'a, 'ctx> {
     jit: ExecutionEngine<'ctx>,
     links: HashMap<RC<str>, BasicBlock<'ctx>>,
     pub(crate) types: Types<'ctx>,
+    // not were umpl functions are stored
+    functions: Functions<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -99,6 +101,14 @@ pub struct Types<'ctx> {
     pub generic_pointer: PointerType<'ctx>,
     pub hempty: StructType<'ctx>,
 }
+
+#[derive(Clone, Copy, Debug)]
+/// Important function that the compiler needs to access
+pub struct Functions<'ctx> {
+    pub va_start: FunctionValue<'ctx>,
+    pub va_end: FunctionValue<'ctx>,
+}
+
 
 macro_rules! make_extract {
     ($self:expr, $type:ident, $o_type: ident, $name:literal) => {{
@@ -472,7 +482,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         )
     }
 
-    fn make_add(&self) {}
+    fn make_add(&mut self) {
+        let fn_ty = self.types.lambda_ty;
+        let func = self.module.add_function("add", fn_ty, None);
+        let entry = self.context.append_basic_block(func, "entry");
+        self.builder.position_at_end(entry);
+        let va_list =self.builder.build_alloca(self.context.i8_type(), "va_list");
+        self.builder.build_call(self.functions.va_start, &[va_list.into()], "init args");
+        self.builder.build_call(self.functions.va_end, &[va_list.into()], "va end");
+        self.builder.build_return(Some(&self.hempty()));
+        self.insert_function("add".into(), func, self.types.generic_pointer.const_null());
+    }
 
     fn make_accesors(&mut self) {
         let fn_ty = self.types.lambda_ty;
@@ -589,6 +609,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
+
         let jit = module
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
@@ -631,6 +652,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             context.i32_type().fn_type(&[types.string.into()], true),
             Some(Linkage::External),
         );
+        let va_arg_start = Intrinsic::find("llvm.va_start").unwrap();
+        let va_start=va_arg_start.get_declaration(module, &[types.generic_pointer.into()]).unwrap();
+        let va_arg_end = Intrinsic::find("llvm.va_start").unwrap();
+        let va_end=va_arg_end.get_declaration(module, &[types.generic_pointer.into()]).unwrap();
+        let functions= Functions {
+            va_end, va_start
+        };
         kind.set_body(
             &[
                 types.ty.as_basic_type_enum(),
@@ -656,6 +684,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             jit,
             types,
             links: HashMap::new(),
+            functions,
         }
     }
 
@@ -984,6 +1013,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_extraction();
         self.make_accesors();
         self.make_print();
+        self.make_add();
+        self.new_env();
         let main_fn_type = self.context.i32_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
         let main_block = self.context.append_basic_block(main_fn, "entry");
