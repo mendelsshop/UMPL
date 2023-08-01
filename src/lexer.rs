@@ -81,10 +81,12 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
         |r| {
             if let Some(mut accesors) = r.1 {
                 let first_acces = accesors.next().unwrap();
-                let new_acces= |accesor: String, expr|UMPL2Expr::Application(Application::new(
-                    vec![UMPL2Expr::Ident(accesor.into()), expr],
-                    PrintType::None,
-                ));
+                let new_acces = |accesor: String, expr| {
+                    UMPL2Expr::Application(Application::new(
+                        vec![UMPL2Expr::Ident(accesor.into()), expr],
+                        PrintType::None,
+                    ))
+                };
                 let mut base = new_acces(first_acces, r.0);
                 for accesor in accesors {
                     base = new_acces(accesor, base);

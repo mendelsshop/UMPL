@@ -46,12 +46,12 @@ pub struct Compiler<'a, 'ctx> {
     jit: ExecutionEngine<'ctx>,
     links: HashMap<RC<str>, BasicBlock<'ctx>>,
     pub(crate) types: Types<'ctx>,
-    pub(crate) object_builder: Object<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(C)]
 #[allow(non_camel_case_types)]
+/// when updating anything in this enum, remember to update the how object is set in [Compiler::new] as it is the only thing that won't automatically reflect changes made here
 pub enum TyprIndex {
     #[default]
     Unkown = 100,
@@ -66,12 +66,20 @@ pub enum TyprIndex {
     thunk = 6,
 }
 
-macro_rules! builder_object {
+macro_rules! buider_object {
     ($value:ident, $type:ty) => {
-        pub fn $value(&mut self, value: $type) -> StructValue<'ctx> {
-            self.ty = TyprIndex::$value;
-            self.$value = Some(value);
-            self.object()
+        pub fn $value(&self, value: $type) -> StructValue<'ctx> {
+            let ty = TyprIndex::$value;
+            let obj = self.types.object.const_zero();
+            let obj = self
+                .builder
+                .build_insert_value(obj, self.types.ty.const_int(ty as u64, false), 0, "type")
+                .unwrap();
+            let obj = self
+                .builder
+                .build_insert_value(obj, value, ty as u32 + 1, "value")
+                .unwrap();
+            obj.into_struct_value()
         }
     };
 }
@@ -90,162 +98,6 @@ pub struct Types<'ctx> {
     pub symbol_type: PointerType<'ctx>,
     pub generic_pointer: PointerType<'ctx>,
     pub hempty: StructType<'ctx>,
-}
-
-#[derive(Default, Clone, Copy, Debug)]
-pub struct Object<'ctx> {
-    ty: TyprIndex,
-    types: Option<Types<'ctx>>,
-    boolean: Option<IntValue<'ctx>>,
-    number: Option<FloatValue<'ctx>>,
-    string: Option<PointerValue<'ctx>>,
-    cons: Option<PointerValue<'ctx>>,
-    lambda: Option<StructValue<'ctx>>,
-    symbol: Option<PointerValue<'ctx>>,
-    thunk: Option<PointerValue<'ctx>>,
-}
-
-impl<'ctx> Object<'ctx> {
-    pub fn new(types: Types<'ctx>) -> Self {
-        Self {
-            types: Some(types),
-            ..Default::default()
-        }
-    }
-
-    builder_object!(boolean, IntValue<'ctx>);
-    builder_object!(number, FloatValue<'ctx>);
-    builder_object!(string, PointerValue<'ctx>);
-    builder_object!(cons, PointerValue<'ctx>);
-    builder_object!(lambda, StructValue<'ctx>);
-    builder_object!(thunk, PointerValue<'ctx>);
-    builder_object!(symbol, PointerValue<'ctx>);
-    pub fn hempty(&mut self) -> StructValue<'ctx> {
-        self.ty = TyprIndex::hempty;
-        self.object()
-    }
-
-    pub fn object(&mut self) -> StructValue<'ctx> {
-        let types = self.types.unwrap();
-        let result = types.object.const_named_struct(&[
-            types.ty.const_int(self.ty as u64, false).into(),
-            self.boolean
-                .unwrap_or_else(|| types.boolean.const_zero())
-                .into(),
-            self.number
-                .unwrap_or_else(|| types.number.const_zero())
-                .into(),
-            self.string
-                .unwrap_or_else(|| types.string.const_null())
-                .into(),
-            self.cons
-                .unwrap_or_else(|| types.generic_pointer.const_null())
-                .into(),
-            self.lambda
-                .unwrap_or_else(|| {
-                    types.lambda.const_named_struct(&[
-                        types.lambda_ptr.const_null().into(),
-                        types.generic_pointer.const_null().into(),
-                    ])
-                })
-                .into(),
-            self.thunk
-                .unwrap_or_else(|| types.generic_pointer.const_null())
-                .into(),
-            types.hempty.const_zero().into(),
-        ]);
-        *self = Self::new(types);
-        result
-    }
-
-    pub(crate) fn const_string(
-        &mut self,
-        value: &RC<str>,
-        string_map: Option<&mut HashMap<RC<str>, GlobalValue<'ctx>>>,
-        builder: &Builder<'ctx>,
-    ) -> StructValue<'ctx> {
-        let str = Self::make_string(string_map, builder, value);
-        self.string(str)
-    }
-
-    pub(crate) fn const_symbol(
-        &mut self,
-        value: &RC<str>,
-        string_map: Option<&mut HashMap<RC<str>, GlobalValue<'ctx>>>,
-        builder: &Builder<'ctx>,
-    ) -> StructValue<'ctx> {
-        let str = Self::make_string(string_map, builder, value);
-        self.symbol(str)
-    }
-
-    pub(crate) fn const_cons(
-        &mut self,
-        builder: &Builder<'ctx>,
-        module: &Module<'ctx>,
-        left_tree: StructValue<'ctx>,
-        this: StructValue<'ctx>,
-        right_tree: StructValue<'ctx>,
-    ) -> StructValue<'ctx> {
-        let types = self.types.unwrap();
-        // let left_ptr = builder.build_alloca(types.object, "cdr");
-        // builder.build_store(left_ptr, left_tree);
-        // let this_ptr = builder.build_alloca(types.object, "car");
-        // builder.build_store(this_ptr, this);
-        // let right_ptr = builder.build_alloca(types.object, "cgr");
-        // builder.build_store(right_ptr, right_tree);
-        let tree_type =
-            types
-                .cons
-                .const_named_struct(&[left_tree.into(), this.into(), right_tree.into()]);
-
-        let tree_ptr = module.add_global(tree_type.get_type(), None, "cons");
-        tree_ptr.set_initializer(&types.cons.const_zero());
-        builder.build_store(tree_ptr.as_pointer_value(), tree_type);
-        self.cons(tree_ptr.as_pointer_value())
-    }
-
-    pub(crate) fn const_number(&mut self, value: f64) -> StructValue<'ctx> {
-        let types = self.types.unwrap();
-        self.number(types.number.const_float(value))
-    }
-
-    pub(crate) fn const_boolean(&mut self, value: Boolean) -> StructValue<'ctx> {
-        let types = self.types.unwrap();
-        self.boolean(types.boolean.const_int(
-            match value {
-                Boolean::False => 0,
-                Boolean::True => 1,
-                Boolean::Maybee => todo!(),
-            },
-            false,
-        ))
-    }
-
-    fn make_string(
-        string_map: Option<&mut HashMap<std::rc::Rc<str>, GlobalValue<'ctx>>>,
-        builder: &Builder<'ctx>,
-        value: &std::rc::Rc<str>,
-    ) -> PointerValue<'ctx> {
-        #[allow(clippy::map_unwrap_or)]
-        // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
-        string_map.map_or_else(
-            || {
-                builder
-                    .build_global_string_ptr(value, value)
-                    .as_pointer_value()
-            },
-            |string_map| {
-                string_map.get(value).map_or_else(
-                    || {
-                        builder
-                            .build_global_string_ptr(value, value)
-                            .as_pointer_value()
-                    },
-                    |string| string.as_pointer_value(),
-                )
-            },
-        )
-    }
 }
 
 macro_rules! make_extract {
@@ -304,6 +156,109 @@ macro_rules! make_extract {
     }};
 }
 
+enum TableAccess {
+    String,
+    Symbol,
+}
+
+/// Seperate impl for the [Compiler] for making new objects
+impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    buider_object!(boolean, IntValue<'ctx>);
+    buider_object!(number, FloatValue<'ctx>);
+    buider_object!(string, PointerValue<'ctx>);
+    buider_object!(cons, PointerValue<'ctx>);
+    buider_object!(lambda, StructValue<'ctx>);
+    buider_object!(thunk, PointerValue<'ctx>);
+    buider_object!(symbol, PointerValue<'ctx>);
+    pub fn hempty(&self) -> StructValue<'ctx> {
+        let ty = TyprIndex::hempty;
+        let obj = self.types.object.const_zero();
+        let obj = self
+            .builder
+            .build_insert_value(obj, self.types.ty.const_int(ty as u64, false), 0, "type")
+            .unwrap();
+        obj.into_struct_value()
+    }
+    pub(crate) fn const_number(&self, value: f64) -> StructValue<'ctx> {
+        self.number(self.types.number.const_float(value))
+    }
+    pub(crate) fn const_boolean(&self, value: Boolean) -> StructValue<'ctx> {
+        self.boolean(self.types.boolean.const_int(
+            match value {
+                Boolean::False => 0,
+                Boolean::True => 1,
+                Boolean::Maybee => todo!(),
+            },
+            false,
+        ))
+    }
+
+    pub(crate) fn const_string(&mut self, value: &RC<str>) -> StructValue<'ctx> {
+        let str = self.make_string(Some(TableAccess::String), value);
+        self.string(str)
+    }
+
+    pub(crate) fn const_symbol(&mut self, value: &RC<str>) -> StructValue<'ctx> {
+        let str = self.make_string(Some(TableAccess::Symbol), value);
+        self.symbol(str)
+    }
+
+    fn make_string(
+        &mut self,
+
+        kind: Option<TableAccess>,
+        value: &std::rc::Rc<str>,
+    ) -> PointerValue<'ctx> {
+        #[allow(clippy::map_unwrap_or)]
+        // allowing this lint b/c we insert in self.string in None case and rust doesn't like that after trying to get from self.string
+        kind.map_or_else(
+            || {
+                self.builder
+                    .build_global_string_ptr(value, value)
+                    .as_pointer_value()
+            },
+            |acces| {
+                let string_map = match acces {
+                    TableAccess::String => &mut self.string,
+                    TableAccess::Symbol => &mut self.ident,
+                };
+
+                if let Some(str) = string_map.get(value) {
+                    str.as_pointer_value()
+                } else {
+                    let str = self.builder.build_global_string_ptr(value, value);
+                    string_map.insert(value.clone(), str);
+                    str.as_pointer_value()
+                }
+            },
+        )
+    }
+
+    pub(crate) fn const_cons(
+        &self,
+        left_tree: StructValue<'ctx>,
+        this: StructValue<'ctx>,
+        right_tree: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        // TODO: try to not use globals
+        // let left_ptr = builder.build_alloca(types.object, "cdr");
+        // builder.build_store(left_ptr, left_tree);
+        // let this_ptr = builder.build_alloca(types.object, "car");
+        // builder.build_store(this_ptr, this);
+        // let right_ptr = builder.build_alloca(types.object, "cgr");
+        // builder.build_store(right_ptr, right_tree);
+        let tree_type =
+            self.types
+                .cons
+                .const_named_struct(&[left_tree.into(), this.into(), right_tree.into()]);
+
+        let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
+        tree_ptr.set_initializer(&self.types.cons.const_zero());
+        self.builder
+            .build_store(tree_ptr.as_pointer_value(), tree_type);
+        self.cons(tree_ptr.as_pointer_value())
+    }
+}
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn new(
         context: &'ctx Context,
@@ -363,10 +318,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 types.generic_pointer.as_basic_type_enum(),
                 types.lambda.as_basic_type_enum(),
                 types.symbol_type.as_basic_type_enum(),
+                types.hempty.as_basic_type_enum(),
             ],
             false,
         );
-        let object_builder = Object::new(types);
         Self {
             context,
             module,
@@ -379,7 +334,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             jit,
             types,
             links: HashMap::new(),
-            object_builder,
         }
     }
 
@@ -463,21 +417,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn compile_expr(&mut self, expr: &UMPL2Expr) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         match expr {
-            UMPL2Expr::Number(value) => Ok(Some(
-                self.object_builder
-                    .const_number(*value)
-                    .as_basic_value_enum(),
-            )),
-            UMPL2Expr::Bool(value) => Ok(Some(
-                self.object_builder
-                    .const_boolean(*value)
-                    .as_basic_value_enum(),
-            )),
-            UMPL2Expr::String(value) => Ok(Some(
-                self.object_builder
-                    .const_string(value, Some(&mut self.string), self.builder)
-                    .as_basic_value_enum(),
-            )),
+            UMPL2Expr::Number(value) => Ok(Some(self.const_number(*value).as_basic_value_enum())),
+            UMPL2Expr::Bool(value) => Ok(Some(self.const_boolean(*value).as_basic_value_enum())),
+            UMPL2Expr::String(value) => Ok(Some(self.const_string(value).as_basic_value_enum())),
             UMPL2Expr::Fanction(r#fn) => {
                 // if its var arg dont make it var arg, just make it arg_count+1  number of parameters
                 let env = self.get_scope();
@@ -546,12 +488,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     // let env_ptr = self.builder.build_alloca(env.0, "env");
                     // self.builder.build_store(env_ptr, env.1);
                     Ok(Some(
-                        self.object_builder
-                            .lambda(self.types.lambda.const_named_struct(&[
-                                fn_value.as_global_value().as_pointer_value().into(),
-                                env.0.ptr_type(AddressSpace::default()).const_null().into(),
-                            ]))
-                            .as_basic_value_enum(),
+                        self.lambda(self.types.lambda.const_named_struct(&[
+                            fn_value.as_global_value().as_pointer_value().into(),
+                            env.0.ptr_type(AddressSpace::default()).const_null().into(),
+                        ]))
+                        .as_basic_value_enum(),
                     ))
                 } else {
                     println!();
@@ -677,7 +618,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
             UMPL2Expr::Label(_s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
-            UMPL2Expr::Hempty => todo!(),
+            UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
             UMPL2Expr::Link(_, _) => todo!(),
             // UMPL2Expr::Tree(_) => todo!(),
             UMPL2Expr::Let(i, v) => {
@@ -698,18 +639,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 FnKeyword::Div => todo!(),
                 FnKeyword::Mod => todo!(),
                 FnKeyword::Print => Ok(Some(
-                    self.object_builder
-                        .lambda(
-                            self.types.lambda.const_named_struct(&[
-                                self.module
-                                    .get_function("print")
-                                    .map(|func| func.as_global_value().as_pointer_value())
-                                    .unwrap()
-                                    .into(),
-                                self.types.generic_pointer.const_null().into(),
-                            ]),
-                        )
-                        .as_basic_value_enum(),
+                    self.lambda(
+                        self.types.lambda.const_named_struct(&[
+                            self.module
+                                .get_function("print")
+                                .map(|func| func.as_global_value().as_pointer_value())
+                                .unwrap()
+                                .into(),
+                            self.types.generic_pointer.const_null().into(),
+                        ]),
+                    )
+                    .as_basic_value_enum(),
                 )),
             },
         }
@@ -819,7 +759,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.position_at_end(main_block);
 
-        
         for expr in program {
             match self.compile_expr(expr) {
                 Ok(_) => continue,
@@ -915,7 +854,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn make_print(&mut self) {
-        // maybe make print should turn into make string 
+        // maybe make print should turn into make string
         let old = self.fn_value;
         // self.types.lambda.
         let print_fn_ty: FunctionType<'_> = self.types.object.fn_type(
@@ -1003,58 +942,94 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // let val = self.extract_cons( args).unwrap();
         self.builder.build_call(
             print,
-            &[
-                self.builder
-                    .build_global_string_ptr("(", "open paren")
-                    .as_basic_value_enum()
-                    .into(),
-
-            ],
+            &[self
+                .builder
+                .build_global_string_ptr("(", "open paren")
+                .as_basic_value_enum()
+                .into()],
             &format!("print open"),
         );
-        let val = self.builder.build_call(self.module.get_function("car").unwrap(), &[self.types.generic_pointer.const_null().into(), args.into()], "getcar").try_as_basic_value().unwrap_left();
-        self.builder.build_call(self.module.get_function("print").unwrap(), &[self.types.generic_pointer.const_null().into(), val.into()], "printcar");
+        let val = self
+            .builder
+            .build_call(
+                self.module.get_function("car").unwrap(),
+                &[self.types.generic_pointer.const_null().into(), args.into()],
+                "getcar",
+            )
+            .try_as_basic_value()
+            .unwrap_left();
+        self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[self.types.generic_pointer.const_null().into(), val.into()],
+            "printcar",
+        );
         self.builder.build_call(
             print,
-            &[
-                self.builder
-                    .build_global_string_ptr(" ", "space")
-                    .as_basic_value_enum()
-                    .into(),
-
-            ],
+            &[self
+                .builder
+                .build_global_string_ptr(" ", "space")
+                .as_basic_value_enum()
+                .into()],
             &format!("print space"),
         );
-        let val = self.builder.build_call(self.module.get_function("cdr").unwrap(), &[self.types.generic_pointer.const_null().into(), args.into()], "getcar").try_as_basic_value().unwrap_left();
-        self.builder.build_call(self.module.get_function("print").unwrap(), &[self.types.generic_pointer.const_null().into(), val.into()], "printcar");
+        let val = self
+            .builder
+            .build_call(
+                self.module.get_function("cdr").unwrap(),
+                &[self.types.generic_pointer.const_null().into(), args.into()],
+                "getcar",
+            )
+            .try_as_basic_value()
+            .unwrap_left();
+        self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[self.types.generic_pointer.const_null().into(), val.into()],
+            "printcar",
+        );
         self.builder.build_call(
             print,
-            &[
-                self.builder
-                    .build_global_string_ptr(" ", "space")
-                    .as_basic_value_enum()
-                    .into(),
-
-            ],
+            &[self
+                .builder
+                .build_global_string_ptr(" ", "space")
+                .as_basic_value_enum()
+                .into()],
             &format!("print space"),
         );
-        let val = self.builder.build_call(self.module.get_function("cgr").unwrap(), &[self.types.generic_pointer.const_null().into(), args.into()], "getcar").try_as_basic_value().unwrap_left();
-        self.builder.build_call(self.module.get_function("print").unwrap(), &[self.types.generic_pointer.const_null().into(), val.into()], "printcar");
+        let val = self
+            .builder
+            .build_call(
+                self.module.get_function("cgr").unwrap(),
+                &[self.types.generic_pointer.const_null().into(), args.into()],
+                "getcar",
+            )
+            .try_as_basic_value()
+            .unwrap_left();
+        self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[self.types.generic_pointer.const_null().into(), val.into()],
+            "printcar",
+        );
         self.builder.build_call(
             print,
-            &[
-                self.builder
-                    .build_global_string_ptr(")", "open paren")
-                    .as_basic_value_enum()
-                    .into(),
-
-            ],
+            &[self
+                .builder
+                .build_global_string_ptr(")", "open paren")
+                .as_basic_value_enum()
+                .into()],
             &format!("print open"),
         );
         self.builder.build_unconditional_branch(ret_block);
         self.builder.position_at_end(hempty_block);
-        self.builder.build_call(print, &[self.builder.build_global_string_ptr("hempty", "hempty").as_pointer_value().into()], "printcar");
-           self.builder.build_unconditional_branch(ret_block);
+        self.builder.build_call(
+            print,
+            &[self
+                .builder
+                .build_global_string_ptr("hempty", "hempty")
+                .as_pointer_value()
+                .into()],
+            "printcar",
+        );
+        self.builder.build_unconditional_branch(ret_block);
         self.builder.position_at_end(ret_block);
         let phi = self.builder.build_phi(self.types.object, "print return");
         phi.add_incoming(&[
@@ -1093,7 +1068,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_extract_value(cons_object, idx, &format!("get-{name}"))
                 .unwrap();
             self.builder.build_return(Some(&car));
-            let value = self.object_builder.lambda( self.types.lambda.const_named_struct(&[self.types.generic_pointer.const_null().into(), func.as_global_value().as_pointer_value().into()]));
+            let value = self.lambda(self.types.lambda.const_named_struct(&[
+                func.as_global_value().as_pointer_value().into(),
+                self.types.generic_pointer.const_null().into(),
+            ]));
             let g = self.module.add_global(value.get_type(), None, name);
 
             g.set_initializer(&value);

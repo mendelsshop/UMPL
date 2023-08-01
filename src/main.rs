@@ -52,15 +52,32 @@ fn main() {
 
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
+    // TODO: make these into tests
     let fn_type = umpl_parse(
-        "let x 1111
-       let s ;()>
-       s^car
+        "let x 10000%1
+        let y ;(c .c.)<
+        (print y^car^cdr)<
+        (print x)<
+        let cons 
+                                fanction  2 ᚜ 
+                                        let x '0' 
+                                        let y '1' 
+                                        fanction  1 ᚜ 
+                                            if '0' 
+                                                do ᚜x
+                                            ᚛ 
+                                                otherwise ᚜y
+                                            ᚛
+                                        ᚛
+                                ᚛
+                      
+                     let k (cons 5 6)< 
+                        
+                        (print (k &)<)<
 
                         ",
     )
     .unwrap();
-    // umpl_parse("let i 9 (print i)<").unwrap();
     println!("{fn_type:?}");
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);

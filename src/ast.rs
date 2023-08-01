@@ -54,19 +54,11 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
         println!("flatten {self:?}");
         match self {
-            UMPL2Expr::Bool(b) => compiler.object_builder.const_boolean(b),
-            UMPL2Expr::Number(n) => compiler.object_builder.const_number(n),
-            UMPL2Expr::String(c) => compiler.object_builder.const_string(
-                &c,
-                Some(&mut compiler.string),
-                compiler.builder,
-            ),
+            UMPL2Expr::Bool(b) => compiler.const_boolean(b),
+            UMPL2Expr::Number(n) => compiler.const_number(n),
+            UMPL2Expr::String(c) => compiler.const_string(&c),
             UMPL2Expr::Scope(_) => unreachable!(),
-            UMPL2Expr::Ident(i) => compiler.object_builder.const_symbol(
-                &i,
-                Some(&mut compiler.ident),
-                compiler.builder,
-            ),
+            UMPL2Expr::Ident(i) => compiler.const_symbol(&i),
             UMPL2Expr::If(_) => todo!(),
             UMPL2Expr::Unless(_) => todo!(),
             UMPL2Expr::Stop(_) => todo!(),
@@ -78,12 +70,8 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
             UMPL2Expr::Application(a) => a.flatten(compiler),
             UMPL2Expr::Quoted(_) => todo!(),
             UMPL2Expr::Label(_) => todo!(),
-            UMPL2Expr::FnParam(p) => compiler.object_builder.const_symbol(
-                &format!("'{p}'").into(),
-                Some(&mut compiler.ident),
-                compiler.builder,
-            ),
-            UMPL2Expr::Hempty => compiler.object_builder.hempty(),
+            UMPL2Expr::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
+            UMPL2Expr::Hempty => compiler.hempty(),
             UMPL2Expr::Link(_, _) => todo!(),
             UMPL2Expr::FnKW(_) => todo!(),
             UMPL2Expr::Let(_, _) => todo!(),
@@ -100,7 +88,7 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
             n: usize,
         ) -> (StructValue<'ctx>, Vec<UMPL2Expr>) {
             if n == 0 {
-                (compiler.object_builder.hempty(), list)
+                (compiler.hempty(), list)
             } else {
                 let left_size = (n - 1) / 2;
                 let (left_tree, mut non_left_tree) = fun_name(list, compiler, left_size);
@@ -109,16 +97,7 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
 
                 let right_size = n - (left_size + 1);
                 let (right_tree, remaining) = fun_name(non_left_tree, compiler, right_size);
-                (
-                    compiler.object_builder.const_cons(
-                        compiler.builder,
-                        compiler.module,
-                        left_tree,
-                        this,
-                        right_tree,
-                    ),
-                    remaining,
-                )
+                (compiler.const_cons(left_tree, this, right_tree), remaining)
             }
         }
         let n = self.len();
@@ -271,19 +250,9 @@ pub struct Application {
 impl<'ctx, 'a> FlattenAst<'a, 'ctx> for Application {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
         let left_tree = self.args.flatten(compiler);
-        let this = compiler.object_builder.const_symbol(
-            &format!("{:?}", self.print).into(),
-            Some(&mut compiler.ident),
-            compiler.builder,
-        );
-        let right_tree = compiler.object_builder.hempty();
-        compiler.object_builder.const_cons(
-            compiler.builder,
-            compiler.module,
-            left_tree,
-            this,
-            right_tree,
-        )
+        let this = compiler.const_symbol(&format!("{:?}", self.print).into());
+        let right_tree = compiler.hempty();
+        compiler.const_cons(left_tree, this, right_tree)
     }
 }
 
