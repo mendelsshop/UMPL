@@ -72,7 +72,7 @@ fn main() {
                                 ᚛
                       
                      let k (cons 5 6)< 
-                        
+                        (print .\n.)<
                         (print (k &)<)<
 
                         ",

@@ -653,9 +653,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Some(Linkage::External),
         );
         let va_arg_start = Intrinsic::find("llvm.va_start").unwrap();
-        let va_start=va_arg_start.get_declaration(module, &[types.generic_pointer.into()]).unwrap();
-        let va_arg_end = Intrinsic::find("llvm.va_start").unwrap();
-        let va_end=va_arg_end.get_declaration(module, &[types.generic_pointer.into()]).unwrap();
+        let va_start=va_arg_start.get_declaration(module, &[]).unwrap();
+        let va_arg_end = Intrinsic::find("llvm.va_end").unwrap();
+        let va_end=va_arg_end.get_declaration(module, &[]).unwrap();
         let functions= Functions {
             va_end, va_start
         };
