@@ -54,7 +54,10 @@ fn main() {
     // fanction  1* ᚜ (print '0')< ᚛
     // TODO: make these into tests
     let fn_type = umpl_parse(
-        "let x 10000%1
+        
+        "
+        (add 1 3 4)<
+        let x 10000%1
         let y ;(c .c.)<
         (print y^car^cdr)<
         (print x)<

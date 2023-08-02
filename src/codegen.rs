@@ -487,8 +487,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let func = self.module.add_function("add", fn_ty, None);
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
-        let va_list =self.builder.build_alloca(self.context.i8_type(), "va_list");
+        let va_list =self.builder.build_alloca(self.types.generic_pointer, "va_list");
         self.builder.build_call(self.functions.va_start, &[va_list.into()], "init args");
+        self.builder.build_va_arg(va_list, self.types.object, "va first");
         self.builder.build_call(self.functions.va_end, &[va_list.into()], "va end");
         self.builder.build_return(Some(&self.hempty()));
         self.insert_function("add".into(), func, self.types.generic_pointer.const_null());
