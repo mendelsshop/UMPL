@@ -56,11 +56,11 @@ fn main() {
     let fn_type = umpl_parse(
         
         "
-        (add 1 3 4)<
-        let x 10000%1
-        let y ;(c .c.)<
-        (print y^car^cdr)<
-        (print x)<
+        !(add 1 3 4)<
+        !let x 10000%1
+        !let y ;(c .c.)<
+        !(print y^car^cdr)<
+        !(print x)<
         let cons 
                                 fanction  2 ᚜ 
                                         let x '0' 
@@ -74,9 +74,9 @@ fn main() {
                                         ᚛
                                 ᚛
                       
-                     let k (cons 5 6)< 
-                        (print .\n.)<
-                        (print (k &)<)<
+                   let k (cons 5 6)< 
+                    !(print .\n.)<
+                     !(print (k &)<)<
 
                         ",
     )
