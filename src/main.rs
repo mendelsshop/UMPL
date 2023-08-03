@@ -58,9 +58,12 @@ fn main() {
         "
         !(add 1 3 4)<
         !let x 10000%1
-        let y ;()<
+   
         !(print y^car^cdr)<
         !(print x)<
+        ! doesnt work b/c codegen trying to save q in globals so that cons can use it
+        let q ;(a b c d e f g a b a)<
+        (print q)>
         let cons 
                                 fanction  2 ᚜ 
                                         let x '0' 
@@ -73,7 +76,7 @@ fn main() {
                                             ᚛
                                         ᚛
                                 ᚛
-                      
+
                    !let k (cons 5 6)>
                     !(print .\n.)<
                      !(print (k &)<)<

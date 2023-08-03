@@ -1,2 +1,3 @@
 globals must be initilized!!!
 allocas should be in a functions entry block
+prefer inserting instead of const struct unless you are sure you are only using constants

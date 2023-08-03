@@ -323,11 +323,13 @@ buider_object!(cons, PointerValue<'ctx>);
         let tree_type =
             self.types
                 .cons
-                .const_named_struct(&[left_tree.into(), this.into(), right_tree.into()]);
-
+                .const_zero();
+        let tree_type = self.builder.build_insert_value(tree_type, left_tree, 0, "car-set").unwrap();
+        let tree_type = self.builder.build_insert_value(tree_type, this, 1, "car-set").unwrap();
+        let tree_type = self.builder.build_insert_value(tree_type, right_tree, 2, "car-set").unwrap();
         // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
         // tree_ptr.set_initializer(&self.types.cons.const_zero());
-        let tree_ptr =  self.create_entry_block_alloca(tree_type.get_type(), "cons").unwrap();
+        let tree_ptr =  self.create_entry_block_alloca(tree_type.into_struct_value().get_type(), "cons").unwrap();
         self.builder
             .build_store(tree_ptr, tree_type);
         self.cons(tree_ptr)
