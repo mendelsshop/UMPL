@@ -108,6 +108,10 @@ pub struct Types<'ctx> {
 pub struct Functions<'ctx> {
     pub va_start: FunctionValue<'ctx>,
     pub va_end: FunctionValue<'ctx>,
+    exit: FunctionValue<'ctx>,
+    printf: FunctionValue<'ctx>,
+    malloc: FunctionValue<'ctx>,
+    free: FunctionValue<'ctx>,
 }
 
 
@@ -177,7 +181,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     buider_object!(boolean, IntValue<'ctx>);
     buider_object!(number, FloatValue<'ctx>);
     buider_object!(string, PointerValue<'ctx>);
-    buider_object!(cons, PointerValue<'ctx>);
+//     pub fn cons(&self,value:PointerValue<'ctx>) -> StructValue<'ctx>{
+//   let ty = TyprIndex::cons;
+//   value.print_to_stderr();
+//   println!("{ty:?}");
+//   let obj = self.types.object.const_zero();
+//   let cons = self.builder.build_extract_value(obj,ty as u32 +1, "cons.field").unwrap().into_pointer_value();
+//   self.builder.build_store(cons, value);
+// //   let obj = self.builder.build_insert_value(obj,value,ty as u32+1, &format!("value $value",)).unwrap();
+//   let obj = self.builder.build_insert_value(obj,self.types.ty.const_int(ty as u64,false),0,"typesss").unwrap();
+  
+//   obj.into_struct_value()
+// // obj
+// }
+buider_object!(cons, PointerValue<'ctx>);
     buider_object!(lambda, StructValue<'ctx>);
     buider_object!(thunk, PointerValue<'ctx>);
     buider_object!(symbol, PointerValue<'ctx>);
@@ -186,7 +203,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let obj = self.types.object.const_zero();
         let obj = self
             .builder
-            .build_insert_value(obj, self.types.ty.const_int(ty as u64, false), 0, "type")
+            .build_insert_value(obj, self.types.ty.const_int(ty as u64, false), 0, "hempty-type")
             .unwrap();
         obj.into_struct_value()
     }
@@ -263,7 +280,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         for i in 0..env.0.count_fields() {
             let cn = env_iter[i as usize].clone();
             // self.module.add_global(type_, address_space, name)
-            let alloca = self.builder.build_alloca(self.types.object, &cn);
+            let alloca = self.create_entry_block_alloca(self.types.object, &cn).unwrap();
             let arg = self
                 .builder
                 .build_extract_value(envs, i.try_into().unwrap(), "load captured")
@@ -297,22 +314,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         right_tree: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
         // TODO: try to not use globals
-        // let left_ptr = builder.build_alloca(types.object, "cdr");
+        // let left_ptr = create_entry_block_alloca(types.object, "cdr").unwrap();
         // builder.build_store(left_ptr, left_tree);
-        // let this_ptr = builder.build_alloca(types.object, "car");
+        // let this_ptr = create_entry_block_alloca(types.object, "car").unwrap();
         // builder.build_store(this_ptr, this);
-        // let right_ptr = builder.build_alloca(types.object, "cgr");
+        // let right_ptr = create_entry_block_alloca(types.object, "cgr").unwrap();
         // builder.build_store(right_ptr, right_tree);
         let tree_type =
             self.types
                 .cons
                 .const_named_struct(&[left_tree.into(), this.into(), right_tree.into()]);
 
-        let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
-        tree_ptr.set_initializer(&self.types.cons.const_zero());
+        // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
+        // tree_ptr.set_initializer(&self.types.cons.const_zero());
+        let tree_ptr =  self.create_entry_block_alloca(tree_type.get_type(), "cons").unwrap();
         self.builder
-            .build_store(tree_ptr.as_pointer_value(), tree_type);
-        self.cons(tree_ptr.as_pointer_value())
+            .build_store(tree_ptr, tree_type);
+        self.cons(tree_ptr)
     }
 
     fn const_lambda(
@@ -533,9 +551,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn make_add(&mut self) {
         let fn_ty = self.types.lambda_ty;
         let func = self.module.add_function("add", fn_ty, None);
+        self.fn_value = Some(func);
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
-        let va_list =self.builder.build_alloca(self.types.generic_pointer, "va_list");
+        let va_list =self.create_entry_block_alloca(self.types.generic_pointer, "va_list").unwrap();
         self.builder.build_call(self.functions.va_start, &[va_list.into()], "init args");
         self.builder.build_va_arg(va_list, self.types.generic_pointer, "va first");
         self.builder.build_call(self.functions.va_end, &[va_list.into()], "va end");
@@ -690,16 +709,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             hempty: context.struct_type(&[], false),
             thunk: kind.fn_type(&[env_ptr.into()], false)
         };
-        module.add_function(
+        let exit = module.add_function(
             "exit",
             context
                 .void_type()
                 .fn_type(&[context.i32_type().into()], false),
             Some(Linkage::External),
         );
-        module.add_function(
+        let printf =module.add_function(
             "printf",
             context.i32_type().fn_type(&[types.string.into()], true),
+            Some(Linkage::External),
+        );
+        let malloc =module.add_function(
+            "malloc",
+            types.generic_pointer.fn_type(&[context.i64_type().into()], false),
+            Some(Linkage::External),
+        );
+        let free =module.add_function(
+            "malloc",
+            context.void_type().fn_type(&[types.generic_pointer.into()], false),
             Some(Linkage::External),
         );
         let va_arg_start = Intrinsic::find("llvm.va_start").unwrap();
@@ -707,7 +736,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let va_arg_end = Intrinsic::find("llvm.va_end").unwrap();
         let va_end=va_arg_end.get_declaration(module, &[]).unwrap();
         let functions= Functions {
-            va_end, va_start
+            va_end, va_start, exit, printf, malloc, free
         };
         kind.set_body(
             &[
@@ -744,7 +773,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.fn_value.ok_or("could not find current function")
     }
     // / Creates a new stack allocation instruction in the entry block of the function.
-    fn create_entry_block_alloca(&self, name: &str) -> Result<PointerValue<'ctx>, &str> {
+    fn create_entry_block_alloca<T>(&self, ty: T, name: &str) -> Result<PointerValue<'ctx>, &str> where
+    T: BasicType<'ctx>, {
+        let old_block = self.builder.get_insert_block();
         let fn_value = self.current_fn_value()?;
         // if a function is already allocated it will have an entry block so its fine to unwrap
         let entry = fn_value.get_first_basic_block().unwrap();
@@ -754,7 +785,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             |first_instr| self.builder.position_before(&first_instr),
         );
 
-        let build_alloca = self.builder.build_alloca(self.types.object, name);
+        let build_alloca = self.builder.build_alloca(ty, name);
+        if let Some(bb) = old_block {
+            self.builder.position_at_end(bb);
+        }
         Ok(build_alloca)
         // store everything as a global variable
         // Ok(self.module.add_global(self.types.object, Some(AddressSpace::default()), name).as_pointer_value())
@@ -800,7 +834,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 for i in 0..env.0.count_fields() {
                     let cn = env_iter[i as usize].clone();
                     // self.module.add_global(type_, address_space, name)
-                    let alloca = self.builder.build_alloca(self.types.object, &cn);
+                    let alloca = self.create_entry_block_alloca(self.types.object, &cn).unwrap();
                     let arg = self
                         .builder
                         .build_extract_value(envs, i.try_into().unwrap(), "load captured")
@@ -810,7 +844,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 for (i, arg) in fn_value.get_param_iter().skip(1).enumerate() {
                     let arg_name: RC<str> = i.to_string().into();
-                    let alloca = self.create_entry_block_alloca(&arg_name)?;
+                    let alloca = self.create_entry_block_alloca(self.types.object, &arg_name)?;
                     self.builder.build_store(alloca, arg);
                     self.insert_variable(arg_name, alloca);
                 }
@@ -969,7 +1003,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;
-                let ptr = self.builder.build_alloca(ty, i);
+                let ptr = self.create_entry_block_alloca(ty, i).unwrap();
                 // let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
                 self.builder.build_store(ptr, v);
                 self.insert_variable(i.clone(), ptr);
@@ -1119,7 +1153,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let verify = main_fn.verify(true);
 
         if verify {
-            self.fpm.run_on(&main_fn);
+            // self.fpm.run_on(&main_fn);
             println!("done");
             None
         } else {

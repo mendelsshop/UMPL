@@ -58,7 +58,7 @@ fn main() {
         "
         !(add 1 3 4)<
         !let x 10000%1
-        !let y ;(c .c.)<
+        let y ;()<
         !(print y^car^cdr)<
         !(print x)<
         let cons 
@@ -74,14 +74,14 @@ fn main() {
                                         ᚛
                                 ᚛
                       
-                   let k (cons 5 6)< 
+                   !let k (cons 5 6)>
                     !(print .\n.)<
                      !(print (k &)<)<
 
                         ",
     )
     .unwrap();
-    println!("{fn_type:?}");
+    println!("{}", fn_type.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>().join("\n"));
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&program.1, program.0).map_or_else(

@@ -1,1 +1,2 @@
 globals must be initilized!!!
+allocas should be in a functions entry block
