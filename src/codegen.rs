@@ -8,6 +8,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     execution_engine::ExecutionEngine,
+    intrinsics::Intrinsic,
     module::{Linkage, Module},
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
@@ -16,7 +17,7 @@ use inkwell::{
         AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue,
         GlobalValue, IntValue, PointerValue, StructValue,
     },
-    AddressSpace, OptimizationLevel, intrinsics::Intrinsic,
+    AddressSpace, OptimizationLevel,
 };
 
 use crate::{
@@ -58,14 +59,16 @@ pub enum TyprIndex {
     #[default]
     Unkown = 100,
     boolean = 0,
-    cons = 3,
-    // TODO: make hempty be 0 so object will be zeroinitilizer if its hempty
-    hempty = 7,
-    lambda = 4,
     number = 1,
     string = 2,
+    cons = 3,
+    lambda = 4,
     symbol = 5,
     thunk = 6,
+    // TODO: make hempty be 0 so object will be zeroinitilizer if its hempty
+    hempty = 7,
+    // TODO make primitive things so function like print cons, car .. dont needt to unthunk or take env pointers
+    primitive = 8,
 }
 
 macro_rules! buider_object {
@@ -95,12 +98,13 @@ pub struct Types<'ctx> {
     pub string: PointerType<'ctx>,
     pub cons: StructType<'ctx>,
     pub lambda: StructType<'ctx>,
-    pub lambda_ptr: PointerType<'ctx>,
     pub lambda_ty: FunctionType<'ctx>,
-    pub symbol_type: PointerType<'ctx>,
+    pub symbol: PointerType<'ctx>,
     pub generic_pointer: PointerType<'ctx>,
     pub hempty: StructType<'ctx>,
     pub thunk: FunctionType<'ctx>,
+    thunk_ty: StructType<'ctx>,
+    primitive_ty: FunctionType<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -113,7 +117,6 @@ pub struct Functions<'ctx> {
     malloc: FunctionValue<'ctx>,
     free: FunctionValue<'ctx>,
 }
-
 
 macro_rules! make_extract {
     ($self:expr, $type:ident, $o_type: ident, $name:literal) => {{
@@ -181,29 +184,35 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     buider_object!(boolean, IntValue<'ctx>);
     buider_object!(number, FloatValue<'ctx>);
     buider_object!(string, PointerValue<'ctx>);
-//     pub fn cons(&self,value:PointerValue<'ctx>) -> StructValue<'ctx>{
-//   let ty = TyprIndex::cons;
-//   value.print_to_stderr();
-//   println!("{ty:?}");
-//   let obj = self.types.object.const_zero();
-//   let cons = self.builder.build_extract_value(obj,ty as u32 +1, "cons.field").unwrap().into_pointer_value();
-//   self.builder.build_store(cons, value);
-// //   let obj = self.builder.build_insert_value(obj,value,ty as u32+1, &format!("value $value",)).unwrap();
-//   let obj = self.builder.build_insert_value(obj,self.types.ty.const_int(ty as u64,false),0,"typesss").unwrap();
-  
-//   obj.into_struct_value()
-// // obj
-// }
-buider_object!(cons, PointerValue<'ctx>);
+    buider_object!(primitive, PointerValue<'ctx>);
+    //     pub fn cons(&self,value:PointerValue<'ctx>) -> StructValue<'ctx>{
+    //   let ty = TyprIndex::cons;
+    //   value.print_to_stderr();
+    //   println!("{ty:?}");
+    //   let obj = self.types.object.const_zero();
+    //   let cons = self.builder.build_extract_value(obj,ty as u32 +1, "cons.field").unwrap().into_pointer_value();
+    //   self.builder.build_store(cons, value);
+    // //   let obj = self.builder.build_insert_value(obj,value,ty as u32+1, &format!("value $value",)).unwrap();
+    //   let obj = self.builder.build_insert_value(obj,self.types.ty.const_int(ty as u64,false),0,"typesss").unwrap();
+
+    //   obj.into_struct_value()
+    // // obj
+    // }
+    buider_object!(cons, PointerValue<'ctx>);
     buider_object!(lambda, StructValue<'ctx>);
-    buider_object!(thunk, PointerValue<'ctx>);
+    buider_object!(thunk, StructValue<'ctx>);
     buider_object!(symbol, PointerValue<'ctx>);
     pub fn hempty(&self) -> StructValue<'ctx> {
         let ty = TyprIndex::hempty;
         let obj = self.types.object.const_zero();
         let obj = self
             .builder
-            .build_insert_value(obj, self.types.ty.const_int(ty as u64, false), 0, "hempty-type")
+            .build_insert_value(
+                obj,
+                self.types.ty.const_int(ty as u64, false),
+                0,
+                "hempty-type",
+            )
             .unwrap();
         obj.into_struct_value()
     }
@@ -261,7 +270,6 @@ buider_object!(cons, PointerValue<'ctx>);
         )
     }
 
-
     fn const_thunk(&mut self, object: UMPL2Expr) -> Option<StructValue<'ctx>> {
         let env = self.get_scope();
         let old_fn = self.fn_value;
@@ -274,13 +282,19 @@ buider_object!(cons, PointerValue<'ctx>);
         // right now even though we take the first parameter to be the "envoirnment" we don't actully use it, maybee remove that parameter
         let envs = self
             .builder
-            .build_load(env.0, env.1, "load env")
+            .build_load(
+                env.0,
+                thunk.get_first_param().unwrap().into_pointer_value(),
+                "load env",
+            )
             .into_struct_value();
         self.new_env();
         for i in 0..env.0.count_fields() {
             let cn = env_iter[i as usize].clone();
             // self.module.add_global(type_, address_space, name)
-            let alloca = self.create_entry_block_alloca(self.types.object, &cn).unwrap();
+            let alloca = self
+                .create_entry_block_alloca(self.types.object, &cn)
+                .unwrap();
             let arg = self
                 .builder
                 .build_extract_value(envs, i.try_into().unwrap(), "load captured")
@@ -291,20 +305,36 @@ buider_object!(cons, PointerValue<'ctx>);
         let ret = self.compile_expr(&object);
         match ret {
             Ok(v) => {
-                let v  =self.actual_value(v?.into_struct_value());
-                self.builder.build_return(Some(&v));},
+                let v = self.actual_value(v?.into_struct_value());
+                self.builder.build_return(Some(&v));
+            }
             Err(e) => self.exit(&e, 2),
         };
         self.fn_value = old_fn;
-        if let Some(bb) = old_block  {
+        if let Some(bb) = old_block {
             self.builder.position_at_end(bb);
         }
         if !thunk.verify(true) {
             self.print_ir();
             panic!("invalid function")
         }
-        // self.fpm.run_on(&thunk);
-        Some(self.thunk(thunk.as_global_value().as_pointer_value()))
+        self.pop_env();
+        self.fpm.run_on(&thunk);
+        let value = self.types.thunk_ty.const_zero();
+        let value = self
+            .builder
+            .build_insert_value(
+                value,
+                thunk.as_global_value().as_pointer_value(),
+                0,
+                "save-thunk-fn",
+            )
+            .unwrap();
+        let value = self
+            .builder
+            .build_insert_value(value, env.1, 1, "save-thunk-env")
+            .unwrap();
+        Some(self.thunk(value.into_struct_value()))
     }
 
     pub(crate) fn const_cons(
@@ -320,18 +350,25 @@ buider_object!(cons, PointerValue<'ctx>);
         // builder.build_store(this_ptr, this);
         // let right_ptr = create_entry_block_alloca(types.object, "cgr").unwrap();
         // builder.build_store(right_ptr, right_tree);
-        let tree_type =
-            self.types
-                .cons
-                .const_zero();
-        let tree_type = self.builder.build_insert_value(tree_type, left_tree, 0, "car-set").unwrap();
-        let tree_type = self.builder.build_insert_value(tree_type, this, 1, "car-set").unwrap();
-        let tree_type = self.builder.build_insert_value(tree_type, right_tree, 2, "car-set").unwrap();
+        let tree_type = self.types.cons.const_zero();
+        let tree_type = self
+            .builder
+            .build_insert_value(tree_type, left_tree, 0, "car-set")
+            .unwrap();
+        let tree_type = self
+            .builder
+            .build_insert_value(tree_type, this, 1, "car-set")
+            .unwrap();
+        let tree_type = self
+            .builder
+            .build_insert_value(tree_type, right_tree, 2, "car-set")
+            .unwrap();
         // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
         // tree_ptr.set_initializer(&self.types.cons.const_zero());
-        let tree_ptr =  self.create_entry_block_alloca(tree_type.into_struct_value().get_type(), "cons").unwrap();
-        self.builder
-            .build_store(tree_ptr, tree_type);
+        let tree_ptr = self
+            .create_entry_block_alloca(tree_type.into_struct_value().get_type(), "cons")
+            .unwrap();
+        self.builder.build_store(tree_ptr, tree_type);
         self.cons(tree_ptr)
     }
 
@@ -342,10 +379,25 @@ buider_object!(cons, PointerValue<'ctx>);
     ) -> Result<StructValue<'ctx>, &str> {
         if function.verify(true) {
             self.fpm.run_on(&function);
-            Ok(self.lambda(self.types.lambda.const_named_struct(&[
-                function.as_global_value().as_pointer_value().into(),
-                env.into(),
-            ])))
+            let value = self.types.lambda.const_zero();
+            let value = self
+                .builder
+                .build_insert_value(
+                    value,
+                    function.as_global_value().as_pointer_value(),
+                    0,
+                    "save-fn",
+                )
+                .unwrap();
+            let value = self
+                .builder
+                .build_insert_value(value, env, 1, "save-fn")
+                .unwrap();
+            // .const_named_struct(&[
+            // function.as_global_value().as_pointer_value().into(),
+            // env.into(),
+            // ]);
+            Ok(self.lambda(value.into_struct_value()))
         } else {
             function.print_to_stderr();
             unsafe { function.delete() }
@@ -359,10 +411,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn make_print(&mut self) {
         // maybe make print should turn into make string
 
-        let print_fn_ty: FunctionType<'_> = self.types.object.fn_type(
-            &[self.types.generic_pointer.into(), self.types.object.into()],
-            false,
-        );
+        let print_fn_ty: FunctionType<'_> = self
+            .types
+            .object
+            .fn_type(&[self.types.object.into()], false);
         let print_fn = self.module.add_function("print", print_fn_ty, None);
         self.fn_value = Some(print_fn);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
@@ -379,7 +431,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.exit("not a valid type\n", 1);
         self.builder.position_at_end(entry_block);
-        let args_thunk = print_fn.get_nth_param(1).unwrap().into_struct_value();
+        let args_thunk = print_fn.get_first_param().unwrap().into_struct_value();
         let args = self.actual_value(args_thunk);
         let ty = self.extract_type(args).unwrap().into_int_value();
         self.builder.build_switch(
@@ -455,14 +507,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("car").unwrap(),
-                &[self.types.generic_pointer.const_null().into(), args.into()],
+                &[args.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
             self.module.get_function("print").unwrap(),
-            &[self.types.generic_pointer.const_null().into(), val.into()],
+            &[val.into()],
             "printcar",
         );
         self.builder.build_call(
@@ -478,14 +530,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("cdr").unwrap(),
-                &[self.types.generic_pointer.const_null().into(), args.into()],
+                &[args.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
             self.module.get_function("print").unwrap(),
-            &[self.types.generic_pointer.const_null().into(), val.into()],
+            &[val.into()],
             "printcar",
         );
         self.builder.build_call(
@@ -501,14 +553,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("cgr").unwrap(),
-                &[self.types.generic_pointer.const_null().into(), args.into()],
+                &[args.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
             self.module.get_function("print").unwrap(),
-            &[self.types.generic_pointer.const_null().into(), val.into()],
+            &[val.into()],
             "printcar",
         );
         self.builder.build_call(
@@ -543,42 +595,43 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             (&args, symbol_block),
         ]);
         self.builder.build_return(Some(&phi.as_basic_value()));
-        self.insert_function(
-            "print".into(),
-            print_fn,
-            self.types.generic_pointer.const_null(),
-        )
+        self.insert_function("print".into(), print_fn)
     }
 
     fn make_add(&mut self) {
-        let fn_ty = self.types.lambda_ty;
+        let fn_ty = self.types.primitive_ty;
         let func = self.module.add_function("add", fn_ty, None);
         self.fn_value = Some(func);
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
-        let va_list =self.create_entry_block_alloca(self.types.generic_pointer, "va_list").unwrap();
-        self.builder.build_call(self.functions.va_start, &[va_list.into()], "init args");
-        self.builder.build_va_arg(va_list, self.types.generic_pointer, "va first");
-        self.builder.build_call(self.functions.va_end, &[va_list.into()], "va end");
+        let va_list = self
+            .create_entry_block_alloca(self.types.generic_pointer, "va_list")
+            .unwrap();
+        self.builder
+            .build_call(self.functions.va_start, &[va_list.into()], "init args");
+        self.builder
+            .build_va_arg(va_list, self.types.generic_pointer, "va first");
+        self.builder
+            .build_call(self.functions.va_end, &[va_list.into()], "va end");
         self.builder.build_return(Some(&self.hempty()));
-        self.insert_function("add".into(), func, self.types.generic_pointer.const_null());
+        self.insert_function("add".into(), func);
     }
 
     fn make_accesors(&mut self) {
-        let fn_ty = self.types.lambda_ty;
+        let fn_ty = self.types.primitive_ty;
         let mut accesor = |idx, name| {
             let func = self.module.add_function(name, fn_ty, None);
             let entry = self.context.append_basic_block(func, name);
             self.builder.position_at_end(entry);
             // we can ignore envoirment, just needed for compatibility with other procedures
-            let cons_object = func.get_nth_param(1).unwrap().into_struct_value();
+            let cons_object = func.get_first_param().unwrap().into_struct_value();
             let cons_object = self.extract_cons(cons_object).unwrap().into_struct_value();
             let car = self
                 .builder
                 .build_extract_value(cons_object, idx, &format!("get-{name}"))
                 .unwrap();
             self.builder.build_return(Some(&car));
-            self.insert_function(name.into(), func, self.types.generic_pointer.const_null());
+            self.insert_function(name.into(), func);
         };
         accesor(0, "car");
         accesor(1, "cdr");
@@ -588,16 +641,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
 /// envoirnment/variable handling functions
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    fn insert_function(
-        &mut self,
-        name: RC<str>,
-        function: FunctionValue<'ctx>,
-        env: PointerValue<'ctx>,
-    ) {
-        if let Ok(lambda) = self.const_lambda(function, env) {
-            self.insert_lambda(name, lambda)
+    fn insert_function(&mut self, name: RC<str>, function: FunctionValue<'ctx>) {
+        if function.verify(true) {
+            self.fpm.run_on(&function);
+            let p = self.primitive(function.as_global_value().as_pointer_value());
+            self.insert_lambda(name, p);
         } else {
-            println!("")
+            println!("Failed to verify function {name}");
         }
     }
 
@@ -633,12 +683,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .collect::<Vec<_>>(),
             false,
         );
-        let global_save = self.module.add_global(env_struct_type, None, "");
-        global_save.set_initializer(&env_struct_type.const_zero());
-        let env_pointer = global_save.as_pointer_value();
+        let env_pointer = self
+            .create_entry_block_alloca(env_struct_type, "env")
+            .unwrap();
+        // global_save.set_initializer(&env_struct_type.const_zero());
+        // let env_pointer = global_save.as_pointer_value();
 
         for (i, v) in value.iter().enumerate() {
-            println!("{i} {v}");
             let value = self.get_var(*v).unwrap();
             let gep = self
                 .builder
@@ -665,11 +716,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn get_var(&self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
-        Ok(self.builder.build_load(
-            self.types.object,
-            self.get_variable(s).ok_or(format!("{s} not found"))?,
-            s,
-        ))
+        let ptr = self.get_variable(s).ok_or(format!("{s} not found"))?;
+        // ptr.print_to_stderr();
+        Ok(self.builder.build_load(self.types.object, ptr, s))
     }
 }
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -679,7 +728,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
-
         let jit = module
             .create_jit_execution_engine(inkwell::OptimizationLevel::None)
             .unwrap();
@@ -704,12 +752,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             string: context.i8_type().ptr_type(AddressSpace::default()),
             cons: context.struct_type(&[kind.into(), kind.into(), kind.into()], false),
             lambda,
-            lambda_ptr: lambda.ptr_type(AddressSpace::default()),
             lambda_ty: fn_type,
-            symbol_type: context.i8_type().ptr_type(AddressSpace::default()),
+            symbol: context.i8_type().ptr_type(AddressSpace::default()),
             generic_pointer: context.i8_type().ptr_type(AddressSpace::default()),
             hempty: context.struct_type(&[], false),
-            thunk: kind.fn_type(&[env_ptr.into()], false)
+            thunk_ty: context.struct_type(
+                &[
+                    kind.fn_type(&[env_ptr.into()], false)
+                        .ptr_type(AddressSpace::default())
+                        .into(),
+                    env_ptr.into(),
+                ],
+                false,
+            ),
+            thunk: kind.fn_type(&[env_ptr.into()], false),
+            primitive_ty: kind.fn_type(&[kind.into()], true),
         };
         let exit = module.add_function(
             "exit",
@@ -718,39 +775,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .fn_type(&[context.i32_type().into()], false),
             Some(Linkage::External),
         );
-        let printf =module.add_function(
+        let printf = module.add_function(
             "printf",
             context.i32_type().fn_type(&[types.string.into()], true),
             Some(Linkage::External),
         );
-        let malloc =module.add_function(
+        let malloc = module.add_function(
             "malloc",
-            types.generic_pointer.fn_type(&[context.i64_type().into()], false),
+            types
+                .generic_pointer
+                .fn_type(&[context.i64_type().into()], false),
             Some(Linkage::External),
         );
-        let free =module.add_function(
+        let free = module.add_function(
             "malloc",
-            context.void_type().fn_type(&[types.generic_pointer.into()], false),
+            context
+                .void_type()
+                .fn_type(&[types.generic_pointer.into()], false),
             Some(Linkage::External),
         );
         let va_arg_start = Intrinsic::find("llvm.va_start").unwrap();
-        let va_start=va_arg_start.get_declaration(module, &[]).unwrap();
+        let va_start = va_arg_start.get_declaration(module, &[]).unwrap();
         let va_arg_end = Intrinsic::find("llvm.va_end").unwrap();
-        let va_end=va_arg_end.get_declaration(module, &[]).unwrap();
-        let functions= Functions {
-            va_end, va_start, exit, printf, malloc, free
+        let va_end = va_arg_end.get_declaration(module, &[]).unwrap();
+        let functions = Functions {
+            va_end,
+            va_start,
+            exit,
+            printf,
+            malloc,
+            free,
         };
         kind.set_body(
             &[
-                types.ty.as_basic_type_enum(), //type
-                types.boolean.as_basic_type_enum(), // bool
-                types.number.as_basic_type_enum(), //number
-                types.string.as_basic_type_enum(), // string
+                types.ty.as_basic_type_enum(),              //type
+                types.boolean.as_basic_type_enum(),         // bool
+                types.number.as_basic_type_enum(),          //number
+                types.string.as_basic_type_enum(),          // string
                 types.generic_pointer.as_basic_type_enum(), // cons (maybee turn it back to 3 elemement struct)
-                types.lambda.as_basic_type_enum(), // function
-                types.symbol_type.as_basic_type_enum(), // symbol
-                types.generic_pointer.as_basic_type_enum(),  // thunk
-                types.hempty.as_basic_type_enum(), //hempty
+                types.lambda.as_basic_type_enum(),          // function
+                types.symbol.as_basic_type_enum(),          // symbol
+                types.thunk_ty.as_basic_type_enum(),        // thunk
+                types.hempty.as_basic_type_enum(),          //hempty
+                types.generic_pointer.as_basic_type_enum(), // primitive function
             ],
             false,
         );
@@ -775,8 +842,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.fn_value.ok_or("could not find current function")
     }
     // / Creates a new stack allocation instruction in the entry block of the function.
-    fn create_entry_block_alloca<T>(&self, ty: T, name: &str) -> Result<PointerValue<'ctx>, &str> where
-    T: BasicType<'ctx>, {
+    fn create_entry_block_alloca<T>(&self, ty: T, name: &str) -> Result<PointerValue<'ctx>, &str>
+    where
+        T: BasicType<'ctx>,
+    {
         let old_block = self.builder.get_insert_block();
         let fn_value = self.current_fn_value()?;
         // if a function is already allocated it will have an entry block so its fine to unwrap
@@ -818,8 +887,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let ret_type = self.types.object;
                 let fn_type = ret_type.fn_type(&arg_types, false);
                 let fn_value = self.module.add_function(&name, fn_type, None);
-                let envs = env.1;
-
                 for (name, arg) in fn_value.get_param_iter().skip(1).enumerate() {
                     arg.set_name(&name.to_string());
                 }
@@ -830,13 +897,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 // right now even though we take the first parameter to be the "envoirnment" we don't actully use it, maybee remove that parameter
                 let envs = self
                     .builder
-                    .build_load(env.0, envs, "load env")
+                    .build_load(
+                        env.0,
+                        fn_value.get_first_param().unwrap().into_pointer_value(),
+                        "load env",
+                    )
                     .into_struct_value();
                 self.new_env();
                 for i in 0..env.0.count_fields() {
                     let cn = env_iter[i as usize].clone();
                     // self.module.add_global(type_, address_space, name)
-                    let alloca = self.create_entry_block_alloca(self.types.object, &cn).unwrap();
+                    let alloca = self
+                        .create_entry_block_alloca(self.types.object, &cn)
+                        .unwrap();
                     let arg = self
                         .builder
                         .build_extract_value(envs, i.try_into().unwrap(), "load captured")
@@ -863,9 +936,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.fn_value = old_fn;
 
                 // return the whole thing after verification and optimization
-                if let Ok(lambda) =
-                    self.const_lambda(fn_value, self.types.generic_pointer.const_null())
-                {
+                if let Ok(lambda) = self.const_lambda(fn_value, env.1) {
                     self.pop_env();
                     let ret = if let Some(_) = r#fn.name() {
                         self.insert_lambda(name.into(), lambda);
@@ -889,9 +960,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::If(if_stmt) => {
                 let parent = self.current_fn_value()?;
                 let thunked = return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
-                let cond_struct =
-                   self.actual_value( thunked);
-                    // dont assume a bool
+                let cond_struct = self.actual_value(thunked);
+                // TODO: dont assume a bool
                 let bool_val = self.extract_bool(cond_struct).unwrap().into_int_value();
                 let object_type = self.extract_type(cond_struct).unwrap().into_int_value();
                 // if its not a bool type
@@ -950,15 +1020,61 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
                 let op = return_none!(self.compile_expr(&application.args()[0])?);
+
+                let val = self.actual_value(op.into_struct_value());
+                let primitve_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "primitve-application");
+                let lambda_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "lambda-application");
+                let cont_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "cont-application");
+                let fn_ty = self.extract_type(val).unwrap();
+                let is_primitive = self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    fn_ty.into_int_value(),
+                    self.types.ty.const_int(TyprIndex::primitive as u64, false),
+                    "application::fntype::cmp",
+                );
+                self.builder
+                    .build_conditional_branch(is_primitive, primitve_bb, lambda_bb);
+                self.builder.position_at_end(primitve_bb);
+                let args = (application
+                    .args()
+                    .iter()
+                    .skip(1)
+                    .map(|expr| self.compile_expr(expr)))
+                .collect::<Result<Option<Vec<_>>, _>>()?;
+                let args = return_none!(args)
+                    .iter()
+                    .map(|a| (self.actual_value(a.into_struct_value())).into())
+                    .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+                let op = self.extract_primitve(val).unwrap().into_pointer_value();
+                let unwrap_left_prim = self
+                    .builder
+                    .build_indirect_call(
+                        self.types.primitive_ty,
+                        op,
+                        args.as_slice(),
+                        "application:call",
+                    )
+                    .try_as_basic_value()
+                    .unwrap_left();
+                let primitve_bb = self.builder.get_insert_block().unwrap();
+                self.builder.build_unconditional_branch(cont_bb);
+                self.builder.position_at_end(lambda_bb);
                 let args = return_none!(application
                     .args()
                     .iter()
                     .skip(1)
-                    .map(|expr|  self.const_thunk(expr.clone()))
+                    .map(|expr| self.const_thunk(expr.clone()))
                     .collect::<Option<Vec<StructValue<'_>>>>());
-
-                let val = self.actual_value(op.into_struct_value());
-
+                let mut args = args
+                    .iter()
+                    .map(|a| (*a).into())
+                    .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
                 let op = self.extract_function(val).unwrap();
                 let function_pointer = self
                     .builder
@@ -966,16 +1082,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .unwrap()
                     .as_any_value_enum()
                     .into_pointer_value();
-                let env_pointer = self
+                let any_value_enum = self
                     .builder
                     .build_extract_value(op.into_struct_value(), 1, "function env load")
                     .unwrap()
-                    .as_any_value_enum()
-                    .into_pointer_value();
-                let mut args = args
-                    .iter()
-                    .map(|a| (*a).into())
-                    .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+                    .as_any_value_enum();
+                let env_pointer = any_value_enum.into_pointer_value();
+
                 args.insert(0, env_pointer.into());
                 // should probavly figure out that actual param count of function cause supposedly tail calls dont work on varidiac aargument function
                 let unwrap_left = self
@@ -988,7 +1101,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     )
                     .try_as_basic_value()
                     .unwrap_left();
-                Ok(Some(unwrap_left))
+                let lambda_bb = self.builder.get_insert_block().unwrap();
+                self.builder.build_unconditional_branch(cont_bb);
+                self.builder.position_at_end(cont_bb);
+                let cont = self
+                    .builder
+                    .build_phi(self.types.object, "application::done");
+                cont.add_incoming(&[(&unwrap_left, lambda_bb), (&unwrap_left_prim, primitve_bb)]);
+                Ok(Some(cont.as_basic_value()))
             }
             // right now the approach for quotation is to codegen the expression and wrap it in a function which will be called with the to get the value of the expression
             // kinda of doesnt work because quotation should assume nothing about the environment, but since we do a full codegen if a ident is quoted it will attempt to lookup
@@ -1060,6 +1180,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .left()
     }
 
+    fn extract_primitve(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
+        let primitive_extract = self.module.get_function("extract_primitive").unwrap();
+        self.builder
+            .build_call(primitive_extract, &[val.into()], "extract-primitive")
+            .try_as_basic_value()
+            .left()
+    }
+
     fn extract_thunk(&self, val: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
         let thunk_extract = self.module.get_function("extract_thunk").unwrap();
         self.builder
@@ -1086,15 +1214,40 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let current_bb = self.builder.get_insert_block().unwrap();
         let force = self.context.append_basic_block(current_fn, "force");
         let done_force = self.context.append_basic_block(current_fn, "done-force");
-        
+
         let ty = self.extract_type(thunked).unwrap().into_int_value();
-        let cond =self.builder.build_int_compare(inkwell::IntPredicate::EQ, ty, self.types.ty.const_int(TyprIndex::thunk as u64, false), "is thunk");
-        self.builder.build_conditional_branch(cond, force, done_force);
+        let cond = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            ty,
+            self.types.ty.const_int(TyprIndex::thunk as u64, false),
+            "is thunk",
+        );
+        self.builder
+            .build_conditional_branch(cond, force, done_force);
         self.builder.position_at_end(force);
-        let thunked_fn = self.extract_thunk(thunked).unwrap();
-        let unthunked= self.builder.build_indirect_call(self.types.thunk, thunked_fn.into_pointer_value(), &[self.types.generic_pointer.const_null().into()], "unthunk").try_as_basic_value().unwrap_left().into_struct_value();
+        let unthunked = self.extract_thunk(thunked).unwrap().into_struct_value();
+        let thunked_fn = self
+            .builder
+            .build_extract_value(unthunked, 0, "thunk-fn")
+            .unwrap();
+        let unthunked_env = self
+            .builder
+            .build_extract_value(unthunked, 1, "thunk-env")
+            .unwrap();
+        let unthunked = self
+            .builder
+            .build_indirect_call(
+                self.types.thunk,
+                thunked_fn.into_pointer_value(),
+                &[unthunked_env.into()],
+                "unthunk",
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_struct_value();
         self.builder.build_unconditional_branch(done_force);
         self.builder.position_at_end(done_force);
+        // we dont need to reget the block for unthunking because we are only calling a function and nothing elsse that would make another block in between
         let object = self.builder.build_phi(self.types.object, "value");
         object.add_incoming(&[(&thunked, current_bb), (&unthunked, force)]);
         object.as_basic_value().into_struct_value()
@@ -1118,7 +1271,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         make_extract!(self, number, number, "number");
         make_extract!(self, string, symbol, "symbol");
         make_extract!(self, generic_pointer, cons, "cons");
-        make_extract!(self, generic_pointer, thunk, "thunk");
+        make_extract!(self, thunk_ty, thunk, "thunk");
+        make_extract!(self, generic_pointer, primitive, "primitive");
     }
 
     pub fn compile_program(
@@ -1151,11 +1305,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.pop_env();
-
+        // self.print_ir();
         let verify = main_fn.verify(true);
 
         if verify {
-            // self.fpm.run_on(&main_fn);
+            self.fpm.run_on(&main_fn);
             println!("done");
             None
         } else {

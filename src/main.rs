@@ -54,7 +54,6 @@ fn main() {
     // fanction  1* ᚜ (print '0')< ᚛
     // TODO: make these into tests
     let fn_type = umpl_parse(
-        
         "
         !(add 1 3 4)<
         !let x 10000%1
@@ -62,7 +61,7 @@ fn main() {
         !(print y^car^cdr)<
         !(print x)<
         ! doesnt work b/c codegen trying to save q in globals so that cons can use it
-        let q ;(a b c d e f g a b a)<
+        let q ;(a a v b a)<
         (print q)>
         let cons 
                                 fanction  2 ᚜ 
@@ -77,14 +76,21 @@ fn main() {
                                         ᚛
                                 ᚛
 
-                   !let k (cons 5 6)>
-                    !(print .\n.)<
-                     !(print (k &)<)<
+                   let k (cons 6 8)>
+                    (print .\n.)<
+                     (print (k &)<)<
 
                         ",
     )
     .unwrap();
-    println!("{}", fn_type.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>().join("\n"));
+    println!(
+        "{}",
+        fn_type
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&program.1, program.0).map_or_else(

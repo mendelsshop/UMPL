@@ -46,7 +46,6 @@ pub fn integer() -> Box<Parser<usize>> {
 
 pub fn satify(checker: impl Fn(char) -> bool + 'static + Clone) -> Box<Parser<char>> {
     Box::new(move |input: &str| {
-        
         input.chars().next().map_or(
             Err(ParseError {
                 kind: ParseErrorType::EOF,
@@ -54,10 +53,8 @@ pub fn satify(checker: impl Fn(char) -> bool + 'static + Clone) -> Box<Parser<ch
             }),
             |n| {
                 if checker(n) {
-                    
                     Ok((n, input.split_at(n.len_utf8()).1))
                 } else {
-                    
                     Err(ParseError {
                         kind: ParseErrorType::SatisfyMismatch(n),
                         input,
@@ -79,11 +76,10 @@ pub fn chain<T: 'static, U: 'static>(
     parser2: Box<Parser<U>>,
 ) -> Box<Parser<(T, U)>> {
     Box::new(move |input: &str| {
-        
         let (res1, input) = parser1(input)?;
-        
+
         let (res2, input) = parser2(input)?;
-        
+
         Ok(((res1, res2), input))
     })
 }
@@ -114,18 +110,9 @@ pub fn try_map<
 
 #[must_use]
 pub fn alt<T: 'static>(parser1: Box<Parser<T>>, parser2: Box<Parser<T>>) -> Box<Parser<T>> {
-    Box::new(move |input| {
-        
-        match parser1(input) {
-            Ok((res, input)) => {
-                
-                Ok((res, input))
-            }
-            Err(_) => {
-                
-                parser2(input)
-            }
-        }
+    Box::new(move |input| match parser1(input) {
+        Ok((res, input)) => Ok((res, input)),
+        Err(_) => parser2(input),
     })
 }
 
@@ -143,11 +130,10 @@ pub fn many<T: 'static>(
     parser: Box<Parser<T>>,
 ) -> Box<Parser<Option<Box<dyn Iterator<Item = T>>>>> {
     Box::new(move |mut input| {
-        
         let mut init: Option<Box<dyn Iterator<Item = T>>> = None;
         while let Ok((v, new_input)) = parser(input) {
             input = new_input;
-            
+
             let v = iter::once(v);
             init = match init {
                 Some(old_v) => Some(Box::new(old_v.chain(v))),
@@ -227,7 +213,6 @@ pub fn seq<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<impl Iterator
 pub fn choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
     Box::new(move |input| {
         for parser in parsers.clone() {
-            
             match parser(input) {
                 Ok(ok) => return Ok(ok),
                 Err(_) => continue,
@@ -242,7 +227,6 @@ pub fn not_choice<T: 'static>(parsers: Vec<Box<Parser<T>>>) -> Box<Parser<T>> {
     Box::new(move |input| {
         let mut res = None;
         for parser in parsers.clone() {
-            
             res = Some(parser(input)?);
         }
         res.ok_or(ParseError {

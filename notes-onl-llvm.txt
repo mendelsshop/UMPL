@@ -1,3 +1,4 @@
 globals must be initilized!!!
 allocas should be in a functions entry block
 prefer inserting instead of const struct unless you are sure you are only using constants
+when doing conditnals and phis alway get the latest place the builder is at for case or else the phi will be messed up
