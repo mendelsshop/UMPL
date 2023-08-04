@@ -40,15 +40,25 @@ fn main() {
 
     // Create FPM
     let fpm = PassManager::create(&module);
-
+    fpm.add_new_gvn_pass();
     fpm.add_instruction_combining_pass();
     fpm.add_reassociate_pass();
     fpm.add_gvn_pass();
-    fpm.add_cfg_simplification_pass();
     fpm.add_basic_alias_analysis_pass();
     fpm.add_promote_memory_to_register_pass();
-    fpm.add_instruction_combining_pass();
-    fpm.add_reassociate_pass();
+    fpm.add_aggressive_inst_combiner_pass();
+    fpm.add_cfg_simplification_pass();
+    fpm.add_aggressive_dce_pass();
+    fpm.add_instruction_simplify_pass();
+
+    fpm.add_verifier_pass();
+    fpm.add_bit_tracking_dce_pass();
+    fpm.add_merged_load_store_motion_pass();
+    fpm.add_ind_var_simplify_pass();
+    fpm.add_jump_threading_pass();
+
+    fpm.add_scalarizer_pass();
+    fpm.add_tail_call_elimination_pass();
 
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
@@ -56,7 +66,7 @@ fn main() {
     let fn_type = umpl_parse(
         "
         !(add 1 3 4)<
-        !let x 10000%1
+        let x 10000%1
    
         !(print y^car^cdr)<
         !(print x)<
@@ -76,10 +86,10 @@ fn main() {
                                         ᚛
                                 ᚛
 
-                   let k (cons 6 8)>
-                    (print .\n.)<
-                     (print (k &)<)<
-
+                   let k (cons (cons 1 1)> c )>
+                    (print x)>
+                     (print .\n.)<
+                     (print ((k |)> |)>)<
                         ",
     )
     .unwrap();
@@ -87,7 +97,7 @@ fn main() {
         "{}",
         fn_type
             .iter()
-            .map(|s| format!("{:?}", s))
+            .map(|s| format!("{s:?}"))
             .collect::<Vec<_>>()
             .join("\n")
     );

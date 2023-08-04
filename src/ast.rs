@@ -52,36 +52,36 @@ pub enum UMPL2Expr {
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
         match self {
-            UMPL2Expr::Bool(b) => compiler.const_boolean(b),
-            UMPL2Expr::Number(n) => compiler.const_number(n),
-            UMPL2Expr::String(c) => compiler.const_string(&c),
-            UMPL2Expr::Scope(_) => unreachable!(),
-            UMPL2Expr::Ident(i) => compiler.const_symbol(&i),
-            UMPL2Expr::If(_) => todo!(),
-            UMPL2Expr::Unless(_) => todo!(),
-            UMPL2Expr::Stop(_) => todo!(),
-            UMPL2Expr::Skip => todo!(),
-            UMPL2Expr::Until(_) => todo!(),
-            UMPL2Expr::GoThrough(_) => todo!(),
-            UMPL2Expr::ContiueDoing(_) => todo!(),
-            UMPL2Expr::Fanction(_) => todo!(),
-            UMPL2Expr::Application(a) => a.flatten(compiler),
-            UMPL2Expr::Quoted(_) => todo!(),
-            UMPL2Expr::Label(_) => todo!(),
-            UMPL2Expr::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
-            UMPL2Expr::Hempty => compiler.hempty(),
-            UMPL2Expr::Link(_, _) => todo!(),
-            UMPL2Expr::Let(_, _) => todo!(),
-            UMPL2Expr::ComeTo(_) => todo!(),
+            Self::Bool(b) => compiler.const_boolean(b),
+            Self::Number(n) => compiler.const_number(n),
+            Self::String(c) => compiler.const_string(&c),
+            Self::Scope(_) => unreachable!(),
+            Self::Ident(i) => compiler.const_symbol(&i),
+            Self::If(_) => todo!(),
+            Self::Unless(_) => todo!(),
+            Self::Stop(_) => todo!(),
+            Self::Skip => todo!(),
+            Self::Until(_) => todo!(),
+            Self::GoThrough(_) => todo!(),
+            Self::ContiueDoing(_) => todo!(),
+            Self::Fanction(_) => todo!(),
+            Self::Application(a) => a.flatten(compiler),
+            Self::Quoted(_) => todo!(),
+            Self::Label(_) => todo!(),
+            Self::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
+            Self::Hempty => compiler.hempty(),
+            Self::Link(_, _) => todo!(),
+            Self::Let(_, _) => todo!(),
+            Self::ComeTo(_) => todo!(),
         }
     }
 }
 
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        fn fun_name<'a, 'ctx>(
+        fn fun_name<'ctx>(
             list: Vec<UMPL2Expr>,
-            compiler: &mut Compiler<'a, 'ctx>,
+            compiler: &mut Compiler<'_, 'ctx>,
             n: usize,
         ) -> (StructValue<'ctx>, Vec<UMPL2Expr>) {
             if n == 0 {
@@ -107,27 +107,27 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
 impl core::fmt::Display for UMPL2Expr {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            UMPL2Expr::Bool(f0) => write!(f, "{}", f0),
-            UMPL2Expr::Number(f0) => write!(f, "{}", f0),
-            UMPL2Expr::String(f0) => write!(f, "{}", f0),
-            UMPL2Expr::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
-            UMPL2Expr::Ident(f0) => write!(f, "{}", f0),
-            UMPL2Expr::If(f0) => f.debug_tuple("If").field(&f0).finish(),
-            UMPL2Expr::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
-            UMPL2Expr::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
-            UMPL2Expr::Skip => write!(f, "skip"),
-            UMPL2Expr::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
-            UMPL2Expr::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
-            UMPL2Expr::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
-            UMPL2Expr::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
-            UMPL2Expr::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
-            UMPL2Expr::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
-            UMPL2Expr::Label(f0) => write!(f, "@{}", f0),
-            UMPL2Expr::FnParam(f0) => write!(f, "'{}", f0),
-            UMPL2Expr::Hempty => write!(f, "hempty"),
-            UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
-            UMPL2Expr::ComeTo(f0) => write!(f, "Come to {}", f0),
+            Self::Bool(f0) => write!(f, "{f0}"),
+            Self::Number(f0) => write!(f, "{f0}"),
+            Self::String(f0) => write!(f, "{f0}"),
+            Self::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
+            Self::Ident(f0) => write!(f, "{f0}"),
+            Self::If(f0) => f.debug_tuple("If").field(&f0).finish(),
+            Self::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
+            Self::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
+            Self::Skip => write!(f, "skip"),
+            Self::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
+            Self::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
+            Self::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
+            Self::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
+            Self::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
+            Self::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
+            Self::Label(f0) => write!(f, "@{f0}"),
+            Self::FnParam(f0) => write!(f, "'{f0}"),
+            Self::Hempty => write!(f, "hempty"),
+            Self::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
+            Self::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
+            Self::ComeTo(f0) => write!(f, "Come to {f0}"),
         }
     }
 }
@@ -370,9 +370,9 @@ pub enum Boolean {
 impl Display for Boolean {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Boolean::False => write!(f, "false"),
-            Boolean::True => write!(f, "true"),
-            Boolean::Maybee => write!(f, "maybe"),
+            Self::False => write!(f, "false"),
+            Self::True => write!(f, "true"),
+            Self::Maybee => write!(f, "maybe"),
         }
     }
 }
