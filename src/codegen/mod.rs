@@ -115,6 +115,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .ptr_type(AddressSpace::default());
         let kind = context.opaque_struct_type("object");
         // TODO: make the generic lambda function type not explicitly take an object, and also it should take a number, which signify the amount actual arguments
+        // and also it should take a pointer (that if non-null should indirect br to that ptr)
         let fn_type = kind.fn_type(&[env_ptr.into(), kind.into()], true);
         let lambda = context.struct_type(
             &[
@@ -473,13 +474,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 cont.add_incoming(&[(&unwrap_left, lambda_bb), (&unwrap_left_prim, primitve_bb)]);
                 Ok(Some(cont.as_basic_value()))
             }
-            // right now the approach for quotation is to codegen the expression and wrap it in a function which will be called with the to get the value of the expression
-            // kinda of doesnt work because quotation should assume nothing about the environment, but since we do a full codegen if a ident is quoted it will attempt to lookup
-            // the variable and error if it doesn't exist (not wanted behavior)
-            // another approach would be to make codegen eitheer return and llvm value or a UMPl2expr
-
-            // note the above comment and code below is wrong we just need to convert to appropriate literal types either tree, number, bool, string, or symbol (needs to be added to object struct)
             UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
+            // try to retrieve the function and block address from the goto hashmap
+            // if not there save whatevers needed and once all codegen completed retry to get information function/address for label from goto hashmap
+            // and information to build at the right positon and do it
+
+            // should add unreachable after this?
+            // what should this return?
             UMPL2Expr::Label(_s) => todo!(),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
@@ -495,6 +496,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 // self.context.o
                 return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
             }
+            // create new basic block use uncdoital br to new bb
+            // store the block address and the current fn_value in some sort of hashmap with the name as the key
             UMPL2Expr::ComeTo(_) => todo!(),
         }
     }
