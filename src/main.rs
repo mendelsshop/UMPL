@@ -71,11 +71,11 @@ fn main() {
         !(print y^car^cdr)<
         !(print x)<
         ! doesnt work b/c codegen trying to save q in globals so that cons can use it
-        let q ;(a a v b a)<
+        let q ;(a a v 7 .azc. b a)<
         (print q)>
         let cons 
                                 fanction  2 ᚜ 
-                                        let x '0' 
+                                        let x '0\" 
                                         let y '1' 
                                         fanction  1 ᚜ 
                                             if '0' 
@@ -86,10 +86,10 @@ fn main() {
                                         ᚛
                                 ᚛
 
-                   let k (cons (cons 1 1)> c )>
+                   let k (cons (cons 7 8)> c )>
                     (print x)>
                      (print .\n.)<
-                     (print ((k |)> |)>)<
+                     (print ((k &)> |)>)<
                         ",
     )
     .unwrap();

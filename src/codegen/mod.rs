@@ -59,8 +59,6 @@ pub struct Functions<'ctx> {
     pub va_end: FunctionValue<'ctx>,
     exit: FunctionValue<'ctx>,
     printf: FunctionValue<'ctx>,
-    malloc: FunctionValue<'ctx>,
-    free: FunctionValue<'ctx>,
 }
 
 #[derive(Clone, Debug)]
@@ -116,6 +114,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .struct_type(&[], false)
             .ptr_type(AddressSpace::default());
         let kind = context.opaque_struct_type("object");
+        // TODO: make the generic lambda function type not explicitly take an object, and also it should take a number, which signify the amount actual arguments
         let fn_type = kind.fn_type(&[env_ptr.into(), kind.into()], true);
         let lambda = context.struct_type(
             &[
@@ -160,20 +159,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             context.i32_type().fn_type(&[types.string.into()], true),
             Some(Linkage::External),
         );
-        let malloc = module.add_function(
-            "malloc",
-            types
-                .generic_pointer
-                .fn_type(&[context.i64_type().into()], false),
-            Some(Linkage::External),
-        );
-        let free = module.add_function(
-            "malloc",
-            context
-                .void_type()
-                .fn_type(&[types.generic_pointer.into()], false),
-            Some(Linkage::External),
-        );
         let va_arg_start = Intrinsic::find("llvm.va_start").unwrap();
         let va_start = va_arg_start.get_declaration(module, &[]).unwrap();
         let va_arg_end = Intrinsic::find("llvm.va_end").unwrap();
@@ -183,8 +168,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             va_end,
             exit,
             printf,
-            malloc,
-            free,
         };
         kind.set_body(
             &[
@@ -607,7 +590,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.fpm.run_on(&main_fn);
             let fpm = PassManager::create(());
             // TODO: more optimizations
-
+            fpm.add_function_inlining_pass();
             fpm.add_merge_functions_pass();
             fpm.add_global_dce_pass();
             fpm.add_ipsccp_pass();
@@ -624,6 +607,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             fpm.add_cfg_simplification_pass();
             fpm.add_aggressive_dce_pass();
             fpm.add_instruction_simplify_pass();
+            fpm.add_function_inlining_pass();
+            fpm.add_strip_dead_prototypes_pass();
 
             fpm.run_on(self.module);
             println!("done");
@@ -655,9 +640,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub fn exit(&self, reason: &str, code: i32) {
-        let print = self.module.get_function("printf").unwrap();
         self.builder.build_call(
-            print,
+            self.functions.printf,
             &[self
                 .builder
                 .build_global_string_ptr(reason, "error exit")
@@ -665,9 +649,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into()],
             "print",
         );
-        let exit = self.module.get_function("exit").unwrap();
         self.builder.build_call(
-            exit,
+            self.functions.exit,
             &[self.context.i32_type().const_int(code as u64, false).into()],
             "exit",
         );

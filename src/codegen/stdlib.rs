@@ -60,7 +60,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ),
             ],
         );
-        let print = self.module.get_function("printf").unwrap();
+        let print = self.functions.printf;
         let print_type = |block,
                           extracter: fn(
             &Compiler<'a, 'ctx>,
@@ -185,14 +185,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(error_block);
         self.builder.build_call(
             print,
-            &[self
-                .builder
-                .build_global_string_ptr("not valid type %d\n", "idk")
-                .as_pointer_value()
-                .into(), ty.into()],
+            &[
+                self.builder
+                    .build_global_string_ptr("not valid type %d\n", "idk")
+                    .as_pointer_value()
+                    .into(),
+                ty.into(),
+            ],
             "printcar",
         );
-        
+
         self.exit("", 1);
 
         self.builder.position_at_end(ret_block);
