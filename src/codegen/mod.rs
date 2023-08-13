@@ -116,7 +116,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let kind = context.opaque_struct_type("object");
         // TODO: make the generic lambda function type not explicitly take an object, and also it should take a number, which signify the amount actual arguments
         // and also it should take a pointer (that if non-null should indirect br to that ptr)
-        let fn_type = kind.fn_type(&[env_ptr.into(), kind.into()], true);
+        let call_info = context.struct_type(&[context.i64_type().into(), context.i8_type().ptr_type(AddressSpace::default()).into()], false);
+        let fn_type = kind.fn_type(&[env_ptr.into(), call_info.into()], true);
         let lambda = context.struct_type(
             &[
                 fn_type.ptr_type(AddressSpace::default()).into(),
@@ -146,7 +147,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 false,
             ),
             thunk: kind.fn_type(&[env_ptr.into()], false),
-            primitive_ty: kind.fn_type(&[kind.into()], true),
+            primitive_ty: kind.fn_type(&[call_info.into()], true),
         };
         let exit = module.add_function(
             "exit",
