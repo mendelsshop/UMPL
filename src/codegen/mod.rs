@@ -1,7 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    iter,
+};
 
 use inkwell::{
-    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     execution_engine::ExecutionEngine,
@@ -79,7 +81,7 @@ pub struct Compiler<'a, 'ctx> {
     pub(crate) ident: HashMap<RC<str>, GlobalValue<'ctx>>,
     fn_value: Option<FunctionValue<'ctx>>,
     jit: ExecutionEngine<'ctx>,
-    links: HashMap<RC<str>, BasicBlock<'ctx>>,
+    links: HashMap<RC<str>, (PointerValue<'ctx>, FunctionValue<'ctx>)>,
     pub(crate) types: Types<'ctx>,
     // not were umpl functions are stored
     functions: Functions<'ctx>,
@@ -272,6 +274,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let entry = self.context.append_basic_block(fn_value, "entry");
                 self.fn_value = Some(fn_value);
                 self.builder.position_at_end(entry);
+                let call_info = fn_value.get_nth_param(1).unwrap().into_struct_value();
+                let jmp_block = self
+                    .builder
+                    .build_extract_value(call_info, 1, "basic block address")
+                    .unwrap()
+                    .into_pointer_value();
+                let jump_bb = self.context.append_basic_block(fn_value, "not-jmp");
+                let cont_bb = self
+                    .context
+                    .append_basic_block(fn_value, "normal evaluation");
+                let is_jmp = self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    jmp_block,
+                    self.types.generic_pointer.const_null(),
+                    "is null",
+                );
+                self.builder
+                    .build_conditional_branch(is_jmp, jump_bb, cont_bb);
+                self.builder.position_at_end(jump_bb);
+                self.builder.build_indirect_branch(jmp_block, &[]);
+                self.builder.position_at_end(cont_bb);
+                let ac = self
+                    .builder
+                    .build_extract_value(call_info, 0, "get number of args")
+                    .unwrap();
                 let env_iter = self.get_current_env_name().cloned().collect::<Vec<_>>();
                 let envs = self
                     .builder
@@ -507,7 +534,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             // should add unreachable after this?
             // what should this return?
-            UMPL2Expr::Label(_s) => todo!(),
+            UMPL2Expr::Label(s) => {
+                let link = self.links.get(s).unwrap();
+                let call_info = self.types.call_info.const_named_struct(&[
+                    self.context.i64_type().const_zero().into(),
+                    link.0.into(),
+                ]);
+
+                // we subtract 2 b/c the first 2 params are just needed for evaluation (like captured environment, call_info like number of parameters ...)
+                let args_count = link.1.count_params() - 2;
+                let mut args = iter::repeat(self.types.object.const_zero())
+                    .take(args_count as usize)
+                    .map(|a| a.into())
+                    .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+                args.insert(0, call_info.into());
+                args.insert(0, self.types.generic_pointer.const_null().into());
+                self.builder.build_call(link.1, &args, "jump");
+                // maybe should be signal that we jumped somewhere
+                Ok(Some(self.hempty().into()))
+            }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
             UMPL2Expr::Link(_, _) => todo!(),
@@ -524,7 +569,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             // create new basic block use uncdoital br to new bb
             // store the block address and the current fn_value in some sort of hashmap with the name as the key
-            UMPL2Expr::ComeTo(_) => todo!(),
+            UMPL2Expr::ComeTo(n) => {
+                let block = self.context.append_basic_block(self.fn_value.unwrap(), n);
+                self.links.insert(
+                    n.clone(),
+                    (
+                        unsafe { block.get_address().unwrap() },
+                        self.fn_value.unwrap(),
+                    ),
+                );
+                self.builder.build_unconditional_branch(block);
+                self.builder.position_at_end(block);
+                Ok(Some(self.hempty().into()))
+            }
         }
     }
 
@@ -643,12 +700,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             println!("done");
             None
         } else {
-            println!("without optimized");
+            println!("error occurred");
             self.print_ir();
-            self.fpm.run_on(&main_fn);
-            println!("with optimized");
-            self.print_ir();
-
             unsafe {
                 main_fn.delete();
             }

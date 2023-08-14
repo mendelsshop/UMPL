@@ -136,7 +136,7 @@ impl Analyzer {
             UMPL2Expr::Fanction(fanction) => {
                 self.find_labels(fanction.scope_mut());
             }
-            UMPL2Expr::Let(_, v) => self.find_link(v),
+            UMPL2Expr::Let(_, v) => self.find_label(v),
             UMPL2Expr::ComeTo(_) => todo!(),
         }
     }

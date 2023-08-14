@@ -55,7 +55,8 @@ fn main() {
     fpm.add_bit_tracking_dce_pass();
     fpm.add_merged_load_store_motion_pass();
     fpm.add_ind_var_simplify_pass();
-    fpm.add_jump_threading_pass();
+    // doesn't work with current goto implementation
+    // fpm.add_jump_threading_pass();
 
     fpm.add_scalarizer_pass();
     fpm.add_tail_call_elimination_pass();
@@ -67,7 +68,7 @@ fn main() {
         "
         !(add 1 3 4)<
         let x 10000%1
-   
+        link @x @y
         !(print y^car^cdr)<
         !(print x)<
         ! doesnt work b/c codegen trying to save q in globals so that cons can use it
@@ -75,6 +76,7 @@ fn main() {
         (print q)>
         let cons 
                                 fanction  2 ᚜ 
+                                        @x
                                         let x '0\" 
                                         let y '1' 
                                         fanction  1 ᚜ 
@@ -86,26 +88,27 @@ fn main() {
                                         ᚛
                                 ᚛
 
-                   let k (cons (cons 7 8)> c )>
+                   let k (cons (cons 7 8 9)> c )>
                     (print x)>
                      (print .\n.)<
                      (print ((k &)> |)>)<
+                     @y
                         ",
     )
     .unwrap();
+    let program = analyzer::Analyzer::analyze(&fn_type);
     println!(
         "{}",
-        fn_type
+        program
+            .1
             .iter()
             .map(|s| format!("{s:?}"))
             .collect::<Vec<_>>()
             .join("\n")
     );
-    let program = analyzer::Analyzer::analyze(&fn_type);
     let mut complier = Compiler::new(&context, &module, &builder, &fpm);
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
-            complier.print_ir();
             complier.export_bc("bin/main");
             complier.export_ir("bin/main");
             complier.export_object_and_asm("bin/main");
