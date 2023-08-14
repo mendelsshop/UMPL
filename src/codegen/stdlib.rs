@@ -10,10 +10,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn make_print(&mut self) {
         // maybe make print should turn into make string
 
-        let print_fn_ty: FunctionType<'_> = self
-            .types
-            .object
-            .fn_type(&[self.types.object.into()], false);
+        let print_fn_ty: FunctionType<'_> = self.types.object.fn_type(
+            &[self.types.call_info.into(), self.types.object.into()],
+            false,
+        );
         let print_fn = self.module.add_function("print", print_fn_ty, None);
         self.fn_value = Some(print_fn);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
@@ -27,7 +27,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let ret_block = self.context.append_basic_block(print_fn, "return");
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(entry_block);
-        let args = print_fn.get_first_param().unwrap().into_struct_value();
+        let args = print_fn.get_nth_param(1).unwrap().into_struct_value();
         let args = self.actual_value(args);
         let ty = self.extract_type(args).unwrap().into_int_value();
         self.builder.build_switch(
@@ -90,6 +90,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let string_block = print_type(string_block, Self::extract_string, "%s", "string");
         let symbol_block = print_type(symbol_block, Self::extract_symbol, "%s", "symbol");
         self.builder.position_at_end(cons_block);
+        let call_info = self.types.call_info.const_named_struct(&[
+            self.context.i64_type().const_int(1, false).into(),
+            self.types.generic_pointer.const_null().into(),
+        ]);
         // let val = self.extract_cons( args).unwrap();
         self.builder.build_call(
             print,
@@ -104,16 +108,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("car").unwrap(),
-                &[args.into()],
+                &[call_info.into(), args.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
-        self.builder.build_call(
-            self.module.get_function("print").unwrap(),
-            &[val.into()],
-            "printcar",
-        );
+        self.builder
+            .build_call(print_fn, &[call_info.into(), val.into()], "printcar");
         self.builder.build_call(
             print,
             &[self
@@ -127,16 +128,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("cdr").unwrap(),
-                &[args.into()],
+                &[call_info.into(), args.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
-        self.builder.build_call(
-            self.module.get_function("print").unwrap(),
-            &[val.into()],
-            "printcar",
-        );
+        self.builder
+            .build_call(print_fn, &[call_info.into(), val.into()], "printcar");
         self.builder.build_call(
             print,
             &[self
@@ -150,16 +148,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("cgr").unwrap(),
-                &[args.into()],
+                &[call_info.into(), args.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
-        self.builder.build_call(
-            self.module.get_function("print").unwrap(),
-            &[val.into()],
-            "printcar",
-        );
+        self.builder
+            .build_call(print_fn, &[call_info.into(), val.into()], "printcar");
         self.builder.build_call(
             print,
             &[self
@@ -231,12 +226,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub(super) fn make_accesors(&mut self) {
-        let fn_ty = self.types.primitive_ty;
+        let fn_ty = self.types.object.fn_type(
+            &[self.types.call_info.into(), self.types.object.into()],
+            false,
+        );
         let mut accesor = |idx, name| {
             let func = self.module.add_function(name, fn_ty, None);
             let entry = self.context.append_basic_block(func, name);
             self.builder.position_at_end(entry);
-            let args = func.get_first_param().unwrap().into_struct_value();
+            let args = func.get_nth_param(1).unwrap().into_struct_value();
             self.fn_value = Some(func);
             let args = self.actual_value(args);
             let cons_object = self.extract_cons(args).unwrap().into_struct_value();

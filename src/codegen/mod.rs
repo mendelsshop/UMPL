@@ -50,6 +50,11 @@ pub struct Types<'ctx> {
     pub thunk: FunctionType<'ctx>,
     thunk_ty: StructType<'ctx>,
     primitive_ty: FunctionType<'ctx>,
+    /// {param count, basicbock ptr}
+    /// maintains information about a function calish
+    /// It is a struct that keeps the number of arguments
+    /// and also a pointer to a basic block which the function should jump too (if non null) for (gotos)
+    call_info: StructType<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -86,7 +91,7 @@ pub struct Compiler<'a, 'ctx> {
 /// when updating anything in this enum, remember to update the how object is set in [`Compiler::new`] as it is the only thing that won't automatically reflect changes made here
 pub enum TyprIndex {
     #[default]
-    Unkown = 100,
+    Unknown = 100,
     boolean = 0,
     number = 1,
     string = 2,
@@ -116,7 +121,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let kind = context.opaque_struct_type("object");
         // TODO: make the generic lambda function type not explicitly take an object, and also it should take a number, which signify the amount actual arguments
         // and also it should take a pointer (that if non-null should indirect br to that ptr)
-        let call_info = context.struct_type(&[context.i64_type().into(), context.i8_type().ptr_type(AddressSpace::default()).into()], false);
+        let call_info = context.struct_type(
+            &[
+                context.i64_type().into(),
+                context.i8_type().ptr_type(AddressSpace::default()).into(),
+            ],
+            false,
+        );
         let fn_type = kind.fn_type(&[env_ptr.into(), call_info.into()], true);
         let lambda = context.struct_type(
             &[
@@ -148,6 +159,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ),
             thunk: kind.fn_type(&[env_ptr.into()], false),
             primitive_ty: kind.fn_type(&[call_info.into()], true),
+            call_info,
         };
         let exit = module.add_function(
             "exit",
@@ -248,18 +260,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .take(r#fn.param_count())
                     .map(std::convert::Into::into)
                     .collect();
+                // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
+                arg_types.insert(0, self.types.call_info.into());
                 arg_types.insert(0, env.0.ptr_type(AddressSpace::default()).into());
                 let ret_type = self.types.object;
                 let fn_type = ret_type.fn_type(&arg_types, false);
                 let fn_value = self.module.add_function(&name, fn_type, None);
-                for (name, arg) in fn_value.get_param_iter().skip(1).enumerate() {
+                for (name, arg) in fn_value.get_param_iter().skip(2).enumerate() {
                     arg.set_name(&name.to_string());
                 }
                 let entry = self.context.append_basic_block(fn_value, "entry");
                 self.fn_value = Some(fn_value);
                 self.builder.position_at_end(entry);
                 let env_iter = self.get_current_env_name().cloned().collect::<Vec<_>>();
-                // right now even though we take the first parameter to be the "envoirnment" we don't actully use it, maybee remove that parameter
                 let envs = self
                     .builder
                     .build_load(
@@ -271,7 +284,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.new_env();
                 for i in 0..env.0.count_fields() {
                     let cn = env_iter[i as usize].clone();
-                    // self.module.add_global(type_, address_space, name)
                     let alloca = self
                         .create_entry_block_alloca(self.types.object, &cn)
                         .unwrap();
@@ -282,7 +294,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.builder.build_store(alloca, arg);
                     self.insert_variable(cn.clone(), alloca);
                 }
-                for (i, arg) in fn_value.get_param_iter().skip(1).enumerate() {
+                for (i, arg) in fn_value
+                    .get_param_iter()
+                    .skip(2)
+                    .take(r#fn.param_count())
+                    .enumerate()
+                {
                     let arg_name: RC<str> = i.to_string().into();
                     let alloca = self.create_entry_block_alloca(self.types.object, &arg_name)?;
                     self.builder.build_store(alloca, arg);
@@ -385,7 +402,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::ContiueDoing(_) => todo!(),
             UMPL2Expr::Application(application) => {
                 let op = return_none!(self.compile_expr(&application.args()[0])?);
-
+                let arg_len = application.args().len();
+                let call_info = self.types.call_info.const_named_struct(&[
+                    self.context
+                        .i64_type()
+                        .const_int(arg_len as u64, false)
+                        .into(),
+                    self.types.generic_pointer.const_null().into(),
+                ]);
                 let val = self.actual_value(op.into_struct_value());
                 let primitve_bb = self
                     .context
@@ -406,6 +430,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .iter()
                     .map(|a| (*a).into())
                     .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+                args.insert(0, call_info.into());
                 let fn_ty = self.extract_type(val).unwrap();
                 let is_primitive = self.builder.build_int_compare(
                     inkwell::IntPredicate::EQ,
