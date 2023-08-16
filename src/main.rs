@@ -73,7 +73,7 @@ fn main() {
         !(print x)<
         ! doesnt work b/c codegen trying to save q in globals so that cons can use it
         let q ;(a a v 7 .azc. b a)<
-        continue-doing ᚜  (print 1)> ᚛
+        continue-doing ᚜  (print 1)> stop .a.  ᚛
         (print q)>
         let cons 
                                 fanction  2 ᚜ 

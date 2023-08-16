@@ -13,9 +13,9 @@ use inkwell::{
     types::{BasicType, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
         AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, GlobalValue,
-        PointerValue, StructValue,
+        PointerValue, StructValue, PhiValue,
     },
-    AddressSpace,
+    AddressSpace, basic_block::BasicBlock,
 };
 
 use crate::{
@@ -34,6 +34,19 @@ macro_rules! return_none {
             _ => return Ok(None),
         }
     };
+}
+
+/// needed for when we reach stoppers like stop or skip 
+/// to tell us what type of code to generate ie, br or return
+#[derive(Clone, Copy, Debug)]
+pub enum EvalType<'ctx> {
+    // for a function since it's just build return we dont need to 
+    // keep any state from the function function
+    Function,
+    // for a loop we in case of a stop we need to know which block to branch too
+    // and in case of a skip what was the start of a loop (block)
+    // probably also need to keep track of function it was created in just in case we have the stopper being called from an inner function/thunk
+    Loop{loop_bb: BasicBlock<'ctx>,done_loop_bb: BasicBlock<'ctx>, connection:PhiValue<'ctx> }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -85,6 +98,7 @@ pub struct Compiler<'a, 'ctx> {
     pub(crate) types: Types<'ctx>,
     // not were umpl functions are stored
     functions: Functions<'ctx>,
+    state: Vec<EvalType<'ctx>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -213,6 +227,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             types,
             links: HashMap::new(),
             functions,
+            state: vec![]
         }
     }
 
@@ -334,7 +349,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 self.builder
                     .position_at_end(fn_value.get_last_basic_block().unwrap());
-                if let Some(ret) = self.compile_scope(body)? {
+                self.state.push(EvalType::Function);
+                let compile_scope = self.compile_scope(body);
+                self.state.pop();
+                if let Some(ret) = 
+                compile_scope? {
                     self.builder.build_return(Some(&ret));
                 }
 
@@ -420,7 +439,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Unless(_) => todo!(),
             UMPL2Expr::Stop(s) => {
                 let res = return_none!(self.compile_expr(s)?);
-                self.builder.build_return(Some(&res));
+                match self.state.last().ok_or("a stop is found outside a funcion or loop")? {
+                    EvalType::Function => {
+                        self.builder.build_return(Some(&res));
+                    },
+                    EvalType::Loop { loop_bb: _, done_loop_bb, connection } => {
+                        let cont_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop-continue");
+                        self.builder.build_conditional_branch(self.context.bool_type().const_zero(), cont_bb, *done_loop_bb, );
+                        connection.add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
+                        self.builder.position_at_end(cont_bb);
+                        
+                        
+                    },
+                };
+                
+                
                 Ok(None)
             }
             UMPL2Expr::Skip => todo!(),
@@ -434,7 +467,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .context
                     .append_basic_block(self.fn_value.unwrap(), "done-loop");
                 self.builder.build_unconditional_branch(loop_bb);
-
+                self.builder.position_at_end(done_bb);
+                let phi_return = self.builder.build_phi(self.types.object, "loop ret");
+                self.state.push(EvalType::Loop { loop_bb, done_loop_bb: done_bb, connection: phi_return });
                 self.builder.position_at_end(loop_bb);
                 for expr in scope {
                     match self.compile_expr(expr)? {
@@ -444,13 +479,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         //      Skip
                         //      Stop(UMPL2Expr) // maybe basic value?
                         // }
-                        None => todo!(),
+                        None => {}
                     }
                 }
                 self.builder.build_unconditional_branch(loop_bb);
-                self.builder.position_at_end(done_bb);
-                let phi_return = self.builder.build_phi(self.types.object, "loop ret");
 
+                self.builder.position_at_end(done_bb);
                 Ok(Some(phi_return.as_basic_value()))
             }
             UMPL2Expr::Application(application) => {
