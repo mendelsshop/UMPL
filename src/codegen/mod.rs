@@ -426,7 +426,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Skip => todo!(),
             UMPL2Expr::Until(_) => todo!(),
             UMPL2Expr::GoThrough(_) => todo!(),
-            UMPL2Expr::ContiueDoing(_) => todo!(),
+            UMPL2Expr::ContiueDoing(scope) => {
+                let loop_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "loop");
+                let done_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "done-loop");
+                self.builder.build_unconditional_branch(loop_bb);
+
+                self.builder.position_at_end(loop_bb);
+                for expr in scope {
+                    match self.compile_expr(expr)? {
+                        Some(_) => {}
+                        // we should make return type Result<Result<BasicValue, Stopper>, Error>
+                        // enum Stopper{
+                        //      Skip
+                        //      Stop(UMPL2Expr) // maybe basic value?
+                        // }
+                        None => todo!(),
+                    }
+                }
+                self.builder.build_unconditional_branch(loop_bb);
+                self.builder.position_at_end(done_bb);
+                let phi_return = self.builder.build_phi(self.types.object, "loop ret");
+
+                Ok(Some(phi_return.as_basic_value()))
+            }
             UMPL2Expr::Application(application) => {
                 let op = return_none!(self.compile_expr(&application.args()[0])?);
                 let arg_len = application.args().len();
