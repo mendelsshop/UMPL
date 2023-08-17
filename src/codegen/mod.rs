@@ -4,6 +4,7 @@ use std::{
 };
 
 use inkwell::{
+    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     execution_engine::ExecutionEngine,
@@ -13,9 +14,9 @@ use inkwell::{
     types::{BasicType, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
         AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, GlobalValue,
-        PointerValue, StructValue, PhiValue,
+        PhiValue, PointerValue, StructValue,
     },
-    AddressSpace, basic_block::BasicBlock,
+    AddressSpace,
 };
 
 use crate::{
@@ -36,17 +37,21 @@ macro_rules! return_none {
     };
 }
 
-/// needed for when we reach stoppers like stop or skip 
+/// needed for when we reach stoppers like stop or skip
 /// to tell us what type of code to generate ie, br or return
 #[derive(Clone, Copy, Debug)]
 pub enum EvalType<'ctx> {
-    // for a function since it's just build return we dont need to 
+    // for a function since it's just build return we dont need to
     // keep any state from the function function
     Function,
     // for a loop we in case of a stop we need to know which block to branch too
     // and in case of a skip what was the start of a loop (block)
     // probably also need to keep track of function it was created in just in case we have the stopper being called from an inner function/thunk
-    Loop{loop_bb: BasicBlock<'ctx>,done_loop_bb: BasicBlock<'ctx>, connection:PhiValue<'ctx> }
+    Loop {
+        loop_bb: BasicBlock<'ctx>,
+        done_loop_bb: BasicBlock<'ctx>,
+        connection: PhiValue<'ctx>,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -227,7 +232,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             types,
             links: HashMap::new(),
             functions,
-            state: vec![]
+            state: vec![],
         }
     }
 
@@ -352,8 +357,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.state.push(EvalType::Function);
                 let compile_scope = self.compile_scope(body);
                 self.state.pop();
-                if let Some(ret) = 
-                compile_scope? {
+                if let Some(ret) = compile_scope? {
                     self.builder.build_return(Some(&ret));
                 }
 
@@ -437,26 +441,52 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(Some(phi.as_basic_value()))
             }
             UMPL2Expr::Unless(_) => todo!(),
+            // TODO: keep in mind the fact that the loop might be in outer function
             UMPL2Expr::Stop(s) => {
                 let res = return_none!(self.compile_expr(s)?);
-                match self.state.last().ok_or("a stop is found outside a funcion or loop")? {
+                match self
+                    .state
+                    .last()
+                    .ok_or("a stop is found outside a funcion or loop")?
+                {
                     EvalType::Function => {
                         self.builder.build_return(Some(&res));
-                    },
-                    EvalType::Loop { loop_bb: _, done_loop_bb, connection } => {
-                        let cont_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop-continue");
-                        self.builder.build_conditional_branch(self.context.bool_type().const_zero(), cont_bb, *done_loop_bb, );
-                        connection.add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
+                    }
+                    EvalType::Loop {
+                        loop_bb: _,
+                        done_loop_bb,
+                        connection,
+                    } => {
+                        let cont_bb = self
+                            .context
+                            .append_basic_block(self.fn_value.unwrap(), "loop-continue");
+                        self.builder.build_conditional_branch(
+                            self.context.bool_type().const_zero(),
+                            cont_bb,
+                            *done_loop_bb,
+                        );
+                        connection
+                            .add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
                         self.builder.position_at_end(cont_bb);
-                        
-                        
-                    },
+                    }
                 };
-                
-                
                 Ok(None)
             }
-            UMPL2Expr::Skip => todo!(),
+            UMPL2Expr::Skip => {
+                // find the newesr "state event" that is a loop
+                self.builder.build_unconditional_branch(
+                    *self
+                        .state
+                        .iter()
+                        .rev()
+                        .find_map(|state| match state {
+                            EvalType::Function => None,
+                            EvalType::Loop { loop_bb, .. } => Some(loop_bb),
+                        })
+                        .ok_or("skip found outside loop")?,
+                );
+                Ok(None)
+            }
             UMPL2Expr::Until(_) => todo!(),
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(scope) => {
@@ -469,7 +499,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.build_unconditional_branch(loop_bb);
                 self.builder.position_at_end(done_bb);
                 let phi_return = self.builder.build_phi(self.types.object, "loop ret");
-                self.state.push(EvalType::Loop { loop_bb, done_loop_bb: done_bb, connection: phi_return });
+                self.state.push(EvalType::Loop {
+                    loop_bb,
+                    done_loop_bb: done_bb,
+                    connection: phi_return,
+                });
                 self.builder.position_at_end(loop_bb);
                 for expr in scope {
                     match self.compile_expr(expr)? {
