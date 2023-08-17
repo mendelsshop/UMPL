@@ -487,7 +487,54 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 );
                 Ok(None)
             }
-            UMPL2Expr::Until(_) => todo!(),
+            UMPL2Expr::Until(until_stmt) => {
+                let loop_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "loop");
+                let loop_start_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "loop-start");
+                let done_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "done-loop");
+                self.builder.build_unconditional_branch(loop_start_bb);
+                self.builder.position_at_end(done_bb);
+                let phi_return = self.builder.build_phi(self.types.object, "loop ret");
+                self.state.push(EvalType::Loop {
+                    done_loop_bb: done_bb,
+                    connection: phi_return,
+                    loop_bb: loop_start_bb,
+                });
+
+                self.builder.position_at_end(loop_start_bb);
+
+                let expr = return_none!(self.compile_expr(until_stmt.cond())?);
+                let expr = self.actual_value(expr.into_struct_value());
+                let bool_val = self.extract_bool(expr).unwrap().into_int_value();
+                let object_type = self.extract_type(expr).unwrap().into_int_value();
+                // if its not a bool type
+                let cond = self.builder.build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    object_type,
+                    self.types.ty.const_int(TyprIndex::boolean as u64, false),
+                    "if:cond:boolean?",
+                );
+
+                // conditinal: either not bool or true
+                let cond = self.builder.build_or(bool_val, cond, "if:cond:false?");
+                self.builder
+                    .build_conditional_branch(cond, loop_bb, done_bb);
+                // if we break b/c condition not met the loop return hempty
+                phi_return
+                    .add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
+                self.builder.position_at_end(loop_bb);
+                for expr in until_stmt.scope() {
+                    self.compile_expr(expr)?;
+                }
+                self.builder.build_unconditional_branch(loop_start_bb);
+                self.builder.position_at_end(done_bb);
+                Ok(Some(phi_return.as_basic_value()))
+            }
             UMPL2Expr::GoThrough(_) => todo!(),
             UMPL2Expr::ContiueDoing(scope) => {
                 let loop_bb = self
@@ -506,15 +553,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 });
                 self.builder.position_at_end(loop_bb);
                 for expr in scope {
-                    match self.compile_expr(expr)? {
-                        Some(_) => {}
-                        // we should make return type Result<Result<BasicValue, Stopper>, Error>
-                        // enum Stopper{
-                        //      Skip
-                        //      Stop(UMPL2Expr) // maybe basic value?
-                        // }
-                        None => {}
-                    }
+                    self.compile_expr(expr)?;
                 }
                 self.builder.build_unconditional_branch(loop_bb);
 

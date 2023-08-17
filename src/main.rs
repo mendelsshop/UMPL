@@ -64,37 +64,40 @@ fn main() {
     fpm.initialize();
     // fanction  1* ᚜ (print '0')< ᚛
     // TODO: make these into tests
+    // !(add 1 3 4)<
+    // let x 10000%1
+    // link @x @y
+    // !(print y^car^cdr)<
+    // !(print x)<
+    // ! doesnt work b/c codegen trying to save q in globals so that cons can use it
+    // let q ;(a a v 7 .azc. b a)<
+    // continue-doing ᚜  (print 1)> stop .a.  ᚛
+    // (print q)>
+    // let cons
+    //                         fanction  2 ᚜
+    //                                 @x
+
+    //                                 let x '0\"
+    //                                 let y '1'
+    //                                 fanction  1 ᚜
+    //                                     if '0'
+    //                                         do ᚜x
+    //                                     ᚛
+    //                                         otherwise ᚜y
+    //                                     ᚛
+    //                                 ᚛
+    //                         ᚛
+
+    //            let k (cons (cons 7 8 9)> c )>
+    //             (print x)>
+    //              (print .\n.)<
+    //              (print ((k &)> |)>)<
+    //              @y
     let fn_type = umpl_parse(
         "
-        !(add 1 3 4)<
-        let x 10000%1
-        link @x @y
-        !(print y^car^cdr)<
-        !(print x)<
-        ! doesnt work b/c codegen trying to save q in globals so that cons can use it
-        let q ;(a a v 7 .azc. b a)<
-        continue-doing ᚜  (print 1)> stop .a.  ᚛
-        (print q)>
-        let cons 
-                                fanction  2 ᚜ 
-                                        @x
 
-                                        let x '0\" 
-                                        let y '1' 
-                                        fanction  1 ᚜ 
-                                            if '0' 
-                                                do ᚜x
-                                            ᚛ 
-                                                otherwise ᚜y
-                                            ᚛
-                                        ᚛
-                                ᚛
-
-                   let k (cons (cons 7 8 9)> c )>
-                    (print x)>
-                     (print .\n.)<
-                     (print ((k &)> |)>)<
-                     @y
+        until | then ᚜  (print 1)> stop .a.  ᚛
+      
                         ",
     )
     .unwrap();
