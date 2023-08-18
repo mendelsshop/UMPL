@@ -7,6 +7,10 @@ use super::{Compiler, TyprIndex};
 
 /// provides a standard library and adds the functions to the root envoirment
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    // guideline for stdlib functions:
+    // current must expect to be passed in thunks
+    // before unthunk save the current function in self.fn_value
+
     pub(super) fn make_print(&mut self) {
         // maybe make print should turn into make string
 
@@ -250,9 +254,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         accesor(2, "cgr");
     }
 
+    // create the hempty? function
+    pub fn make_hempty(&mut self) {
+        let fn_ty = self.types.object.fn_type(
+            &[self.types.call_info.into(), self.types.object.into()],
+            false,
+        );
+        let func = self.module.add_function("hempty?", fn_ty, None);
+        let entry = self.context.append_basic_block(func, "hempty?");
+        self.builder.position_at_end(entry);
+        let arg = func.get_nth_param(1).unwrap().into_struct_value();
+        self.fn_value = Some(func);
+        let arg = self.actual_value(arg);
+        let is_hempty = self.is_hempty(arg);
+        self.builder.build_return(Some(&self.boolean(is_hempty)));
+        self.insert_function("hempty?".into(), func);
+    }
+
     pub(super) fn init_stdlib(&mut self) {
         self.make_accesors();
         self.make_add();
         self.make_print();
+        self.make_hempty();
     }
 }

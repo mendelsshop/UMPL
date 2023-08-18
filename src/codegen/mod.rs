@@ -535,7 +535,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(done_bb);
                 Ok(Some(phi_return.as_basic_value()))
             }
-            UMPL2Expr::GoThrough(_) => todo!(),
+            UMPL2Expr::GoThrough(_) => {
+                // iterates with `in order`
+                todo!()
+            }
             UMPL2Expr::ContiueDoing(scope) => {
                 let loop_bb = self
                     .context
@@ -773,6 +776,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             res = Ok(return_none!(self.compile_expr(expr)?));
         }
         res.map(Some)
+    }
+
+    fn make_iter(&self, expr: StructValue<'ctx>) -> StructValue<'ctx> {
+        // keep current tree and a new helper tree (initally empty)
+        // 1. check if tree is empty if jump to 4
+        // 2. if left tree is empty then obtain current from tree and do code for iteration
+        // and set main tree to right goto 1
+        // 3. otherwise save/append (current and right) into helper by creating new tree with left null and current and right from tree and put onto root of helper
+        // put lefttree into main tree and goto 1
+        // 4. if helper empty goto 5
+        // otherwise pop first from helper into main tree goto 1
+        // 5. exit/return hempty
+        // (needs to be slightly adjusted to build up new tree as opposed to doing code per iteration)
+        todo!()
+    }
+
+    fn is_hempty(&self, arg: StructValue<'ctx>) -> inkwell::values::IntValue<'ctx> {
+        let arg_type = self.extract_type(arg).unwrap();
+        let is_hempty = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            arg_type.into_int_value(),
+            self.types.ty.const_int(TyprIndex::hempty as u64, false),
+            "is hempty",
+        );
+        is_hempty
     }
 
     pub fn compile_program(
