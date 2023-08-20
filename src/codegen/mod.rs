@@ -778,7 +778,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         res.map(Some)
     }
 
-    fn make_iter(&self, expr: StructValue<'ctx>) -> StructValue<'ctx> {
+    fn make_iter(&mut self, expr: StructValue<'ctx>, name: RC<str>) -> StructValue<'ctx> {
         // keep current tree and a new helper tree (initally empty)
         // 1. check if tree is empty if jump to 4
         // 2. if left tree is empty then obtain current from tree and do code for iteration
@@ -789,6 +789,95 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // otherwise pop first from helper into main tree goto 1
         // 5. exit/return hempty
         // (needs to be slightly adjusted to build up new tree as opposed to doing code per iteration)
+
+
+        // base logic done but it doesnt account for thunks and the actualt structure of the tree being objects
+
+        // init blocks required
+
+        // block where we check if tree null if so jump to loop swap or if not to loop process
+        let loop_entry_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop-entry");
+        // block where we car down (jump to loop save) untill null car and then jump loop_bb
+        let loop_process_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop-process");
+        // execute loop put cgr into tree and jump to loop entry
+        let loop_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop");
+        // save (null cdr cgr) to helper tree set tree to car jump to loop entry
+        let loop_save_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop_save");
+        // pop of root from helper if both trees null exit otherwise jump to loop entry ()
+        let loop_swap_bb = self.context.append_basic_block(self.fn_value.unwrap(), "loop-swap");
+        let loop_done_bb = self.context.append_basic_block(self.fn_value.unwrap(), "done-loop");
+        
+        // allocate trees
+        let tree = self.create_entry_block_alloca(self.types.cons, "iter-tree").unwrap();
+        let helper = self.create_entry_block_alloca(self.types.cons, "helper").unwrap();
+
+        let init = self.extract_cons(self.actual_value(expr)).unwrap().into_struct_value();
+
+        // initialize trees
+        self.builder.build_store(tree, init);
+        self.builder.build_store(helper, self.types.generic_pointer.const_null());
+
+        self.builder.build_unconditional_branch(loop_entry_bb);
+
+        // loop_entry
+        self.builder.position_at_end(loop_entry_bb);
+        let is_tree_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, tree, self.types.generic_pointer.const_null(), "is tree null");
+        self.builder.build_conditional_branch(is_tree_null, loop_swap_bb, loop_process_bb);
+
+        // loop_process
+        self.builder.position_at_end(loop_process_bb);
+        // this logic is wrong b/c were already know thst the tree is non null -> the branch will also be non null
+        // what we really need to check for is if the branch (car) is hempty (maybe also same problem for loop_entry)
+        let car = self.builder.build_struct_gep(self.types.cons, tree, 0, "load car").unwrap();
+        let is_car_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, car, self.types.generic_pointer.const_null(), "is car null");
+        self.builder.build_conditional_branch(is_car_null, loop_bb, loop_save_bb);
+
+        // loop
+        self.builder.position_at_end(loop_bb);
+
+        let val = self.builder.build_struct_gep(self.types.cons, tree, 1, &name).unwrap();
+
+        self.insert_variable(name, val);
+        // code goes here
+        // delete the variable
+        // put cgr of tree as tree
+        let tree_load = self.builder.build_load(self.types.object, tree, "load tree").into_struct_value();
+        let cgr = self.builder.build_extract_value(tree_load, 2, "cgr load").unwrap();
+        self.builder.build_store(tree, cgr);
+        self.builder.build_unconditional_branch(loop_entry_bb);
+
+        // loop_save
+        self.builder.position_at_end(loop_save_bb);
+        let tree_load = self.builder.build_load(self.types.object, tree, "load tree").into_struct_value();
+        let this = self.builder.build_extract_value(tree_load, 1, "cdr").unwrap();
+        let cgr = self.builder.build_extract_value(tree_load, 2, "cgr").unwrap();
+        let save = self.types.cons.const_zero();
+        let save = self.builder.build_insert_value(save, this, 1, "store this").unwrap();
+        let save = self.builder.build_insert_value(save, cgr, 2, "store cgr").unwrap().into_struct_value();
+
+        let helper_load = self.builder.build_load(self.types.cons, helper, "load helper").into_struct_value();
+
+        let new_helper = self.const_cons(save, helper_load, self.types.cons.const_zero());
+        self.builder.build_store(helper, new_helper);
+
+        let car = self.builder.build_extract_value(tree_load, 0, "car").unwrap();
+        self.builder.build_store(tree, car);
+        self.builder.build_unconditional_branch(loop_entry_bb);
+
+        // loop_swap
+        self.builder.position_at_end(loop_swap_bb);
+        let helper_load = self.builder.build_load(self.types.cons, helper, "load helper").into_struct_value();
+        let current = self.builder.build_extract_value(helper_load, 0, "current save").unwrap();
+        let rest = self.builder.build_extract_value(helper_load, 1, "rest").unwrap();
+        self.builder.build_store(tree, current);
+        self.builder.build_store(helper, rest);
+
+        let is_tree_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, tree, self.types.generic_pointer.const_null(), "is tree null");
+        let is_helper_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, helper, self.types.generic_pointer.const_null(), "is helper null");
+        let are_both_null = self.builder.build_and(is_helper_null, is_tree_null, "both is null");
+        self.builder.build_conditional_branch(are_both_null, loop_done_bb, loop_entry_bb);
+    
+
         todo!()
     }
 
