@@ -243,6 +243,10 @@ impl GoThrough {
     pub const fn iter(&self) -> &UMPL2Expr {
         &self.iter
     }
+
+    pub fn ident(&self) -> &str {
+        self.ident.as_ref()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
