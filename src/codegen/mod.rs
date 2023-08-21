@@ -792,7 +792,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Result<PhiValue<'ctx>, String> {
         let helper_struct = self
             .context
-            .struct_type(&[self.types.object.into(), self.types.object.into()], false);
+            .struct_type(&[self.types.cons.into(), self.types.generic_pointer.into()], false);
         // keep current tree and a new helper tree (initally empty)
         // 1. check if tree is empty if jump to 4
         // 2. if left tree is empty then obtain current from tree and do code for iteration
@@ -907,7 +907,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // put cgr of tree as tree
         let tree_load = self
             .builder
-            .build_load(self.types.object, tree, "load tree")
+            .build_load(self.types.cons, tree, "load tree")
             .into_struct_value();
         let cgr = self
             .builder
@@ -920,7 +920,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(loop_save_bb);
         let tree_load = self
             .builder
-            .build_load(self.types.object, tree, "load tree")
+            .build_load(self.types.cons, tree, "load tree")
             .into_struct_value();
         let this = self
             .builder
@@ -946,7 +946,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_load(helper_struct, helper, "load helper")
             .into_struct_value();
 
-        let new_helper = self.const_cons(save, helper_load, self.types.cons.const_zero());
+        let new_helper = helper_struct.const_zero();
+        let new_helper = self.builder.build_insert_value(new_helper, save, 0, "save save").unwrap();
+        let new_helper = self.builder.build_insert_value(new_helper, helper, 1, "save prev helper").unwrap();
         self.builder.build_store(helper, new_helper);
 
         let car = self
