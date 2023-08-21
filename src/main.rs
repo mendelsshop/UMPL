@@ -9,13 +9,14 @@
 
 use inkwell::{context::Context, passes::PassManager};
 
-use crate::{codegen::Compiler, lexer::umpl_parse};
+use crate::{ast::lexer::umpl_parse, codegen::Compiler};
 
 pub mod analyzer;
 pub mod ast;
 mod codegen;
+pub mod cst;
 
-pub mod lexer;
+// pub mod lexer;
 pub mod pc;
 #[cfg(feature = "multi-threaded")]
 pub mod interior_mut {

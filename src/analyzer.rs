@@ -29,7 +29,6 @@ impl Analyzer {
             | UMPL2Expr::FnParam(_)
             | UMPL2Expr::Hempty
             // even thougth scope contains more expressions it should not make it into the ast so we just ignore it (arguabbly we should put an unreachable)
-            | UMPL2Expr::Scope(_)
             | UMPL2Expr::Skip
             | UMPL2Expr::Label(_)
             | UMPL2Expr::ComeTo(_) => {}
@@ -38,36 +37,16 @@ impl Analyzer {
                 self.link_set.insert(label.clone(), jump_from.clone());
                 *val = UMPL2Expr::Hempty;
             }
+            // UMPL2Expr::Tree(_) => unreachable!(),
             UMPL2Expr::Application(aplication) => self.find_links(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_link(s);
             }
-            UMPL2Expr::If(if_stmt) => {
-                self.find_links(if_stmt.cons_mut());
-                self.find_links(if_stmt.alt_mut());
-                self.find_link(if_stmt.cond_mut());
-            }
-            UMPL2Expr::Unless(unless) => {
-                self.find_links(unless.cons_mut());
-                self.find_links(unless.alt_mut());
-                self.find_link(unless.cond_mut());
-            }
-
-            UMPL2Expr::Until(until) => {
-                self.find_links(until.scope_mut());
-                self.find_link(until.cond_mut());
-            }
-            UMPL2Expr::GoThrough(go_through) => {
-                self.find_links(go_through.scope_mut());
-                self.find_link(go_through.iter_mut());
-            }
-            UMPL2Expr::ContiueDoing(scope) => {
-                self.find_links(scope);
-            }
-            UMPL2Expr::Fanction(fanction) => {
-                self.find_links(fanction.scope_mut());
-            }
-            UMPL2Expr::Let(_, v) | UMPL2Expr::Quoted(v) => self.find_link(v),
+            // UMPL2Expr::Fanction(fanction) => {
+            //     self.find_links(fanction.scope_mut());
+            // }
+            // UMPL2Expr::Let(_, v)  => self.find_link(v),
+            UMPL2Expr::Scope(scope) => self.find_links(scope),
 
         }
     }
@@ -87,7 +66,6 @@ impl Analyzer {
             | UMPL2Expr::FnParam(_)
             | UMPL2Expr::Hempty
             // even thougth scope contains more expressions it should not make it into the ast so we just ignore it (arguabbly we should put an unreachable)
-            | UMPL2Expr::Scope(_)
             | UMPL2Expr::Skip  => {}
             | UMPL2Expr::Label(label) => {
                 if let Some(link) = self.link_set.iter().find_map(|link|
@@ -106,38 +84,17 @@ impl Analyzer {
             UMPL2Expr::Link(_, _) => {
               unreachable!()
             }
-            UMPL2Expr::Quoted(v) => self.find_label(v),
+            // UMPL2Expr::Quoted(v) => self.find_label(v),
             UMPL2Expr::Application(aplication) => self.find_labels(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_label(s);
             }
-            UMPL2Expr::If(if_stmt) => {
-                self.find_labels(if_stmt.cons_mut());
-                self.find_labels(if_stmt.alt_mut());
-                self.find_label(if_stmt.cond_mut());
-            }
-            UMPL2Expr::Unless(unless) => {
-                self.find_labels(unless.cons_mut());
-                self.find_labels(unless.alt_mut());
-                self.find_label(unless.cond_mut());
-            }
-
-            UMPL2Expr::Until(until) => {
-                self.find_labels(until.scope_mut());
-                self.find_label(until.cond_mut());
-            }
-            UMPL2Expr::GoThrough(go_through) => {
-                self.find_labels(go_through.scope_mut());
-                self.find_label(go_through.iter_mut());
-            }
-            UMPL2Expr::ContiueDoing(scope) => {
-                self.find_labels(scope);
-            }
-            UMPL2Expr::Fanction(fanction) => {
-                self.find_labels(fanction.scope_mut());
-            }
-            UMPL2Expr::Let(_, v) => self.find_label(v),
+            // UMPL2Expr::Fanction(fanction) => {
+            //     self.find_labels(fanction.scope_mut());
+            // }
+            // UMPL2Expr::Let(_, v) => self.find_label(v),
             UMPL2Expr::ComeTo(_) => todo!(),
+            UMPL2Expr::Scope(scope) => self.find_labels(scope),
         }
     }
 
@@ -150,7 +107,7 @@ impl Analyzer {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{analyzer::Analyzer, lexer::umpl_parse};
+    use crate::{analyzer::Analyzer, ast::lexer::umpl_parse};
 
     #[test]
     fn find_links() {

@@ -1,133 +1,101 @@
-use std::fmt::Display;
-
-use inkwell::values::StructValue;
-
-use crate::{
-    codegen::Compiler,
-    interior_mut::{MUTEX, RC},
-};
+use std::{fmt::Display, str::FromStr};
+pub mod lexer;
+use crate::interior_mut::{MUTEX, RC};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tree {
     pub inner: RC<MUTEX<(UMPL2Expr, UMPL2Expr, UMPL2Expr)>>,
 }
 
-// TODO: flatten trait for quotation
-pub trait FlattenAst<'a, 'ctx> {
-    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx>;
-}
-
 #[derive(Clone, Default, PartialEq, Debug)]
 pub enum UMPL2Expr {
+    /// literals
     Bool(Boolean),
     Number(f64),
     String(RC<str>),
-    Scope(Vec<UMPL2Expr>),
-    Ident(RC<str>),
-    // second 2 are scopes
-    If(Box<If>),
-    // second 2 are scopes
-    Unless(Box<Unless>),
-    Stop(Box<UMPL2Expr>),
-    Skip,
-    // last one is scope
-    Until(Box<Until>),
-    // last one is scope
-    GoThrough(Box<GoThrough>),
-    // last one is scope
-    ContiueDoing(Vec<UMPL2Expr>),
-    // last one is scope
-    Fanction(Fanction),
-    Application(Application),
-    Quoted(Box<UMPL2Expr>),
-    Label(RC<str>),
-    FnParam(usize),
     #[default]
     Hempty,
-    Link(RC<str>, Vec<RC<str>>),
-    Let(RC<str>, Box<UMPL2Expr>),
+    Ident(RC<str>),
+    Label(RC<str>),
+    FnParam(usize),
+    FnKW(FnKeyword),
+
+    Scope(Vec<UMPL2Expr>),
+    Comment(RC<str>),
+    WhiteSpace(RC<str>),
+    /// control flow
+    Skip,
+    Stop(Box<UMPL2Expr>),
     ComeTo(RC<str>),
-}
 
-impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
-    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        match self {
-            Self::Bool(b) => compiler.const_boolean(b),
-            Self::Number(n) => compiler.const_number(n),
-            Self::String(c) => compiler.const_string(&c),
-            Self::Scope(_) => unreachable!(),
-            Self::Ident(i) => compiler.const_symbol(&i),
-            Self::If(_) => todo!(),
-            Self::Unless(_) => todo!(),
-            Self::Stop(_) => todo!(),
-            Self::Skip => todo!(),
-            Self::Until(_) => todo!(),
-            Self::GoThrough(_) => todo!(),
-            Self::ContiueDoing(_) => todo!(),
-            Self::Fanction(_) => todo!(),
-            Self::Application(a) => a.flatten(compiler),
-            Self::Quoted(_) => todo!(),
-            Self::Label(_) => todo!(),
-            Self::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
-            Self::Hempty => compiler.hempty(),
-            Self::Link(_, _) => todo!(),
-            Self::Let(_, _) => todo!(),
-            Self::ComeTo(_) => todo!(),
-        }
-    }
-}
+    Application(Application),
 
-impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
-    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        fn fun_name<'ctx>(
-            list: Vec<UMPL2Expr>,
-            compiler: &mut Compiler<'_, 'ctx>,
-            n: usize,
-        ) -> (StructValue<'ctx>, Vec<UMPL2Expr>) {
-            if n == 0 {
-                (compiler.hempty(), list)
-            } else {
-                let left_size = (n - 1) / 2;
-                let (left_tree, mut non_left_tree) = fun_name(list, compiler, left_size);
-
-                let this = non_left_tree.remove(0).flatten(compiler);
-
-                let right_size = n - (left_size + 1);
-                let (right_tree, remaining) = fun_name(non_left_tree, compiler, right_size);
-                (compiler.const_cons(left_tree, this, right_tree), remaining)
-            }
-        }
-        let n = self.len();
-        let partial_tree = fun_name(self, compiler, n);
-
-        partial_tree.0
-    }
+    /// technically fall under application but in the cst they get their own type
+    Fanction(Fanction),
+    If(Box<If>),
+    Unless(Box<Unless>),
+    Until(Box<Until>),
+    GoThrough(Box<GoThrough>),
+    ContiueDoing(Vec<UMPL2Expr>),
+    Quoted(Box<UMPL2Expr>),
+    Let(RC<str>, Box<UMPL2Expr>),
+    Link(RC<str>, Vec<RC<str>>),
 }
 
 impl core::fmt::Display for UMPL2Expr {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Bool(f0) => write!(f, "{f0}"),
-            Self::Number(f0) => write!(f, "{f0}"),
-            Self::String(f0) => write!(f, "{f0}"),
-            Self::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
-            Self::Ident(f0) => write!(f, "{f0}"),
-            Self::If(f0) => f.debug_tuple("If").field(&f0).finish(),
-            Self::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
-            Self::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
-            Self::Skip => write!(f, "skip"),
-            Self::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
-            Self::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
-            Self::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
-            Self::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
-            Self::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
-            Self::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
-            Self::Label(f0) => write!(f, "@{f0}"),
-            Self::FnParam(f0) => write!(f, "'{f0}"),
-            Self::Hempty => write!(f, "hempty"),
-            Self::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            Self::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
-            Self::ComeTo(f0) => write!(f, "Come to {f0}"),
+            UMPL2Expr::Bool(f0) => write!(f, "{}", f0),
+            UMPL2Expr::Number(f0) => write!(f, "{}", f0),
+            UMPL2Expr::String(f0) => write!(f, "{}", f0),
+            UMPL2Expr::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
+            UMPL2Expr::Ident(f0) => write!(f, "{}", f0),
+            UMPL2Expr::If(f0) => f.debug_tuple("If").field(&f0).finish(),
+            UMPL2Expr::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
+            UMPL2Expr::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
+            UMPL2Expr::Skip => write!(f, "skip"),
+            UMPL2Expr::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
+            UMPL2Expr::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
+            UMPL2Expr::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
+            UMPL2Expr::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
+            UMPL2Expr::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
+            UMPL2Expr::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
+            UMPL2Expr::Label(f0) => write!(f, "@{}", f0),
+            UMPL2Expr::FnParam(f0) => write!(f, "'{}", f0),
+            UMPL2Expr::Hempty => write!(f, "hempty"),
+            UMPL2Expr::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
+            // UMPL2Expr::Tree(f0) => f.debug_tuple("Tree").field(&f0).finish(),
+            UMPL2Expr::FnKW(f0) => f.debug_tuple("FnKW").field(&f0).finish(),
+            UMPL2Expr::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
+            UMPL2Expr::ComeTo(f0) => write!(f, "Come to {}", f0),
+            UMPL2Expr::Comment(_) => todo!(),
+            UMPL2Expr::WhiteSpace(_) => todo!(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FnKeyword {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Print,
+}
+
+impl FromStr for FnKeyword {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "add" => Ok(Self::Add),
+            "div" => Ok(Self::Div),
+            "sub" => Ok(Self::Sub),
+            "mul" => Ok(Self::Mul),
+            "mod" => Ok(Self::Mod),
+            "print" => Ok(Self::Print),
+            other => Err(format!("not a function keyword {other}")),
         }
     }
 }
@@ -188,15 +156,6 @@ pub struct Application {
     print: PrintType,
 }
 
-impl<'ctx, 'a> FlattenAst<'a, 'ctx> for Application {
-    fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        let left_tree = self.args.flatten(compiler);
-        let this = compiler.const_symbol(&format!("{:?}", self.print).into());
-        let right_tree = compiler.hempty();
-        compiler.const_cons(left_tree, this, right_tree)
-    }
-}
-
 impl Application {
     #[must_use]
     pub fn new(args: Vec<UMPL2Expr>, print: PrintType) -> Self {
@@ -242,10 +201,6 @@ impl GoThrough {
     #[must_use]
     pub const fn iter(&self) -> &UMPL2Expr {
         &self.iter
-    }
-
-    pub fn ident(&self) -> &str {
-        self.ident.as_ref()
     }
 }
 
@@ -374,9 +329,9 @@ pub enum Boolean {
 impl Display for Boolean {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::False => write!(f, "false"),
-            Self::True => write!(f, "true"),
-            Self::Maybee => write!(f, "maybe"),
+            Boolean::False => write!(f, "false"),
+            Boolean::True => write!(f, "true"),
+            Boolean::Maybee => write!(f, "maybe"),
         }
     }
 }
@@ -390,7 +345,17 @@ pub enum Varidiac {
     AtLeast0,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl Varidiac {
+    pub const fn from_char(c: char) -> Option<Self> {
+        match c {
+            '*' => Some(Self::AtLeast0),
+            '+' => Some(Self::AtLeast1),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PrintType {
     None,
     Print,

@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-use std::iter;
+use std::{iter, str::FromStr};
 
 use parse_int::parse;
 
 use crate::{
-    ast::{
-        Application, Boolean, Fanction, GoThrough, If, PrintType, UMPL2Expr, Unless, Until,
-        Varidiac,
+    cst::{
+        Application, Boolean, Fanction, FnKeyword, GoThrough, If, PrintType, UMPL2Expr, Unless,
+        Until, Varidiac,
     },
     pc::{
         alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
@@ -15,16 +15,6 @@ use crate::{
         Parser,
     },
 };
-
-impl Varidiac {
-    const fn from_char(c: char) -> Option<Self> {
-        match c {
-            '*' => Some(Self::AtLeast0),
-            '+' => Some(Self::AtLeast1),
-            _ => None,
-        }
-    }
-}
 
 fn ws_or_comment() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
     map(
@@ -54,48 +44,23 @@ fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
 
 fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
     // needs to be its own new closure so that we don't have infinite recursion while creating the parser (so we add a level of indirection)
-    map(
-        chain(
-            Box::new(|input| {
-                keep_right(
-                    ws_or_comment(),
-                    choice(
-                        [
-                            literal(),
-                            stmt(),
-                            terminal_umpl(),
-                            ident_umpl(),
-                            application(),
-                            special_start(),
-                        ]
-                        .to_vec(),
-                    ),
-                )(input)
-            }),
-            many(keep_right(
-                char('^'),
-                choice(vec![string("car"), string("cdr"), string("cgr")]),
-            )),
-        ),
-        |r| {
-            if let Some(mut accesors) = r.1 {
-                let first_acces = accesors.next().unwrap();
-                let new_acces = |accesor: String, expr| {
-                    UMPL2Expr::Application(Application::new(
-                        vec![UMPL2Expr::Ident(accesor.into()), expr],
-                        PrintType::None,
-                    ))
-                };
-                let mut base = new_acces(first_acces, r.0);
-                for accesor in accesors {
-                    base = new_acces(accesor, base);
-                }
-                base
-            } else {
-                r.0
-            }
-        },
-    )
+    Box::new(|input| {
+        keep_right(
+            ws_or_comment(),
+            choice(
+                [
+                    literal(),
+                    stmt(),
+                    stlib_kewyword(),
+                    terminal_umpl(),
+                    ident_umpl(),
+                    application(),
+                    special_start(),
+                ]
+                .to_vec(),
+            ),
+        )(input)
+    })
 }
 
 fn application() -> Box<Parser<UMPL2Expr>> {
@@ -394,8 +359,7 @@ fn ident_umpl() -> Box<Parser<UMPL2Expr>> {
 
 const fn special_char() -> &'static [char] {
     &[
-        '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t', '<',
-        '>', '^',
+        '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t', '<', '>',
     ]
 }
 
@@ -457,12 +421,18 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
         opt(any_of(['\'', '"'])),
     )
 }
+fn stlib_kewyword() -> Box<Parser<UMPL2Expr>> {
+    map(
+        choice(vec![string("add"), string("sub"), string("print")]),
+        |kw| UMPL2Expr::FnKW(FnKeyword::from_str(&kw).unwrap()),
+    )
+}
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ast::{Application, Fanction, GoThrough, If, Unless, Until},
+    use crate::cst::{
         lexer::{parse_umpl, Boolean, PrintType, UMPL2Expr, Varidiac},
+        {Application, Fanction, GoThrough, If, Unless, Until},
     };
 
     #[test]
@@ -554,7 +524,7 @@ mod tests {
 
     #[test]
     fn umpl_fn() {
-        let test_result = parse_umpl("fanction 🚗  1 * ᚜ l ᚛");
+        let test_result = parse_umpl("fanction 🚗  1 * ᚜ ^l ᚛");
         assert!(test_result.is_ok());
         assert_eq!(
             test_result.unwrap(),
@@ -562,7 +532,7 @@ mod tests {
                 Some('🚗'),
                 1,
                 Some(Varidiac::AtLeast0),
-                vec![UMPL2Expr::Ident("l".into())]
+                vec![UMPL2Expr::Ident("^l".into())]
             ))
         );
     }
@@ -616,5 +586,22 @@ mod tests {
     fn umpl_with_comment() {
         let test_result = parse_umpl("!t\n (1!aaa\n 22 6 ]>");
         assert!(test_result.is_ok());
+    }
+
+    #[test]
+    fn umpl_nested_application() {
+        let test_result = parse_umpl("fanction 🚗  1 * ᚜ {mul 5 0x10 ]> ᚛");
+        assert!(test_result.is_ok());
+        assert_eq!(
+            test_result.unwrap(),
+            UMPL2Expr::Application(Application::new(
+                vec![
+                    UMPL2Expr::Ident("mul".into()),
+                    UMPL2Expr::Number(5.0),
+                    UMPL2Expr::Number(16.0)
+                ],
+                PrintType::Print
+            ))
+        );
     }
 }
