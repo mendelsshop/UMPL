@@ -883,7 +883,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // loop_done
         self.builder.position_at_end(loop_done_bb);
         let phi = self.builder.build_phi(self.types.object, "loop value");
-        phi.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
+
 
         // loop
         self.state.push(EvalType::Loop {
@@ -990,7 +990,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_and(is_helper_null, is_tree_null, "both is null");
         self.builder
             .build_conditional_branch(are_both_null, loop_done_bb, loop_entry_bb);
-
+        phi.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.state.pop();
         self.builder.position_at_end(loop_done_bb);
         Ok(phi)
