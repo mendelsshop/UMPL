@@ -1,8 +1,0 @@
-loop ⧼ ! create a loop with the loop keyword followed by ⧼ ⧽ which is were the code goes
-  create input-s with ((input `continue?`))< ! ask for input with the prompt `continue?`
-  if {((eq input-s `y`))<} ⧼ ! if the input is `y` then do the following
-    continue ! continue the loop
-  ⧽ else ⧼
-    break ! if input is not `y` then break the loop
-  ⧽
-⧽
