@@ -36,19 +36,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     buider_object!(number, FloatValue<'ctx>);
     buider_object!(string, PointerValue<'ctx>);
     buider_object!(primitive, PointerValue<'ctx>);
-    //     pub fn cons(&self,value:PointerValue<'ctx>) -> StructValue<'ctx>{
-    //   let ty = TyprIndex::cons;
-    //   value.print_to_stderr();
-    //   println!("{ty:?}");
-    //   let obj = self.types.object.const_zero();
-    //   let cons = self.builder.build_extract_value(obj,ty as u32 +1, "cons.field").unwrap().into_pointer_value();
-    //   self.builder.build_store(cons, value);
-    // //   let obj = self.builder.build_insert_value(obj,value,ty as u32+1, &format!("value $value",)).unwrap();
-    //   let obj = self.builder.build_insert_value(obj,self.types.ty.const_int(ty as u64,false),0,"typesss").unwrap();
-
-    //   obj.into_struct_value()
-    // // obj
-    // }
     buider_object!(cons, PointerValue<'ctx>);
     buider_object!(lambda, StructValue<'ctx>);
     buider_object!(thunk, StructValue<'ctx>);

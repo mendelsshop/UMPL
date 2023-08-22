@@ -790,9 +790,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         name: RC<str>,
         iter_scope: &[UMPL2Expr],
     ) -> Result<PhiValue<'ctx>, String> {
-        let helper_struct = self
-            .context
-            .struct_type(&[self.types.cons.into(), self.types.generic_pointer.into()], false);
+        let helper_struct = self.context.struct_type(
+            &[self.types.cons.into(), self.types.generic_pointer.into()],
+            false,
+        );
+
+        // TODO: wherever there is null checks to stop/continue iteratoration we also need to check for hempty
         // keep current tree and a new helper tree (initally empty)
         // 1. check if tree is empty if jump to 4
         // 2. if left tree is empty then obtain current from tree and do code for iteration
@@ -884,7 +887,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(loop_done_bb);
         let phi = self.builder.build_phi(self.types.object, "loop value");
 
-
         // loop
         self.state.push(EvalType::Loop {
             loop_bb: loop_entry_bb,
@@ -912,7 +914,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let cgr = self
             .builder
             .build_extract_value(tree_load, 2, "cgr load")
-            .unwrap();
+            .unwrap()
+            .into_struct_value();
+        let cgr = self.actual_value(cgr);
+        let cgr = self.extract_cons(cgr)?;
         self.builder.build_store(tree, cgr);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
@@ -941,20 +946,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
             .into_struct_value();
 
-        let helper_load = self
-            .builder
-            .build_load(helper_struct, helper, "load helper")
-            .into_struct_value();
-
         let new_helper = helper_struct.const_zero();
-        let new_helper = self.builder.build_insert_value(new_helper, save, 0, "save save").unwrap();
-        let new_helper = self.builder.build_insert_value(new_helper, helper, 1, "save prev helper").unwrap();
+        let new_helper = self
+            .builder
+            .build_insert_value(new_helper, save, 0, "save save")
+            .unwrap();
+        let new_helper = self
+            .builder
+            .build_insert_value(new_helper, helper, 1, "save prev helper")
+            .unwrap();
         self.builder.build_store(helper, new_helper);
 
         let car = self
             .builder
             .build_extract_value(tree_load, 0, "car")
-            .unwrap();
+            .unwrap()
+            .into_struct_value();
+        let car = self.actual_value(car);
+        let car = self.extract_cons(car)?;
         self.builder.build_store(tree, car);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
@@ -1036,7 +1045,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.pop_env();
-        // self.print_ir();
+
         let verify = main_fn.verify(true);
 
         if verify {

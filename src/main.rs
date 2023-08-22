@@ -96,7 +96,7 @@ fn main() {
     let fn_type = umpl_parse(
         "
         let z ;(a b c d e)<
-        go-through y of z  ᚜  (print 1)> stop .a.  ᚛
+        go-through y of z  ᚜  (print y)>   ᚛
 
         !until | then ᚜  (print 1)> stop .a.  ᚛
       
