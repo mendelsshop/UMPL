@@ -26,7 +26,7 @@ macro_rules! make_extract {
             self.builder
                 .build_conditional_branch(condition, ret_block, error_block);
             self.builder.position_at_end(error_block);
-            self.print_type(val, current_fn);
+            // self.print_type(val, current_fn);
             self.exit(&format!(" does not work as {}\n", $name), 1);
 
             self.builder.position_at_end(ret_block);

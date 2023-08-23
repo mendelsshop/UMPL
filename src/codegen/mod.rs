@@ -819,10 +819,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let loop_process_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop-process");
-        // execute loop put cgr into tree and jump to loop entry
+        // execute loop 
         let loop_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop");
+        // put cgr into tree and jump to loop entry if non hempty
+        let loop_next_bb = self
+        .context
+        .append_basic_block(self.fn_value.unwrap(), "loop-next");
         // save (null cdr cgr) to helper tree set tree to car jump to loop entry
         let loop_save_bb = self
             .context
@@ -857,12 +861,22 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // loop_entry
         self.builder.position_at_end(loop_entry_bb);
-        let is_tree_null = self.builder.build_int_compare(
+    //     let tree_load = self
+    //     .builder
+    //     .build_load(self.types.cons, tree, "load tree")
+    //     .into_struct_value();
+    // // let is_tree_hempty = self.is_hempty(tree_load);
+
+    let is_tree_null = self
+        .builder
+        .build_int_compare(
             inkwell::IntPredicate::EQ,
             tree,
             self.types.generic_pointer.const_null(),
             "is tree null",
-        );
+        )
+        // .const_or(is_tree_hempty)
+        ;
         self.builder
             .build_conditional_branch(is_tree_null, loop_swap_bb, loop_process_bb);
 
@@ -872,16 +886,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // what we really need to check for is if the branch (car) is hempty (maybe also same problem for loop_entry)
         let car = self
             .builder
-            .build_struct_gep(self.types.cons, tree, 0, "load car")
+            .build_struct_gep(self.types.cons, tree, 0, "gep car")
             .unwrap();
-        let is_car_null = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            car,
-            self.types.generic_pointer.const_null(),
-            "is car null",
-        );
+                let car_load = self
+        .builder
+        .build_load(self.types.object, car, "load car")
+        .into_struct_value();
+        let is_car_hempty = self.is_hempty(car_load);
+
         self.builder
-            .build_conditional_branch(is_car_null, loop_bb, loop_save_bb);
+            .build_conditional_branch(is_car_hempty, loop_bb, loop_save_bb);
 
         // loop_done
         self.builder.position_at_end(loop_done_bb);
@@ -909,7 +923,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // put cgr of tree as tree
         let tree_load = self
             .builder
-            .build_load(self.types.cons, tree, "load tree")
+            .build_load(self.types.cons, tree, "load tree cgr")
             .into_struct_value();
         let cgr = self
             .builder
@@ -917,7 +931,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
             .into_struct_value();
         let cgr = self.actual_value(cgr);
+        let is_cgr_hempty = self.is_hempty(cgr);
+        self.builder.build_conditional_branch(is_cgr_hempty, loop_swap_bb, loop_next_bb);
+
+        self.builder.position_at_end(loop_next_bb);
         let cgr = self.extract_cons(cgr)?;
+    
         self.builder.build_store(tree, cgr);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
@@ -984,18 +1003,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_store(tree, current);
         self.builder.build_store(helper, rest);
 
-        let is_tree_null = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            tree,
-            self.types.generic_pointer.const_null(),
-            "is tree null",
-        );
-        let is_helper_null = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            helper,
-            self.types.generic_pointer.const_null(),
-            "is helper null",
-        );
+        // let tree_load = self
+        //     .builder
+        //     .build_load(self.types.cons, tree, "load tree")
+        //     .into_struct_value();
+        // let is_tree_hempty = self.is_hempty(tree_load);
+
+        let is_tree_null = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                tree,
+                self.types.generic_pointer.const_null(),
+                "is tree null",
+            )
+            // .const_or(is_tree_hempty)
+            ;
+        // let helper_load = self
+        //     .builder
+        //     .build_load(self.types.cons, helper, "load helper")
+        //     .into_struct_value();
+        // let is_helper_hempty = self.is_hempty(helper_load);
+        let is_helper_null = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                helper,
+                self.types.generic_pointer.const_null(),
+                "is helper null",
+            )
+           
+            // .const_or(is_helper_hempty)
+            ;
         let are_both_null = self
             .builder
             .build_and(is_helper_null, is_tree_null, "both is null");
