@@ -819,14 +819,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let loop_process_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop-process");
-        // execute loop 
+        // execute loop
         let loop_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop");
         // put cgr into tree and jump to loop entry if non hempty
         let loop_next_bb = self
-        .context
-        .append_basic_block(self.fn_value.unwrap(), "loop-next");
+            .context
+            .append_basic_block(self.fn_value.unwrap(), "loop-next");
         // save (null cdr cgr) to helper tree set tree to car jump to loop entry
         let loop_save_bb = self
             .context
@@ -861,13 +861,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // loop_entry
         self.builder.position_at_end(loop_entry_bb);
-    //     let tree_load = self
-    //     .builder
-    //     .build_load(self.types.cons, tree, "load tree")
-    //     .into_struct_value();
-    // // let is_tree_hempty = self.is_hempty(tree_load);
+        //     let tree_load = self
+        //     .builder
+        //     .build_load(self.types.cons, tree, "load tree")
+        //     .into_struct_value();
+        // // let is_tree_hempty = self.is_hempty(tree_load);
 
-    let is_tree_null = self
+        let is_tree_null = self
         .builder
         .build_int_compare(
             inkwell::IntPredicate::EQ,
@@ -888,10 +888,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_struct_gep(self.types.cons, tree, 0, "gep car")
             .unwrap();
-                let car_load = self
-        .builder
-        .build_load(self.types.object, car, "load car")
-        .into_struct_value();
+        let car_load = self
+            .builder
+            .build_load(self.types.object, car, "load car")
+            .into_struct_value();
         let is_car_hempty = self.is_hempty(car_load);
 
         self.builder
@@ -932,11 +932,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .into_struct_value();
         let cgr = self.actual_value(cgr);
         let is_cgr_hempty = self.is_hempty(cgr);
-        self.builder.build_conditional_branch(is_cgr_hempty, loop_swap_bb, loop_next_bb);
+        self.builder
+            .build_conditional_branch(is_cgr_hempty, loop_swap_bb, loop_next_bb);
 
         self.builder.position_at_end(loop_next_bb);
+        // self.builder.build_call(self.functions.printf, &[self.builder.build_global_string_ptr("cgr", "cgr").as_pointer_value().into()], "cgr");
         let cgr = self.extract_cons(cgr)?;
-    
+
         self.builder.build_store(tree, cgr);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
@@ -955,6 +957,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_extract_value(tree_load, 2, "cgr")
             .unwrap();
         let save = self.types.cons.const_zero();
+        let save = self
+            .builder
+            .build_insert_value(save, self.hempty(), 0, "store hempty in car")
+            .unwrap();
         let save = self
             .builder
             .build_insert_value(save, this, 1, "store this")
@@ -982,7 +988,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
             .into_struct_value();
         let car = self.actual_value(car);
+        // self.builder.build_call(self.functions.printf, &[self.builder.build_global_string_ptr("car", "car").as_pointer_value().into()], "car");
         let car = self.extract_cons(car)?;
+
         self.builder.build_store(tree, car);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
@@ -1032,7 +1040,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.types.generic_pointer.const_null(),
                 "is helper null",
             )
-           
             // .const_or(is_helper_hempty)
             ;
         let are_both_null = self

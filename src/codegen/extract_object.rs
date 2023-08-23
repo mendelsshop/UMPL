@@ -26,7 +26,7 @@ macro_rules! make_extract {
             self.builder
                 .build_conditional_branch(condition, ret_block, error_block);
             self.builder.position_at_end(error_block);
-            // self.print_type(val, current_fn);
+            self.print_type(val, current_fn);
             self.exit(&format!(" does not work as {}\n", $name), 1);
 
             self.builder.position_at_end(ret_block);
@@ -77,14 +77,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let ret_block = self.context.append_basic_block(fn_value, "return");
         let print_type = |block, name| {
             self.builder.position_at_end(block);
-
             self.builder.build_call(
                 print_fn,
-                &[self
-                    .builder
-                    .build_global_string_ptr(name, name)
-                    .as_basic_value_enum()
-                    .into()],
+                &[
+                    self.builder
+                        .build_global_string_ptr(&format!("{}-%d", name), name)
+                        .as_basic_value_enum()
+                        .into(),
+                    type_index.into(),
+                ],
                 &format!("print {name}"),
             );
             self.builder.build_unconditional_branch(ret_block);
