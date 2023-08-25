@@ -791,7 +791,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         iter_scope: &[UMPL2Expr],
     ) -> Result<PhiValue<'ctx>, String> {
         let helper_struct = self.context.struct_type(
-            &[self.types.cons.into(), self.types.generic_pointer.into()],
+            &[self.types.object.into(), self.types.generic_pointer.into()],
             false,
         );
 
@@ -841,23 +841,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // allocate trees
         let tree = self
-            .create_entry_block_alloca(self.types.generic_pointer, "iter-tree")
+            .create_entry_block_alloca(self.types.object, "iter-tree")
             .unwrap();
         let helper = self
-            .create_entry_block_alloca(self.types.generic_pointer, "iter-helper")
+            .create_entry_block_alloca(self.types.object, "iter-helper")
             .unwrap();
 
-        // let val = self.actual_value(expr);
-        let init = self.extract_cons(expr).unwrap().into_struct_value();
+        let val = self.actual_value(expr);
+        // let init = self.extract_cons(expr).unwrap().into_struct_value();
         // initialize trees
-        let tree_start = self
-            .create_entry_block_alloca(self.types.cons, "tree init")
-            .unwrap();
-        self.builder.build_store(tree_start, init);
-        self.builder.build_store(tree, tree_start);
+        self.builder.build_store(tree, val);
 
         self.builder
-            .build_store(helper, self.types.generic_pointer.const_null());
+            .build_store(helper, self.hempty());
 
         self.builder.build_unconditional_branch(loop_entry_bb);
 
@@ -874,38 +870,50 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         let tree_load = self
             .builder
-            .build_load(self.types.generic_pointer, tree, "load tree")
-            .into_pointer_value();
-        let is_tree_null = self.is_null(tree_load);
-        self.builder.build_call(
-            self.functions.printf,
-            &[
-                self.builder
-                    .build_global_string_ptr("is tree null %p\n", "null-tree")
-                    .as_pointer_value()
-                    .into(),
-                tree_load.into(),
-            ],
-            "null check",
+            .build_load(self.types.object, tree, "load tree").into_struct_value();
+                self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[self.types.call_info.const_zero().into(), tree_load.into()],
+            "print",
         );
+        let is_tree_hempty = self.is_hempty(tree_load);
+        
+        // self.builder.build_call(
+        //     self.functions.printf,
+        //     &[
+        //         self.builder
+        //             .build_global_string_ptr("is tree null %p\n", "null-tree")
+        //             .as_pointer_value()
+        //             .into(),
+        //         tree_load.into(),
+        //     ],
+        //     "null check",
+        // );
         let helper_load = self
         .builder
-        .build_load(self.types.generic_pointer, helper, "load helper")
-        .into_pointer_value();
-    self.builder.build_call(
-        self.functions.printf,
-        &[
-            self.builder
-                .build_global_string_ptr("is helper null %p", "null-tree")
-                .as_pointer_value()
-                .into(),
-            helper_load.into(),
-        ],
-        "null check",
-    );
+        .build_load(helper_struct, helper, "load helper")
+        .into_struct_value();
+    let helper_current = self.builder.build_extract_value(helper_load, 0, "load helper for printing").unwrap();
+
+        self.builder.build_call(
+    self.module.get_function("print").unwrap(),
+    &[self.types.call_info.const_zero().into(), helper_current.into()],
+    "print",
+);
+    // self.builder.build_call(
+    //     self.functions.printf,
+    //     &[
+    //         self.builder
+    //             .build_global_string_ptr("is helper null %p", "null-tree")
+    //             .as_pointer_value()
+    //             .into(),
+    //         helper_load.into(),
+    //     ],
+    //     "null check",
+    // );
         
         self.builder
-            .build_conditional_branch(is_tree_null, loop_swap_bb, loop_process_bb);
+            .build_conditional_branch(is_tree_hempty, loop_swap_bb, loop_process_bb);
 
         // loop_process
         self.builder.position_at_end(loop_process_bb);
@@ -922,31 +930,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // what we really need to check for is if the branch (car) is hempty (maybe also same problem for loop_entry)
         let tree_load = self
             .builder
-            .build_load(self.types.generic_pointer, tree, "load tree")
-            .into_pointer_value();
-        let car = self
-            .builder
-            .build_struct_gep(self.types.cons, tree_load, 0, "gep car")
-            .unwrap();
-        let car_load = self
-            .builder
-            .build_load(self.types.object, car, "load car")
+            .build_load(self.types.object, tree, "load tree")
             .into_struct_value();
-        self.builder.build_call(
-            self.functions.printf,
-            &[self
-                .builder
-                .build_global_string_ptr(" is hempty car %d: ", "hempty?")
-                .as_pointer_value()
-                .into(), self.is_hempty(car_load).into()],
-            "hempty check",
-        );
-        self.builder.build_call(
-            self.module.get_function("print").unwrap(),
-            &[self.types.call_info.const_zero().into(), car_load.into()],
-            "print",
-        );
-        let is_car_hempty = self.is_hempty(car_load);
+        let tree_cons = self.extract_cons(tree_load)?;
+        let car =self.builder.build_extract_value(tree_cons.into_struct_value(), 0, "get car").unwrap();
+        // let car = self
+        //     .builder
+        //     .build_struct_gep(self.types.cons, tree_load, 0, "gep car")
+        //     .unwrap();
+        // let car_load = self
+        //     .builder
+        //     .build_load(self.types.object, car, "load car")
+        //     .into_struct_value();
+        // self.builder.build_call(
+        //     self.functions.printf,
+        //     &[self
+        //         .builder
+        //         .build_global_string_ptr(" is hempty car %d: ", "hempty?")
+        //         .as_pointer_value()
+        //         .into(), self.is_hempty(car_load).into()],
+        //     "hempty check",
+        // );
+        // self.builder.build_call(
+        //     self.module.get_function("print").unwrap(),
+        //     &[self.types.call_info.const_zero().into(), car_load.into()],
+        //     "print",
+        // );
+        let is_car_hempty = self.is_hempty(car.into_struct_value());
 
         self.builder
             .build_conditional_branch(is_car_hempty, loop_bb, loop_save_bb);
@@ -981,15 +991,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "annoucement",
         );
         let tree_load = self
-        .builder
-        .build_load(self.types.generic_pointer, tree, "load tree")
-        .into_pointer_value();
-        let val = self
             .builder
-            .build_struct_gep(self.types.cons, tree_load, 1, &name)
-            .unwrap();
+            .build_load(self.types.object, tree, "load tree")
+            .into_struct_value();
+        let tree_cons = self.extract_cons(tree_load)?;
+        let val = self.builder.build_extract_value(tree_cons.into_struct_value(), 1, "get current").unwrap();
+        let this = self.create_entry_block_alloca(self.types.object, "save this").unwrap();
+        self.builder.build_store(this, val);
 
-        self.insert_variable(name, val);
+        self.insert_variable(name, this);
         // code goes here
         for expr in iter_scope {
             self.compile_expr(expr)?;
@@ -997,13 +1007,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // delete the variable
         // put cgr of tree as tree
  
-        let cgr = self
-            .builder
-            .build_struct_gep(self.types.cons, tree_load, 2, "cgr gep")
-            .unwrap();
-        let cgr = self.builder.build_load(self.types.object, cgr, "load cgr").into_struct_value();
+        let cgr = self.builder.build_extract_value(tree_cons.into_struct_value(), 2, "get next").unwrap();
         // let cgr = self.actual_value(cgr);
-        let is_cgr_hempty = self.is_hempty(cgr);
+        let is_cgr_hempty = self.is_hempty(cgr.into_struct_value());
         self.builder
             .build_conditional_branch(is_cgr_hempty, loop_swap_bb, loop_next_bb);
 
@@ -1018,10 +1024,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "announcement",
         );
         // this might be thr problem assuming thzt cgr is non hempty
-        let cgr = self.extract_cons(cgr)?;
-        let tree_new = self.create_entry_block_alloca(self.types.cons, "tree").unwrap();
-        self.builder.build_store(tree, tree_new);
-        self.builder.build_store(tree_new, cgr);
+        self.builder.build_store(tree, cgr);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
         // loop_save
@@ -1035,39 +1038,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into()],
             "anoucement",
         );
+
         let tree_load = self
             .builder
-            .build_load(self.types.generic_pointer, tree, "load tree")
-            .into_pointer_value();
-        let tree_load = self
-            .builder
-            .build_load(self.types.cons, tree_load, "load tree")
+            .build_load(self.types.object, tree, "load tree")
             .into_struct_value();
+        let tree_cons = self.extract_cons(tree_load)?;
         let this = self
             .builder
-            .build_extract_value(tree_load, 1, "cdr")
+            .build_extract_value(tree_cons.into_struct_value(), 1, "cdr")
             .unwrap();
         let cgr = self
             .builder
-            .build_extract_value(tree_load, 2, "cgr")
+            .build_extract_value(tree_cons.into_struct_value(), 2, "cgr")
             .unwrap();
-        let save = self.types.cons.const_zero();
-        let save = self
-            .builder
-            .build_insert_value(save, self.hempty(), 0, "store hempty in car")
-            .unwrap();
-        let save = self
-            .builder
-            .build_insert_value(save, this, 1, "store this")
-            .unwrap();
-        let save = self
-            .builder
-            .build_insert_value(save, cgr, 2, "store cgr")
-            .unwrap()
-            .into_struct_value();
+        let save = self.const_cons(self.hempty(), this.into_struct_value(), cgr.into_struct_value());
+
         let helper_load =
             self.builder
-                .build_load(self.types.generic_pointer, helper, "load helper");
+                .build_load(helper_struct, helper, "load helper");
 
         let new_helper = helper_struct.const_zero();
         let new_helper = self
@@ -1075,60 +1064,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_insert_value(new_helper, save, 0, "save save")
             .unwrap();
         let new_helper = self
-            .builder
-            .build_insert_value(new_helper, helper_load, 1, "save prev helper")
-            .unwrap();
-        let helper_first = self
-            .create_entry_block_alloca(helper_struct, "new_helper")
-            .unwrap();
-        self.builder.build_store(helper_first, new_helper);
-        let helper_load =
-            self.builder
-                .build_load(self.types.generic_pointer, helper, "load helper");
-        self.builder.build_call(
-            self.functions.printf,
-            &[
-                self.builder
-                    .build_global_string_ptr("helper-before save %p\n", "car")
-                    .as_pointer_value()
-                    .into(),
-                helper_load.into(),
-            ],
-            "helper check",
-        );
-        self.builder.build_store(helper, helper_first);
-        let helper_load =
-            self.builder
-                .build_load(self.types.generic_pointer, helper, "load helper");
+        .builder
+        .build_insert_value(new_helper, helper, 1, "save save")
+        .unwrap();
+        // let new_helper_prev = self
+        //     .builder
+        //     .build_struct_gep(self.types.generic_pointer, ptr, index, name)
+        let helper_save = self.create_entry_block_alloca(helper_struct, "new helper")?;
+        self.builder.build_store(helper_save, helper_load);
+        let new_helper=self.builder.build_insert_value(new_helper, helper_save, 1, "name").unwrap();
+        // self.builder.build_store(new_helper.into_pointer_value(), helper_load);
 
-        self.builder.build_call(
-            self.functions.printf,
-            &[
-                self.builder
-                    .build_global_string_ptr("helper-after save %p", "car")
-                    .as_pointer_value()
-                    .into(),
-                helper_load.into(),
-            ],
-            "helper check",
-        );
-        let tree_load = self
-            .builder
-            .build_load(self.types.generic_pointer, tree, "load tree")
-            .into_pointer_value();
+        self.builder.build_store(helper, new_helper);
+
         let car = self
             .builder
-            .build_struct_gep(self.types.cons, tree_load, 0, "get car")
+            .build_extract_value(tree_cons.into_struct_value(), 0, "get car")
             .unwrap();
-        let car = self
-            .builder
-            .build_load(self.types.object, car, "load tree")
-            .into_struct_value();
-        let car = self.extract_cons(car)?;
-    
-        let tree_new = self.create_entry_block_alloca(self.types.cons, "tree").unwrap();
-        self.builder.build_store(tree_new, car);
-        self.builder.build_store(tree, tree_new);
+        self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[self.types.call_info.const_zero().into(), car.into()],
+            "print",
+        );
+        self.builder.build_store(tree, car);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
         // loop_swap
@@ -1144,53 +1102,48 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         let helper_load =
             self.builder
-                .build_load(self.types.generic_pointer, helper, "load helper");
-        let helper_inner_load = self
-            .builder
-            .build_load(
-                helper_struct,
-                helper_load.into_pointer_value(),
-                "load helper",
-            )
-            .into_struct_value();
+                .build_load(helper_struct, helper, "load helper").into_struct_value();
 
         let current = self
             .builder
-            .build_extract_value(helper_inner_load, 0, "current save")
+            .build_extract_value(helper_load, 0, "current save")
             .unwrap();
+                self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[self.types.call_info.const_zero().into(), current.into()],
+            "print",
+        );
         let rest = self
             .builder
-            .build_extract_value(helper_inner_load, 1, "rest")
+            .build_extract_value(helper_load, 1, "rest")
             .unwrap();
-        let tree_new = self.create_entry_block_alloca(self.types.cons, "tree").unwrap();
-        self.builder.build_store(tree_new, current);
-        self.builder.build_store(tree, tree_new);
-        let helper_new  = self.create_entry_block_alloca(helper_struct, "helper").unwrap();
-        self.builder.build_store(helper_new, rest);
-        self.builder.build_store(helper, helper_new);
+        self.builder.build_store(tree, current);
+        
+        let helper_save = self.builder.build_load(helper_struct, rest.into_pointer_value(), "helper load");
         self.builder.build_call(
             self.functions.printf,
-            &[
-                self.builder
-                    .build_global_string_ptr("is null rest %p", "car")
-                    .as_pointer_value()
-                    .into(),
-                rest.into(),
-            ],
-            "null check",
+            &[self
+                .builder
+                .build_global_string_ptr("\nloop swap\n ", "loop swap anoucement")
+                .as_pointer_value()
+                .into()],
+            "anoucement",
         );
+
+        self.builder.build_store(helper, helper_save);
         let tree_load = self
             .builder
-            .build_load(self.types.generic_pointer, tree, "load tree")
-            .into_pointer_value();
-        let is_tree_null = self.is_null(tree_load);
+            .build_load(self.types.object, tree, "load tree")
+            .into_struct_value();
+        let is_tree_null = self.is_hempty(tree_load);
 
         let helper_load = self
             .builder
-            .build_load(self.types.generic_pointer, helper, "load helper")
-            .into_pointer_value();
+            .build_load(helper_struct, helper, "load helper")
+            .into_struct_value();
         // let is_helper_hempty = self.is_hempty(helper_load);
-        let is_helper_null = self.is_null(helper_load);
+        let helper_current = self.builder.build_extract_value(helper_load, 0, "name").unwrap();
+        let is_helper_null = self.is_hempty(helper_current.into_struct_value());
         let are_both_null = self
             .builder
             .build_and(is_helper_null, is_tree_null, "both is null");
