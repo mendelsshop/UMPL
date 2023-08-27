@@ -192,7 +192,7 @@ impl<'ctx, 'a> FlattenAst<'a, 'ctx> for Application {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
         let left_tree = self.args.flatten(compiler);
         let this = compiler.const_symbol(&format!("{:?}", self.print).into());
-        let this = compiler.const_cons(compiler.hempty(),this, compiler.hempty());
+        let this = compiler.const_cons(compiler.hempty(), this, compiler.hempty());
         let right_tree = compiler.hempty();
         compiler.const_cons(left_tree, this, right_tree)
     }

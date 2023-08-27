@@ -215,7 +215,9 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
             chain(keep_right(ws_or_comment(), ident_umpl()), umpl2expr()),
         ),
         |r| {
-            let UMPL2Expr::Ident(let_ident) = r.0 else { panic!() };
+            let UMPL2Expr::Ident(let_ident) = r.0 else {
+                panic!()
+            };
             UMPL2Expr::Let(let_ident, Box::new(r.1))
         },
     )
@@ -298,7 +300,9 @@ fn go_through_stmt() -> Box<Parser<UMPL2Expr>> {
             scope(umpl2expr()),
         ]),
         |mut r| {
-            let UMPL2Expr::Ident(for_ident) = r.next().unwrap_or_default() else { panic!() };
+            let UMPL2Expr::Ident(for_ident) = r.next().unwrap_or_default() else {
+                panic!()
+            };
             let iterable = r.next().unwrap_or_default();
             let loop_scope = get_scope(r.next());
             UMPL2Expr::GoThrough(Box::new(GoThrough::new(for_ident, iterable, loop_scope)))
@@ -326,7 +330,9 @@ fn link_stmt() -> Box<Parser<UMPL2Expr>> {
             many1(keep_right(ws_or_comment(), label_umpl())),
         ),
         |res| {
-            let UMPL2Expr::Label(to_link) = res.0 else { panic!() };
+            let UMPL2Expr::Label(to_link) = res.0 else {
+                panic!()
+            };
             let linked_list = res
                 .1
                 .map(|e| match e {
