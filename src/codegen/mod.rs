@@ -78,6 +78,7 @@ pub struct Types<'ctx> {
     /// It is a struct that keeps the number of arguments
     /// and also a pointer to a basic block which the function should jump too (if non null) for (gotos)
     call_info: StructType<'ctx>,
+    args: StructType<'ctx>
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -184,6 +185,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ),
             thunk: kind.fn_type(&[env_ptr.into()], false),
             primitive_ty: kind.fn_type(&[call_info.into()], true),
+            args: context.struct_type(&[kind.into(), generic_pointer.into()], false),
             call_info,
         };
         let exit = module.add_function(
