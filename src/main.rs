@@ -7,10 +7,12 @@
 )]
 #![allow(clippy::similar_names)]
 
+use std::{fs, process::exit};
+
 use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
-
+use clap::{Parser, Subcommand};
 pub mod analyzer;
 pub mod ast;
 mod codegen;
@@ -32,14 +34,40 @@ pub mod interior_mut {
     pub type RC<T> = Rc<T>;
     pub type MUTEX<T> = RefCell<T>;
 }
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct Args {
+    #[clap(subcommand)]
+    arg: ArgType,
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum ArgType {
+    /// Start a `UMPL` repl
+    Repl,
+    /// Compile some code
+    Compile {
+        filename: String,
+        /// Output file name excluding file extension
+        output: String,
+    },
+    /// Run some code
+    Run { filename: String },
+}
 
 fn main() {
-    let context = Context::create();
-    let module = context.create_module("repl");
-    let builder = context.create_builder();
+    let args = Args::parse();
+    match args.arg {
+        ArgType::Repl => repl(),
+        ArgType::Compile { filename, output } => compile(&filename, &output),
+        ArgType::Run { filename } => run(&filename),
+    }
+}
 
-    // Create FPM
-    let fpm = PassManager::create(&module);
+fn init_function_optimizer<'ctx>(
+    module: &inkwell::module::Module<'ctx>,
+) -> PassManager<inkwell::values::FunctionValue<'ctx>> {
+    let fpm = PassManager::create(module);
     fpm.add_new_gvn_pass();
     fpm.add_instruction_combining_pass();
     fpm.add_reassociate_pass();
@@ -62,69 +90,88 @@ fn main() {
     fpm.add_tail_call_elimination_pass();
 
     fpm.initialize();
-    // fanction  1* ᚜ (print '0')< ᚛
-    // TODO: make these into tests
-    // !(add 1 3 4)<
-    // let x 10000%1
-    // link @x @y
-    // !(print y^car^cdr)<
-    // !(print x)<
-    // ! doesnt work b/c codegen trying to save q in globals so that cons can use it
-    // let q ;(a a v 7 .azc. b a)<
-    // continue-doing ᚜  (print 1)> stop .a.  ᚛
-    // (print q)>
-    // let cons
-    //                         fanction  2 ᚜
-    //                                 @x
+    fpm
+}
 
-    //                                 let x '0\"
-    //                                 let y '1'
-    //                                 fanction  1 ᚜
-    //                                     if '0'
-    //                                         do ᚜x
-    //                                     ᚛
-    //                                         otherwise ᚜y
-    //                                     ᚛
-    //                                 ᚛
-    //                         ᚛
+fn repl() {
+    let context = Context::create();
+    let module = context.create_module("repl");
+    let builder = context.create_builder();
 
-    //            let k (cons (cons 7 8 9)> c )>
-    //             (print x)>
-    //              (print .\n.)<
-    //              (print ((k &)> |)>)<
-    //              @y
-    let fn_type = umpl_parse(
-        "
-        let z ;(a b c d e f g h i j k l m n o p q r t u v w x y z)<
-        (print z)<
-        go-through y of z  ᚜  (print y)> (print .\n.)<  ᚛
+    // Create FPM
+    let fpm = init_function_optimizer(&module);
 
-        !until | then ᚜  (print 1)> stop .a.  ᚛
-      
-                        ",
-    )
-    .unwrap();
-    let program = analyzer::Analyzer::analyze(&fn_type);
-    println!(
-        "{}",
-        program
-            .1
-            .iter()
-            .map(|s| format!("{s:?}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-    let mut complier = Compiler::new(&context, &module, &builder, &fpm);
+    let mut input = String::new();
+    while let Ok(input_new) = std::io::read_to_string(std::io::stdin()) {
+        if input_new.trim() == "run" {
+            // really eneffecient to create a new compiler every time (and not whats expected either)
+            // but currently there is no way to add onto main function after first compile
+            let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
+            let parsed = umpl_parse(&input).unwrap();
+            let program = analyzer::Analyzer::analyze(&parsed);
+            complier.compile_program(&program.1, program.0).map_or_else(
+                || {
+                    let ret = complier.run();
+                    print!("\n");
+                    exit(ret);
+                },
+                |err| {
+                    println!("error: {err}");
+                    exit(1);
+                },
+            );
+            input.clear();
+        } else if input.trim() == "quit" {
+            exit(0)
+        } else {
+            input += &input_new;
+        }
+    }
+}
+
+fn compile(file: &str, out: &str) {
+    let contents = fs::read_to_string(file).unwrap();
+    let parsed = umpl_parse(&contents).unwrap();
+    let program = analyzer::Analyzer::analyze(&parsed);
+    let context = Context::create();
+    let module = context.create_module(file);
+    let builder = context.create_builder();
+
+    // Create FPM
+    let fpm = init_function_optimizer(&module);
+    let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
-            complier.export_bc("bin/main");
-            complier.export_ir("bin/main");
-            complier.export_object_and_asm("bin/main");
-            let ret = complier.run();
-            print!("\nret {ret}\n",);
+            // TODO: actually compile the program not just generate llvm ir
+            complier.export_ir(out);
         },
         |err| {
             println!("error: {err}");
+            exit(1);
+        },
+    );
+}
+
+fn run(file: &str) {
+    let contents = fs::read_to_string(file).unwrap();
+    let parsed = umpl_parse(&contents).unwrap();
+    let program = analyzer::Analyzer::analyze(&parsed);
+    let context = Context::create();
+    let module = context.create_module(file);
+    let builder = context.create_builder();
+
+    // Create FPM
+    let fpm = init_function_optimizer(&module);
+    let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
+    complier.compile_program(&program.1, program.0).map_or_else(
+        || {
+            let ret = complier.run();
+            print!("\n");
+            exit(ret);
+        },
+        |err| {
+            println!("error: {err}");
+            exit(1);
         },
     );
 }

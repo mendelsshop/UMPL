@@ -240,7 +240,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
         // tree_ptr.set_initializer(&self.types.cons.const_zero());
         self.builder.build_store(pv, tree_type);
-    self.cons(pv)
+        self.cons(pv)
     }
 
     pub(super) fn const_lambda(

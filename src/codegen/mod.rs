@@ -833,8 +833,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop-swap");
         let loop_swap_inner_bb = self
-        .context
-        .append_basic_block(self.fn_value.unwrap(), "loop-swap-inner");
+            .context
+            .append_basic_block(self.fn_value.unwrap(), "loop-swap-inner");
         let loop_done_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "done-loop");
@@ -860,10 +860,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let print_iter = |this: &Self| {
             this.builder.build_call(
                 this.module.get_function("print").unwrap(),
-                &[
-                    this.types.call_info.const_zero().into(),
-                    expr.into(),
-                ],
+                &[this.types.call_info.const_zero().into(), expr.into()],
                 "print",
             );
         };
@@ -905,7 +902,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             );
             let helper_current_obj = this
                 .builder
-                .build_extract_value(phi_load.into_struct_value(),0, "current helper")
+                .build_extract_value(phi_load.into_struct_value(), 0, "current helper")
                 .unwrap();
             this.builder.build_call(
                 this.module.get_function("print").unwrap(),
@@ -1032,24 +1029,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_load(self.types.object, tree, "load tree")
             .into_struct_value();
-        let tree_cons = self.builder.build_extract_value(tree_load, TyprIndex::cons as u32 + 1, "extract cons").unwrap();
+        let tree_cons = self
+            .builder
+            .build_extract_value(tree_load, TyprIndex::cons as u32 + 1, "extract cons")
+            .unwrap();
         let this = self
             .builder
-            .build_struct_gep(self.types.cons,tree_cons.into_pointer_value(), 1, "cdr")
+            .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 1, "cdr")
             .unwrap();
-        let this =  self.builder.build_load(self.types.object, this, "load cdr");
+        let this = self.builder.build_load(self.types.object, this, "load cdr");
         let cgr = self
             .builder
-            .build_struct_gep(self.types.cons,tree_cons.into_pointer_value(),2, "cgr")
+            .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 2, "cgr")
             .unwrap();
         let cgr = self.builder.build_load(self.types.object, cgr, "load cgr");
         print_full_helper(self);
-        let new_cons = self.builder.build_alloca(self.types.cons, "new cons in loop");
+        let new_cons = self
+            .builder
+            .build_alloca(self.types.cons, "new cons in loop");
         let save = self.const_cons_with_ptr(
             new_cons,
             self.hempty(),
             this.into_struct_value(),
-            cgr.into_struct_value()
+            cgr.into_struct_value(),
         );
         print_full_helper(self);
         let helper_load =
@@ -1057,9 +1059,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_load(self.types.generic_pointer, helper, "load helper");
         let new_helper = self.builder.build_alloca(helper_struct, "new helper");
         let new_helper_value = helper_struct.const_zero();
-        let new_helper_value = self.builder.build_insert_value(new_helper_value, save, 0, "insert current value").unwrap();
+        let new_helper_value = self
+            .builder
+            .build_insert_value(new_helper_value, save, 0, "insert current value")
+            .unwrap();
         print_full_helper(self);
-        let new_helper_value = self.builder.build_insert_value(new_helper_value, helper_load, 1, "insert current prev").unwrap();
+        let new_helper_value = self
+            .builder
+            .build_insert_value(new_helper_value, helper_load, 1, "insert current prev")
+            .unwrap();
         // let new_helper_obj = self
         //     .builder
         //     .build_struct_gep(helper_struct, new_helper, 0, "gep new helper current node")
@@ -1080,10 +1088,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_store(helper, new_helper);
 
         let car = self
-        .builder
-        .build_struct_gep(self.types.cons,tree_cons.into_pointer_value(),0, "cgr")
-        .unwrap();
-    let car = self.builder.build_load(self.types.object, car, "load cgr");
+            .builder
+            .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 0, "cgr")
+            .unwrap();
+        let car = self.builder.build_load(self.types.object, car, "load cgr");
         self.builder.build_store(tree, car);
         print_full_helper(self);
         self.builder.build_unconditional_branch(loop_entry_bb);
@@ -1097,8 +1105,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_load(self.types.generic_pointer, helper, "load helper")
             .into_pointer_value();
         phi.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
-        self.builder.build_conditional_branch(self.is_null(helper_load), loop_done_bb, loop_swap_inner_bb);
-            self.builder.position_at_end(loop_swap_inner_bb);
+        self.builder.build_conditional_branch(
+            self.is_null(helper_load),
+            loop_done_bb,
+            loop_swap_inner_bb,
+        );
+        self.builder.position_at_end(loop_swap_inner_bb);
         let helper_load_load = self
             .builder
             .build_load(helper_struct, helper_load, "load load helper")
