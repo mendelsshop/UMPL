@@ -195,11 +195,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         let tree_type = self
             .builder
-            .build_insert_value(tree_type, this, 1, "car-set")
+            .build_insert_value(tree_type, this, 1, "cdr-set")
             .unwrap();
         let tree_type = self
             .builder
-            .build_insert_value(tree_type, right_tree, 2, "car-set")
+            .build_insert_value(tree_type, right_tree, 2, "cgr-set")
             .unwrap();
         // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
         // tree_ptr.set_initializer(&self.types.cons.const_zero());
@@ -208,6 +208,39 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         self.builder.build_store(tree_ptr, tree_type);
         self.cons(tree_ptr)
+    }
+
+    pub(crate) fn const_cons_with_ptr(
+        &self,
+        pv: PointerValue<'ctx>,
+        left_tree: StructValue<'ctx>,
+        this: StructValue<'ctx>,
+        right_tree: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        // TODO: try to not use globals
+        // let left_ptr = create_entry_block_alloca(types.object, "cdr").unwrap();
+        // builder.build_store(left_ptr, left_tree);
+        // let this_ptr = create_entry_block_alloca(types.object, "car").unwrap();
+        // builder.build_store(this_ptr, this);
+        // let right_ptr = create_entry_block_alloca(types.object, "cgr").unwrap();
+        // builder.build_store(right_ptr, right_tree);
+        let tree_type = self.types.cons.const_zero();
+        let tree_type = self
+            .builder
+            .build_insert_value(tree_type, left_tree, 0, "car-set")
+            .unwrap();
+        let tree_type = self
+            .builder
+            .build_insert_value(tree_type, this, 1, "cdr-set")
+            .unwrap();
+        let tree_type = self
+            .builder
+            .build_insert_value(tree_type, right_tree, 2, "cgr-set")
+            .unwrap();
+        // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
+        // tree_ptr.set_initializer(&self.types.cons.const_zero());
+        self.builder.build_store(pv, tree_type);
+    self.cons(pv)
     }
 
     pub(super) fn const_lambda(
