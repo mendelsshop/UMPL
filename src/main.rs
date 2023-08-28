@@ -35,7 +35,7 @@ pub mod interior_mut {
     pub type MUTEX<T> = RefCell<T>;
 }
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author = "mendelsshop", version, about, long_about = None, name = "UMPL")]
 pub struct Args {
     #[clap(subcommand)]
     arg: ArgType,
@@ -112,7 +112,7 @@ fn repl() {
             complier.compile_program(&program.1, program.0).map_or_else(
                 || {
                     let ret = complier.run();
-                    print!("\n");
+                    println!();
                     exit(ret);
                 },
                 |err| {
@@ -166,7 +166,7 @@ fn run(file: &str) {
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
             let ret = complier.run();
-            print!("\n");
+            println!();
             exit(ret);
         },
         |err| {

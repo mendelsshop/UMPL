@@ -81,7 +81,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 print_fn,
                 &[
                     self.builder
-                        .build_global_string_ptr(&format!("{}-%d", name), name)
+                        .build_global_string_ptr(&format!("{name}-%d"), name)
                         .as_basic_value_enum()
                         .into(),
                     type_index.into(),

@@ -316,7 +316,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(jump_bb);
                 self.builder.build_indirect_branch(jmp_block, &[]);
                 self.builder.position_at_end(cont_bb);
-                let ac = self
+                let _ac = self
                     .builder
                     .build_extract_value(call_info, 0, "get number of args")
                     .unwrap();
@@ -688,7 +688,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let args_count = link.1.count_params() - 2;
                 let mut args = iter::repeat(self.types.object.const_zero())
                     .take(args_count as usize)
-                    .map(|a| a.into())
+                    .map(std::convert::Into::into)
                     .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
                 args.insert(0, call_info.into());
                 args.insert(0, self.types.generic_pointer.const_null().into());
