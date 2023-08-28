@@ -245,7 +245,8 @@ impl GoThrough {
         &self.iter
     }
 
-    #[must_use] pub fn ident(&self) -> &str {
+    #[must_use]
+    pub fn ident(&self) -> &str {
         self.ident.as_ref()
     }
 }
