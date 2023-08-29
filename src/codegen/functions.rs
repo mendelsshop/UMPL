@@ -153,17 +153,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let cont_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "cont-application");
+        let null= self.types.generic_pointer.const_null();
         let args = return_none!(application
             .args()
             .iter()
             .skip(1)
-            .map(|expr| self.const_thunk(expr.clone()))
-            .collect::<Option<Vec<StructValue<'_>>>>());
-        let mut args = args
-            .iter()
-            .map(|a| (*a).into())
-            .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
-        args.insert(0, call_info.into());
+            .try_fold(null, |init, current| {
+                let ptr = self.builder.build_alloca(self.types.args, "add arg");
+                self.builder.build_store(ptr, self.const_thunk(current.clone())?);
+                let next = self.builder.build_struct_gep(self.types.args, ptr, 1, "next arg").unwrap();
+                self.builder.build_store(next, init);
+                Some(ptr)
+            })
+        );
         let fn_ty = self.extract_type(val).unwrap();
         let is_primitive = self.builder.build_int_compare(
             inkwell::IntPredicate::EQ,
@@ -174,23 +176,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder
             .build_conditional_branch(is_primitive, primitve_bb, lambda_bb);
         self.builder.position_at_end(primitve_bb);
-        // let argss = (application
-        //     .args()
-        //     .iter()
-        //     .skip(1)
-        //     .map(|expr| self.compile_expr(expr)))
-        // .collect::<Result<Option<Vec<_>>, _>>()?;
-        // let argss = return_none!(argss)
-        //     .iter()
-        //     .map(|a| (self.actual_value(a.into_struct_value())).into())
-        //     .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
         let op = self.extract_primitve(val).unwrap().into_pointer_value();
         let unwrap_left_prim = self
             .builder
             .build_indirect_call(
                 self.types.primitive_ty,
                 op,
-                args.as_slice(),
+                &[call_info.into(), args.into()],
                 "application:call",
             )
             .try_as_basic_value()
@@ -211,15 +203,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
             .as_any_value_enum();
         let env_pointer = any_value_enum.into_pointer_value();
-
-        args.insert(0, env_pointer.into());
         // should probavly figure out that actual param count of function cause supposedly tail calls dont work on varidiac aargument function
         let unwrap_left = self
             .builder
             .build_indirect_call(
                 self.types.lambda_ty,
                 function_pointer,
-                args.as_slice(),
+                &[env_pointer.into(), call_info.into(), args.into()],
                 "application:call",
             )
             .try_as_basic_value()
