@@ -7,7 +7,7 @@
 )]
 #![allow(clippy::similar_names)]
 
-use std::{fs, process::exit};
+use std::{fs, io, process::exit};
 
 use inkwell::{context::Context, passes::PassManager};
 
@@ -102,7 +102,8 @@ fn repl() {
     let fpm = init_function_optimizer(&module);
 
     let mut input = String::new();
-    while let Ok(input_new) = std::io::read_to_string(std::io::stdin()) {
+    let mut input_new = String::new();
+    while let Ok(_) = io::stdin().read_line(&mut input_new) {
         if input_new.trim() == "run" {
             // really eneffecient to create a new compiler every time (and not whats expected either)
             // but currently there is no way to add onto main function after first compile
@@ -121,11 +122,12 @@ fn repl() {
                 },
             );
             input.clear();
-        } else if input.trim() == "quit" {
+        } else if input_new.trim() == "quit" {
             exit(0)
         } else {
             input += &input_new;
         }
+        input_new.clear();
     }
 }
 

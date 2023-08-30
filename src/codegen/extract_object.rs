@@ -26,7 +26,7 @@ macro_rules! make_extract {
             self.builder
                 .build_conditional_branch(condition, ret_block, error_block);
             self.builder.position_at_end(error_block);
-            self.print_type(val, current_fn);
+            self.print_type(val);
             self.exit(&format!(" does not work as {}\n", $name), 1);
 
             self.builder.position_at_end(ret_block);
@@ -62,81 +62,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_extract_value(cond_struct, 0, "get_type")
     }
 
-    fn print_type(&self, object: StructValue<'ctx>, fn_value: FunctionValue<'ctx>) {
+    fn print_type(&self, object: StructValue<'ctx>) {
         let type_index = self.extract_type(object).unwrap().into_int_value();
         let print_fn = self.functions.printf;
-        let bool_block = self.context.append_basic_block(fn_value, "bool");
-        let number_block = self.context.append_basic_block(fn_value, "number");
-        let string_block = self.context.append_basic_block(fn_value, "string");
-        let cons_block = self.context.append_basic_block(fn_value, "cons");
-        let lambda_block = self.context.append_basic_block(fn_value, "lambda");
-        let symbol_block = self.context.append_basic_block(fn_value, "hempty");
-        let hempty_block = self.context.append_basic_block(fn_value, "symbol");
-        let thunk_block = self.context.append_basic_block(fn_value, "thunk");
-        let error_block = self.context.append_basic_block(fn_value, "error");
-        let ret_block = self.context.append_basic_block(fn_value, "return");
-        let print_type = |block, name| {
-            self.builder.position_at_end(block);
-            self.builder.build_call(
-                print_fn,
-                &[
-                    self.builder
-                        .build_global_string_ptr(&format!("{name}-%d"), name)
-                        .as_basic_value_enum()
-                        .into(),
-                    type_index.into(),
-                ],
-                &format!("print {name}"),
-            );
-            self.builder.build_unconditional_branch(ret_block);
+
+        let type_as_str = |index, name| {
+            (
+                self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    type_index,
+                    self.types.ty.const_int(index as u64, false),
+                    "",
+                ),
+                self.builder
+                    .build_global_string_ptr(name, name)
+                    .as_basic_value_enum(),
+            )
         };
-        self.builder.build_switch(
-            type_index,
-            error_block,
+        let type_name =self.build_n_select(
+            self.builder
+                .build_global_string_ptr("type not recognized", "")
+                .as_basic_value_enum(),
             &[
-                (
-                    self.types.ty.const_int(TyprIndex::boolean as u64, false),
-                    bool_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::number as u64, false),
-                    number_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::string as u64, false),
-                    string_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::cons as u64, false),
-                    cons_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::hempty as u64, false),
-                    hempty_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::symbol as u64, false),
-                    symbol_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::lambda as u64, false),
-                    lambda_block,
-                ),
-                (
-                    self.types.ty.const_int(TyprIndex::thunk as u64, false),
-                    thunk_block,
-                ),
+                type_as_str(TyprIndex::boolean, "boolean"),
+                type_as_str(TyprIndex::number, "number"),
+                type_as_str(TyprIndex::string, "string"),
+                type_as_str(TyprIndex::cons, "cons"),
+                type_as_str(TyprIndex::hempty, "hempty"),
+                type_as_str(TyprIndex::symbol, "symbol"),
+                type_as_str(TyprIndex::lambda, "lambda"),
+                type_as_str(TyprIndex::thunk, "thunk"),
             ],
         );
-        print_type(bool_block, "bool");
-        print_type(number_block, "number");
-        print_type(string_block, "string");
-        print_type(symbol_block, "symbol");
-        print_type(cons_block, "cons");
-        print_type(lambda_block, "lambda");
-        print_type(thunk_block, "thunk");
-        print_type(hempty_block, "hempty");
-        print_type(error_block, "unknown error");
-        self.builder.position_at_end(ret_block);
+        self.builder.build_call(print_fn, &[type_name.into()], "print type");
     }
 }

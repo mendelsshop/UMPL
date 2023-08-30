@@ -78,7 +78,7 @@ pub struct Types<'ctx> {
     /// It is a struct that keeps the number of arguments
     /// and also a pointer to a basic block which the function should jump too (if non null) for (gotos)
     call_info: StructType<'ctx>,
-    args: StructType<'ctx>
+    args: StructType<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -240,6 +240,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             functions,
             state: vec![],
         }
+    }
+
+    pub(crate) fn build_n_select(
+        &self,
+        default: BasicValueEnum<'ctx>,
+        choices: &[(IntValue<'ctx>, BasicValueEnum<'ctx>)],
+    ) -> BasicValueEnum<'ctx> {
+        choices.iter().fold(default, |prev, choice| {
+            self.builder.build_select(choice.0, choice.1, prev, "")
+        })
     }
 
     #[inline]
@@ -515,7 +525,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             fpm.add_strip_dead_prototypes_pass();
 
             fpm.run_on(self.module);
-            println!("done");
             None
         } else {
             println!("error occurred");
