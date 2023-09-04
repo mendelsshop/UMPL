@@ -103,18 +103,19 @@ fn repl() {
 
     let mut input = String::new();
     let mut input_new = String::new();
+    let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
     while let Ok(_) = io::stdin().read_line(&mut input_new) {
         if input_new.trim() == "run" {
             // really eneffecient to create a new compiler every time (and not whats expected either)
             // but currently there is no way to add onto main function after first compile
-            let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
+
             let parsed = umpl_parse(&input).unwrap();
             let program = analyzer::Analyzer::analyze(&parsed);
             complier.compile_program(&program.1, program.0).map_or_else(
                 || {
-                    let ret = complier.run();
+                    complier.export_ir("bin/main");
+                    complier.run();
                     println!();
-                    exit(ret);
                 },
                 |err| {
                     println!("error: {err}");

@@ -108,6 +108,8 @@ pub struct Compiler<'a, 'ctx> {
     // not were umpl functions are stored
     functions: Functions<'ctx>,
     state: Vec<EvalType<'ctx>>,
+    // used to recover where eval was in when evaling from repl
+    main: Option<(FunctionValue<'ctx>, BasicBlock<'ctx>)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -239,6 +241,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             links: HashMap::new(),
             functions,
             state: vec![],
+            main: None
         }
     }
 
@@ -470,23 +473,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         is_hempty
     }
 
+    pub fn get_main(&mut self) -> (FunctionValue<'ctx>, BasicBlock<'ctx>) {
+        if let Some((function, block)) = self.main {
+            (function, block)
+        } else {
+            self.new_env();
+            self.init_stdlib();
+            self.new_env();
+            let main_fn_type = self.context.i32_type().fn_type(&[], false);
+            let main_fn = self.module.add_function("main", main_fn_type, None);
+            let main_block= self.context.append_basic_block(main_fn, "entry");
+            self.main = Some((main_fn, main_block));
+            (main_fn, main_block)
+        }
+    }
+
     pub fn compile_program(
         &mut self,
         program: &[UMPL2Expr],
         _links: HashSet<RC<str>>,
     ) -> Option<String> {
-        // self.module.add_function("va_arg", self.types.object.fn_type(&[], false), Some(Linkage::External));
-        self.new_env();
-        self.init_stdlib();
-        self.new_env();
-        let main_fn_type = self.context.i32_type().fn_type(&[], false);
-        let main_fn = self.module.add_function("main", main_fn_type, None);
-        let main_block = self.context.append_basic_block(main_fn, "entry");
-        // TODO: maybe dont optimize make_* functions b/c indirect call branches
-
+        let (main_fn, main_block) = self.get_main();
+        
         self.fn_value = Some(main_fn);
-
+    
         self.builder.position_at_end(main_block);
+        if let Some(term)=main_block.get_terminator() {
+            term.erase_from_basic_block()
+        }
 
         for expr in program {
             match self.compile_expr(expr) {
@@ -496,7 +510,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
-        self.pop_env();
+        self.main = Some((main_fn, self.builder.get_insert_block().unwrap()));
 
         let verify = main_fn.verify(true);
 
@@ -543,8 +557,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn run(&self) -> i32 {
         unsafe {
             self.jit
-                .run_function(self.module.get_function("main").unwrap(), &[])
-                .as_int(false) as i32
+                .run_function_as_main(self.module.get_function("main").unwrap(), &[]) as i32
         }
     }
 
