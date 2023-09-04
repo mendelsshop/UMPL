@@ -185,10 +185,36 @@ fn hexnumber() -> Box<Parser<UMPL2Expr>> {
 fn stringdot() -> Box<Parser<UMPL2Expr>> {
     inbetween(
         char('.'),
-        map(many(not_char('.')), |r| {
+        map(many(alt(escape_string(), not_char('.'))), |r| {
             UMPL2Expr::String(r.map_or_else(String::new, Iterator::collect).into())
         }),
         opt(char('.')),
+    )
+}
+/// | Escape sequence | Description |
+/// |:-:|:-:|
+/// | `\n` | newline |
+/// | `\t` | tab |
+/// | `\r` | carriage return |
+/// | `\b` | backspace |
+/// | `\f` | form feed |
+/// | `\a` | alert |
+/// | `\v` | vertical tab |
+/// | `\e` | escape |
+/// | `\\` | backslash |
+/// | ```\` ``` | single quote |
+/// | ```\x{hex}``` | hexadecimal value in ascii representation |
+/// | `\u{hex}` | Unicode character |\
+fn escape_string() -> Box<Parser<char>> {
+    keep_right(
+        // TODO: this more escape characters
+        char('\\'),
+        choice(vec![
+            map(char('a'), |_| '\x07'),
+            map(char('n'), |_| '\n'),
+            char('.'),
+            char('\\'),
+        ]),
     )
 }
 

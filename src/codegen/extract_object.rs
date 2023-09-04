@@ -1,5 +1,5 @@
 use super::{Compiler, TyprIndex};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, StructValue};
+use inkwell::values::{BasicValue, BasicValueEnum, StructValue};
 
 macro_rules! make_extract {
     ($fn_name:ident, $type:ident, $name:literal) => {
@@ -79,7 +79,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .as_basic_value_enum(),
             )
         };
-        let type_name =self.build_n_select(
+        let type_name = self.build_n_select(
             self.builder
                 .build_global_string_ptr("type not recognized", "")
                 .as_basic_value_enum(),
@@ -94,6 +94,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 type_as_str(TyprIndex::thunk, "thunk"),
             ],
         );
-        self.builder.build_call(print_fn, &[type_name.into()], "print type");
+        self.builder
+            .build_call(print_fn, &[type_name.into()], "print type");
     }
 }

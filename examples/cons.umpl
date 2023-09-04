@@ -9,4 +9,5 @@ let cons  fanction  2 ᚜ !using let to get around emoji name requirements
             otherwise ᚜y᚛
     ᚛
 ᚛
-let k (cons (cons 7 8 9)< c )<
+let k (cons (cons 7 9)< c )<
+(print (k |)<)<

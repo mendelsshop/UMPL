@@ -107,97 +107,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let helper = self
             .create_entry_block_alloca(self.types.generic_pointer, "iter-helper")
             .unwrap();
-        let announce = |this: &Compiler<'a, 'ctx>, block: &str| {
-            this.builder.build_call(
-                this.functions.printf,
-                &[this
-                    .builder
-                    .build_global_string_ptr(&format!("\n{block}\n"), "announcement")
-                    .as_pointer_value()
-                    .into()],
-                "announcement",
-            );
-        };
-        let print_iter = |this: &Self| {
-            this.builder.build_call(
-                this.module.get_function("print").unwrap(),
-                &[this.types.call_info.const_zero().into(), expr.into()],
-                "print",
-            );
-        };
-        let print_full_helper = |this: &Self| {
-            let print_bb = this
-                .context
-                .append_basic_block(this.fn_value.unwrap(), "print");
-            let next_bb = this
-                .context
-                .append_basic_block(this.fn_value.unwrap(), "next");
-            let last_bb = this.builder.get_insert_block().unwrap();
-            let done_print_bb = this
-                .context
-                .append_basic_block(this.fn_value.unwrap(), "done");
-            this.builder.position_at_end(print_bb);
-            let phi_helper = this
-                .builder
-                .build_phi(this.types.generic_pointer, "print phi");
-            this.builder.build_call(
-                this.functions.printf,
-                &[
-                    this.builder
-                        .build_global_string_ptr("%p->", "string")
-                        .as_pointer_value()
-                        .into(),
-                    phi_helper.as_basic_value().into(),
-                ],
-                "print helper",
-            );
-
-            let is_helper_null = this.is_null(phi_helper.as_basic_value().into_pointer_value());
-            this.builder
-                .build_conditional_branch(is_helper_null, done_print_bb, next_bb);
-            self.builder.position_at_end(next_bb);
-            let phi_load = this.builder.build_load(
-                helper_struct,
-                phi_helper.as_basic_value().into_pointer_value(),
-                "get next helper",
-            );
-            let helper_current_obj = this
-                .builder
-                .build_extract_value(phi_load.into_struct_value(), 0, "current helper")
-                .unwrap();
-            this.builder.build_call(
-                this.module.get_function("print").unwrap(),
-                &[
-                    this.types.call_info.const_zero().into(),
-                    helper_current_obj.into(),
-                ],
-                "print",
-            );
-            let next = this
-                .builder
-                .build_extract_value(phi_load.into_struct_value(), 1, "get next helper")
-                .unwrap();
-            phi_helper.add_incoming(&[(&next, next_bb)]);
-            self.builder.build_unconditional_branch(print_bb);
-
-            self.builder.position_at_end(last_bb);
-            let helper_load =
-                this.builder
-                    .build_load(this.types.generic_pointer, helper, "load helper");
-            phi_helper.add_incoming(&[(&helper_load, last_bb)]);
-            self.builder.build_unconditional_branch(print_bb);
-            self.builder.position_at_end(done_print_bb);
-            this.builder.build_call(
-                this.functions.printf,
-                &[this
-                    .builder
-                    .build_global_string_ptr("()\n", "done")
-                    .as_pointer_value()
-                    .into()],
-                "print helper done",
-            );
-        };
-
         let val = self.actual_value(expr);
         // initialize trees
         self.builder.build_store(tree, val);
@@ -209,9 +118,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // loop_entry
         self.builder.position_at_end(loop_entry_bb);
-        announce(self, "loop entry");
-        print_full_helper(self);
-        print_iter(self);
+
         let tree_load = self
             .builder
             .build_load(self.types.object, tree, "load tree")
@@ -223,7 +130,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // loop_process
         self.builder.position_at_end(loop_process_bb);
-        announce(self, "loop_process");
         // this logic is wrong b/c were already know thst the tree is non null -> the branch will also be non null
         // what we really need to check for is if the branch (car) is hempty (maybe also same problem for loop_entry)
         let tree_load = self
@@ -243,7 +149,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // loop_done
         self.builder.position_at_end(loop_done_bb);
         let phi = self.builder.build_phi(self.types.object, "loop value");
-        announce(self, "loop_done");
 
         // loop
         self.state.push(EvalType::Loop {
@@ -252,7 +157,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             connection: phi,
         });
         self.builder.position_at_end(loop_bb);
-        announce(self, "loop");
         let tree_load: StructValue<'_> = self
             .builder
             .build_load(self.types.object, tree, "load tree")
@@ -283,8 +187,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // loop_save
         self.builder.position_at_end(loop_save_bb);
-        announce(self, "loop_save");
-        print_full_helper(self);
 
         let tree_load: StructValue<'_> = self
             .builder
@@ -304,7 +206,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 2, "cgr")
             .unwrap();
         let cgr = self.builder.build_load(self.types.object, cgr, "load cgr");
-        print_full_helper(self);
         let new_cons = self
             .builder
             .build_alloca(self.types.cons, "new cons in loop");
@@ -314,7 +215,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             this.into_struct_value(),
             cgr.into_struct_value(),
         );
-        print_full_helper(self);
         let helper_load =
             self.builder
                 .build_load(self.types.generic_pointer, helper, "load helper");
@@ -324,7 +224,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_insert_value(new_helper_value, save, 0, "insert current value")
             .unwrap();
-        print_full_helper(self);
         let new_helper_value = self
             .builder
             .build_insert_value(new_helper_value, helper_load, 1, "insert current prev")
@@ -345,7 +244,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         //     .unwrap();
         // self.builder.build_store(new_helper_prev, helper_load);
         self.builder.build_store(new_helper, new_helper_value);
-        print_full_helper(self);
         self.builder.build_store(helper, new_helper);
 
         let car = self
@@ -354,13 +252,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         let car = self.builder.build_load(self.types.object, car, "load cgr");
         self.builder.build_store(tree, car);
-        print_full_helper(self);
         self.builder.build_unconditional_branch(loop_entry_bb);
 
         // loop_swap
         self.builder.position_at_end(loop_swap_bb);
-        announce(self, "loop_swap");
-        print_full_helper(self);
         let helper_load = self
             .builder
             .build_load(self.types.generic_pointer, helper, "load helper")
@@ -392,7 +287,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_load(self.types.object, tree, "load tree")
             .into_struct_value();
         let is_tree_null = self.is_hempty(tree_load);
-        print_full_helper(self);
         let helper_load = self
             .builder
             .build_load(self.types.generic_pointer, helper, "load helper")
