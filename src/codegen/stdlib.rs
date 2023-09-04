@@ -1,6 +1,6 @@
 use inkwell::{
     types::FunctionType,
-    values::{BasicValue, BasicValueEnum, StructValue},
+    values::{BasicValue, BasicValueEnum, PointerValue, StructValue},
 };
 
 use super::{Compiler, TyprIndex};
@@ -11,11 +11,61 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     // current must expect to be passed in thunks
     // before unthunk save the current function in self.fn_value
 
+    fn extract_arguements_primitive<const N: usize>(
+        &mut self,
+        root: PointerValue<'ctx>,
+    ) -> [StructValue<'ctx>; N] {
+        let current_node = self
+            .builder
+            .build_alloca(self.types.generic_pointer, "arg pointer");
+        self.builder.build_store(current_node, root);
+        // let arg_cound = self.context.i64_type().const_zero();
+        let mut args = [self.types.object.const_zero(); N];
+        for i in 0..N {
+            let arg_load =
+                self.builder
+                    .build_load(self.types.generic_pointer, current_node, "arg_load");
+            let arg_object = self
+                .builder
+                .build_struct_gep(
+                    self.types.args,
+                    arg_load.into_pointer_value(),
+                    0,
+                    "arg data",
+                )
+                .unwrap();
+
+            let arg_object = self
+                .builder
+                .build_load(self.types.object, arg_object, "arg data")
+                .into_struct_value();
+
+            let next_arg = self
+                .builder
+                .build_struct_gep(
+                    self.types.args,
+                    arg_load.into_pointer_value(),
+                    1,
+                    "next arg",
+                )
+                .unwrap();
+            let next_arg =
+                self.builder
+                    .build_load(self.types.generic_pointer, next_arg, "load next arg");
+            self.builder.build_store(current_node, next_arg);
+            args[i] = arg_object;
+        }
+        args
+    }
+
     pub(super) fn make_print(&mut self) {
         // maybe make print should turn into make string
 
         let print_fn_ty: FunctionType<'_> = self.types.object.fn_type(
-            &[self.types.call_info.into(), self.types.object.into()],
+            &[
+                self.types.call_info.into(),
+                self.types.generic_pointer.into(),
+            ],
             false,
         );
         let print_fn = self.module.add_function("print", print_fn_ty, None);
@@ -31,8 +81,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let ret_block = self.context.append_basic_block(print_fn, "return");
         let error_block = self.context.append_basic_block(print_fn, "error");
         self.builder.position_at_end(entry_block);
-        let args = print_fn.get_nth_param(1).unwrap().into_struct_value();
-        let args = self.actual_value(args);
+        let args = self.extract_arguements_primitive::<1>(
+            print_fn.get_nth_param(1).unwrap().into_pointer_value(),
+        );
+        let args = self.actual_value(args[0]);
         let ty = self.extract_type(args).unwrap().into_int_value();
         self.builder.build_switch(
             ty,
@@ -98,7 +150,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.context.i64_type().const_int(1, false).into(),
             self.types.generic_pointer.const_null().into(),
         ]);
-        // let val = self.extract_cons( args).unwrap();
+        let value = self.make_args(&[args]);
         self.builder.build_call(
             print,
             &[self
@@ -112,13 +164,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("car").unwrap(),
-                &[call_info.into(), args.into()],
+                &[call_info.into(), value.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
-        self.builder
-            .build_call(print_fn, &[call_info.into(), val.into()], "printcar");
+        self.builder.build_call(
+            print_fn,
+            &[
+                call_info.into(),
+                self.make_args(&[val.into_struct_value()]).into(),
+            ],
+            "printcar",
+        );
         self.builder.build_call(
             print,
             &[self
@@ -132,13 +190,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_call(
                 self.module.get_function("cdr").unwrap(),
-                &[call_info.into(), args.into()],
+                &[call_info.into(), value.into()],
                 "getcar",
             )
             .try_as_basic_value()
             .unwrap_left();
-        self.builder
-            .build_call(print_fn, &[call_info.into(), val.into()], "printcar");
+        self.builder.build_call(
+            print_fn,
+            &[
+                call_info.into(),
+                self.make_args(&[val.into_struct_value()]).into(),
+            ],
+            "printcar",
+        );
         self.builder.build_call(
             print,
             &[self
@@ -148,17 +212,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into()],
             "print space",
         );
+
         let val = self
             .builder
             .build_call(
                 self.module.get_function("cgr").unwrap(),
-                &[call_info.into(), args.into()],
-                "getcar",
+                &[call_info.into(), value.into()],
+                "getcgr",
             )
             .try_as_basic_value()
             .unwrap_left();
-        self.builder
-            .build_call(print_fn, &[call_info.into(), val.into()], "printcar");
+        self.builder.build_call(
+            print_fn,
+            &[
+                call_info.into(),
+                self.make_args(&[val.into_struct_value()]).into(),
+            ],
+            "printcar",
+        );
         self.builder.build_call(
             print,
             &[self
@@ -231,16 +302,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn make_accesors(&mut self) {
         let fn_ty = self.types.object.fn_type(
-            &[self.types.call_info.into(), self.types.object.into()],
+            &[
+                self.types.call_info.into(),
+                self.types.generic_pointer.into(),
+            ],
             false,
         );
         let mut accesor = |idx, name| {
             let func = self.module.add_function(name, fn_ty, None);
             let entry = self.context.append_basic_block(func, name);
             self.builder.position_at_end(entry);
-            let args = func.get_nth_param(1).unwrap().into_struct_value();
             self.fn_value = Some(func);
-            let args = self.actual_value(args);
+
+            let args = self.extract_arguements_primitive::<1>(
+                func.get_nth_param(1).unwrap().into_pointer_value(),
+            );
+            // self.print_ir();
+            let args = self.actual_value(args[0]);
+            // self.print_ir();
             let cons_object = self.extract_cons(args).unwrap().into_struct_value();
             let car = self
                 .builder
@@ -257,16 +336,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     // create the hempty? function
     pub fn make_hempty(&mut self) {
         let fn_ty = self.types.object.fn_type(
-            &[self.types.call_info.into(), self.types.object.into()],
+            &[
+                self.types.call_info.into(),
+                self.types.generic_pointer.into(),
+            ],
             false,
         );
         let func = self.module.add_function("hempty?", fn_ty, None);
         let entry = self.context.append_basic_block(func, "hempty?");
         self.builder.position_at_end(entry);
-        let arg = func.get_nth_param(1).unwrap().into_struct_value();
         self.fn_value = Some(func);
-        let arg = self.actual_value(arg);
-        let is_hempty = self.is_hempty(arg);
+        let args = self
+            .extract_arguements_primitive::<1>(func.get_nth_param(1).unwrap().into_pointer_value());
+        let args = self.actual_value(args[0]);
+        let is_hempty = self.is_hempty(args);
         self.builder.build_return(Some(&self.boolean(is_hempty)));
         self.insert_function("hempty?".into(), func);
     }
@@ -276,5 +359,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_add();
         self.make_print();
         self.make_hempty();
+    }
+
+    fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {
+        let null = self.types.generic_pointer.const_null();
+        args.iter().fold(null, |init, current| {
+            let ptr = self.builder.build_alloca(self.types.args, "add arg");
+            self.builder.build_store(ptr, current.clone());
+            let next = self
+                .builder
+                .build_struct_gep(self.types.args, ptr, 1, "next arg")
+                .unwrap();
+            self.builder.build_store(next, init);
+            ptr
+        })
     }
 }

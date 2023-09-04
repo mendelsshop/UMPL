@@ -1,13 +1,47 @@
-use inkwell::{
-    values::{AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, StructValue},
-    AddressSpace,
-};
+use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, PointerValue};
 
-use crate::interior_mut::RC;
+use crate::ast::Fanction;
 
 use super::{Compiler, EvalType, TyprIndex};
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    fn extract_arguements(&mut self, root: PointerValue<'ctx>, functiontype: &Fanction) {
+        let current_node = self
+            .builder
+            .build_alloca(self.types.generic_pointer, "arg pointer");
+        self.builder.build_store(current_node, root);
+        // let arg_cound = self.context.i64_type().const_zero();
+
+        for i in 0..functiontype.param_count() {
+            let arg_load =
+                self.builder
+                    .build_load(self.types.generic_pointer, current_node, "arg_load");
+            let arg_object = self
+                .builder
+                .build_struct_gep(
+                    self.types.args,
+                    arg_load.into_pointer_value(),
+                    0,
+                    "arg data",
+                )
+                .unwrap();
+            self.insert_variable(i.to_string().into(), arg_object);
+            let next_arg = self
+                .builder
+                .build_struct_gep(
+                    self.types.args,
+                    arg_load.into_pointer_value(),
+                    1,
+                    "next arg",
+                )
+                .unwrap();
+            let next_arg =
+                self.builder
+                    .build_load(self.types.generic_pointer, next_arg, "load next arg");
+            self.builder.build_store(current_node, next_arg);
+        }
+    }
+
     pub(crate) fn compile_function(
         &mut self,
         r#fn: &crate::ast::Fanction,
@@ -20,15 +54,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let name = r#fn
             .name()
             .map_or("lambda".to_string(), |name| name.to_string());
-        let mut arg_types: Vec<_> = std::iter::repeat(self.types.object)
-            .take(r#fn.param_count())
-            .map(std::convert::Into::into)
-            .collect();
         // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
-        arg_types.insert(0, self.types.call_info.into());
-        arg_types.insert(0, env.0.ptr_type(AddressSpace::default()).into());
+        // arg_types.insert(0, self.types.call_info.into());
+        // arg_types.insert(0, env.0.ptr_type(AddressSpace::default()).into());
         let ret_type = self.types.object;
-        let fn_type = ret_type.fn_type(&arg_types, false);
+        let fn_type = ret_type.fn_type(
+            &[
+                self.types.generic_pointer.into(),
+                self.types.call_info.into(),
+                self.types.generic_pointer.into(),
+            ],
+            false,
+        );
         let fn_value = self.module.add_function(&name, fn_type, None);
         for (name, arg) in fn_value.get_param_iter().skip(2).enumerate() {
             arg.set_name(&name.to_string());
@@ -47,7 +84,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(fn_value, "normal evaluation");
         let is_jmp = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
+            inkwell::IntPredicate::NE,
             jmp_block,
             self.types.generic_pointer.const_null(),
             "is null",
@@ -83,17 +120,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.build_store(alloca, arg);
             self.insert_variable(cn.clone(), alloca);
         }
-        for (i, arg) in fn_value
-            .get_param_iter()
-            .skip(2)
-            .take(r#fn.param_count())
-            .enumerate()
-        {
-            let arg_name: RC<str> = i.to_string().into();
-            let alloca = self.create_entry_block_alloca(self.types.object, &arg_name)?;
-            self.builder.build_store(alloca, arg);
-            self.insert_variable(arg_name, alloca);
-        }
+        let args = fn_value.get_nth_param(2).unwrap().into_pointer_value();
+        self.extract_arguements(args, r#fn);
         self.builder
             .position_at_end(fn_value.get_last_basic_block().unwrap());
         self.state.push(EvalType::Function);
@@ -153,19 +181,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let cont_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "cont-application");
-        let null= self.types.generic_pointer.const_null();
-        let args = return_none!(application
-            .args()
-            .iter()
-            .skip(1)
-            .try_fold(null, |init, current| {
-                let ptr = self.builder.build_alloca(self.types.args, "add arg");
-                self.builder.build_store(ptr, self.const_thunk(current.clone())?);
-                let next = self.builder.build_struct_gep(self.types.args, ptr, 1, "next arg").unwrap();
-                self.builder.build_store(next, init);
-                Some(ptr)
-            })
-        );
+        let null = self.types.generic_pointer.const_null();
+        let args =
+            return_none!(application
+                .args()
+                .iter()
+                .skip(1)
+                .try_fold(null, |init, current| {
+                    let ptr = self.builder.build_alloca(self.types.args, "add arg");
+                    self.builder
+                        .build_store(ptr, self.const_thunk(current.clone())?);
+                    let next = self
+                        .builder
+                        .build_struct_gep(self.types.args, ptr, 1, "next arg")
+                        .unwrap();
+                    self.builder.build_store(next, init);
+                    Some(ptr)
+                }));
         let fn_ty = self.extract_type(val).unwrap();
         let is_primitive = self.builder.build_int_compare(
             inkwell::IntPredicate::EQ,
