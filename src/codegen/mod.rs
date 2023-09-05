@@ -1,6 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -12,8 +10,8 @@ use inkwell::{
     passes::PassManager,
     types::{BasicType, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
-        BasicValue, BasicValueEnum, FunctionValue, GlobalValue, IntValue,
-        PhiValue, PointerValue, StructValue, InstructionValue,
+        BasicValue, BasicValueEnum, FunctionValue, GlobalValue, InstructionValue, IntValue,
+        PhiValue, PointerValue, StructValue,
     },
     AddressSpace,
 };
@@ -109,7 +107,7 @@ pub struct Compiler<'a, 'ctx> {
     state: Vec<EvalType<'ctx>>,
     // used to recover where eval was in when evaling from repl
     main: Option<(FunctionValue<'ctx>, BasicBlock<'ctx>)>,
-    non_found_links: Vec<(RC<str>, BasicBlock<'ctx>, Option<InstructionValue<'ctx>>)>
+    non_found_links: Vec<(RC<str>, BasicBlock<'ctx>, Option<InstructionValue<'ctx>>)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -242,7 +240,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             functions,
             state: vec![],
             main: None,
-            non_found_links: vec![]
+            non_found_links: vec![],
         }
     }
 
@@ -350,20 +348,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // should add unreachable after this?
             // what should this return?
             UMPL2Expr::Label(s) => {
-                if let Some(link) =  self.links.get(s) {
-                let call_info = self.types.call_info.const_named_struct(&[
-                    self.context.i64_type().const_zero().into(),
-                    link.0.into(),
-                ]);
+                if let Some(link) = self.links.get(s) {
+                    let call_info = self.types.call_info.const_named_struct(&[
+                        self.context.i64_type().const_zero().into(),
+                        link.0.into(),
+                    ]);
 
-                self.builder.build_call(link.1, &[self.types.generic_pointer.const_null().into(), call_info.into(), self.types.generic_pointer.const_null().into()], "jump");
+                    self.builder.build_call(
+                        link.1,
+                        &[
+                            self.types.generic_pointer.const_null().into(),
+                            call_info.into(),
+                            self.types.generic_pointer.const_null().into(),
+                        ],
+                        "jump",
+                    );
                 // maybe should be signal that we jumped somewhere
                 } else {
                     let basic_block = self.builder.get_insert_block().unwrap();
                     // will be overriden later if we have a link for the basic block
                     self.builder.build_alloca(self.types.ty, "placeholder");
                     let last_inst = basic_block.get_last_instruction();
-                    self.non_found_links.push((s.clone(), basic_block, last_inst));
+                    self.non_found_links
+                        .push((s.clone(), basic_block, last_inst));
                 }
                 Ok(Some(self.hempty().into()))
             }
@@ -480,16 +487,40 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.new_env();
             let main_fn_type = self.context.i32_type().fn_type(&[], false);
             let main_fn = self.module.add_function("main", main_fn_type, None);
-            let main_block= self.context.append_basic_block(main_fn, "entry");
-            let inner_main_fn_type = self.context.i32_type().fn_type(&[self.types.generic_pointer.into(), self.types.call_info.into(), self.types.generic_pointer.into()], false);
+            let main_block = self.context.append_basic_block(main_fn, "entry");
+            let inner_main_fn_type = self.context.i32_type().fn_type(
+                &[
+                    self.types.generic_pointer.into(),
+                    self.types.call_info.into(),
+                    self.types.generic_pointer.into(),
+                ],
+                false,
+            );
             let inner_main_fn = self.module.add_function("main", inner_main_fn_type, None);
             self.builder.position_at_end(main_block);
-            self.builder.build_return(Some(&self.builder.build_call(inner_main_fn, &[self.types.generic_pointer.const_null().into(), self.types.call_info.const_named_struct(&[
-                self.context.i64_type().const_zero().into(),
-                self.types.generic_pointer.const_null().into()
-            ]).into(), self.types.generic_pointer.const_null().into()], "main").try_as_basic_value().unwrap_left()));
+            self.builder.build_return(Some(
+                &self
+                    .builder
+                    .build_call(
+                        inner_main_fn,
+                        &[
+                            self.types.generic_pointer.const_null().into(),
+                            self.types
+                                .call_info
+                                .const_named_struct(&[
+                                    self.context.i64_type().const_zero().into(),
+                                    self.types.generic_pointer.const_null().into(),
+                                ])
+                                .into(),
+                            self.types.generic_pointer.const_null().into(),
+                        ],
+                        "main",
+                    )
+                    .try_as_basic_value()
+                    .unwrap_left(),
+            ));
 
-            let main_block= self.context.append_basic_block(inner_main_fn, "entry");
+            let main_block = self.context.append_basic_block(inner_main_fn, "entry");
             self.builder.position_at_end(main_block);
             let call_info = inner_main_fn.get_nth_param(1).unwrap().into_struct_value();
             let jmp_block = self
@@ -497,10 +528,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_extract_value(call_info, 1, "basic block address")
                 .unwrap()
                 .into_pointer_value();
-            let jump_bb = self.context.append_basic_block( inner_main_fn, "not-jmp");
+            let jump_bb = self.context.append_basic_block(inner_main_fn, "not-jmp");
             let cont_bb = self
                 .context
-                .append_basic_block( inner_main_fn, "normal evaluation");
+                .append_basic_block(inner_main_fn, "normal evaluation");
             let is_jmp = self.builder.build_int_compare(
                 inkwell::IntPredicate::NE,
                 jmp_block,
@@ -512,33 +543,44 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.position_at_end(jump_bb);
             self.builder.build_indirect_branch(jmp_block, &[]);
             self.builder.position_at_end(cont_bb);
-            self.main = Some((inner_main_fn,cont_bb));
+            self.main = Some((inner_main_fn, cont_bb));
             (inner_main_fn, cont_bb)
         }
     }
 
-
     pub fn resolve_links(&mut self) {
-        self.non_found_links = std::mem::take(&mut self.non_found_links).into_iter().filter(|link|
-        {
-            if let Some(link_info) = self.links.get(&link.0) {
-                // link.2 shouldnt be none b/c of place holder
-                if let Some(inst)  = link.2 {
-                    self.builder.position_at(link.1, &inst)
-                    
-                }
-                let call_info = self.types.call_info.const_named_struct(&[
-                    self.context.i64_type().const_zero().into(),
-                    link_info.0.into(),
-                ]);
+        self.non_found_links = std::mem::take(&mut self.non_found_links)
+            .into_iter()
+            .filter(|link| {
+                if let Some(link_info) = self.links.get(&link.0) {
+                    // link.2 shouldnt be none b/c of place holder
+                    if let Some(inst) = link.2 {
+                        self.builder.position_at(link.1, &inst)
+                    }
+                    let call_info = self.types.call_info.const_named_struct(&[
+                        self.context.i64_type().const_zero().into(),
+                        link_info.0.into(),
+                    ]);
 
-                self.builder.build_call(link_info.1, &[self.types.generic_pointer.const_null().into(), call_info.into(), self.types.generic_pointer.const_null().into()], "jump");
-            false
-            } else {
-                println!("Warning link {} not resolved bad behaviour may occur", link.0);
-            true
-            }
-        }).collect();
+                    self.builder.build_call(
+                        link_info.1,
+                        &[
+                            self.types.generic_pointer.const_null().into(),
+                            call_info.into(),
+                            self.types.generic_pointer.const_null().into(),
+                        ],
+                        "jump",
+                    );
+                    false
+                } else {
+                    println!(
+                        "Warning link {} not resolved bad behaviour may occur",
+                        link.0
+                    );
+                    true
+                }
+            })
+            .collect();
     }
 
     pub fn compile_program(
@@ -547,11 +589,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         _links: HashSet<RC<str>>,
     ) -> Option<String> {
         let (main_fn, main_block) = self.get_main();
-        
+
         self.fn_value = Some(main_fn);
-    
+
         self.builder.position_at_end(main_block);
-        if let Some(term)=main_block.get_terminator() {
+        if let Some(term) = main_block.get_terminator() {
             term.erase_from_basic_block()
         }
 
@@ -578,6 +620,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             fpm.add_merge_functions_pass();
             fpm.add_global_dce_pass();
             fpm.add_ipsccp_pass();
+            // makes hard to debug llvm ir
             // fpm.add_strip_symbol_pass();
             fpm.add_constant_merge_pass();
 
@@ -588,7 +631,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             fpm.add_basic_alias_analysis_pass();
             fpm.add_promote_memory_to_register_pass();
             fpm.add_aggressive_inst_combiner_pass();
-            fpm.add_cfg_simplification_pass();
+            // // doesn't work with current goto implementation
+            // // fpm.add_cfg_simplification_pass();
             fpm.add_aggressive_dce_pass();
             fpm.add_instruction_simplify_pass();
             fpm.add_function_inlining_pass();
@@ -613,7 +657,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn run(&self) -> i32 {
         unsafe {
             self.jit
-                .run_function_as_main(self.module.get_function("main").unwrap(), &[]) as i32
+                .run_function_as_main(self.module.get_function("main").unwrap(), &[])
+                as i32
         }
     }
 

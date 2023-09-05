@@ -1,6 +1,7 @@
 link @x  @y
-    if &  ! & means true
+    if |  ! & means true
         do ᚜@y᚛  !goto @x
         otherwise ᚜(print .hi.)<᚛ !print hi
+(print .not skipped.)>
     @x
     (print .done.)> !print done (using > notation)
