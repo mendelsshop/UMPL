@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    iter,
 };
 
 use inkwell::{
@@ -13,8 +12,8 @@ use inkwell::{
     passes::PassManager,
     types::{BasicType, FloatType, FunctionType, IntType, PointerType, StructType},
     values::{
-        BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, GlobalValue, IntValue,
-        PhiValue, PointerValue, StructValue,
+        BasicValue, BasicValueEnum, FunctionValue, GlobalValue, IntValue,
+        PhiValue, PointerValue, StructValue, InstructionValue,
     },
     AddressSpace,
 };
@@ -110,6 +109,7 @@ pub struct Compiler<'a, 'ctx> {
     state: Vec<EvalType<'ctx>>,
     // used to recover where eval was in when evaling from repl
     main: Option<(FunctionValue<'ctx>, BasicBlock<'ctx>)>,
+    non_found_links: Vec<(RC<str>, BasicBlock<'ctx>, Option<InstructionValue<'ctx>>)>
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -241,7 +241,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             links: HashMap::new(),
             functions,
             state: vec![],
-            main: None
+            main: None,
+            non_found_links: vec![]
         }
     }
 
@@ -349,22 +350,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // should add unreachable after this?
             // what should this return?
             UMPL2Expr::Label(s) => {
-                let link = self.links.get(s).unwrap();
+                if let Some(link) =  self.links.get(s) {
                 let call_info = self.types.call_info.const_named_struct(&[
                     self.context.i64_type().const_zero().into(),
                     link.0.into(),
                 ]);
 
-                // we subtract 2 b/c the first 2 params are just needed for evaluation (like captured environment, call_info like number of parameters ...)
-                let args_count = link.1.count_params() - 2;
-                let mut args = iter::repeat(self.types.object.const_zero())
-                    .take(args_count as usize)
-                    .map(std::convert::Into::into)
-                    .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
-                args.insert(0, call_info.into());
-                args.insert(0, self.types.generic_pointer.const_null().into());
-                self.builder.build_call(link.1, &args, "jump");
+                self.builder.build_call(link.1, &[self.types.generic_pointer.const_null().into(), call_info.into(), self.types.generic_pointer.const_null().into()], "jump");
                 // maybe should be signal that we jumped somewhere
+                } else {
+                    let basic_block = self.builder.get_insert_block().unwrap();
+                    // will be overriden later if we have a link for the basic block
+                    self.builder.build_alloca(self.types.ty, "placeholder");
+                    let last_inst = basic_block.get_last_instruction();
+                    self.non_found_links.push((s.clone(), basic_block, last_inst));
+                }
                 Ok(Some(self.hempty().into()))
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
@@ -375,10 +375,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;
                 let ptr = self.create_entry_block_alloca(ty, i).unwrap();
-                // let ptr = self.module.add_global(ty, Some(AddressSpace::default()), i).as_pointer_value();
                 self.builder.build_store(ptr, v);
                 self.insert_variable(i.clone(), ptr);
-                // self.context.o
                 return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
             }
             // create new basic block use uncdoital br to new bb
@@ -483,9 +481,64 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let main_fn_type = self.context.i32_type().fn_type(&[], false);
             let main_fn = self.module.add_function("main", main_fn_type, None);
             let main_block= self.context.append_basic_block(main_fn, "entry");
-            self.main = Some((main_fn, main_block));
-            (main_fn, main_block)
+            let inner_main_fn_type = self.context.i32_type().fn_type(&[self.types.generic_pointer.into(), self.types.call_info.into(), self.types.generic_pointer.into()], false);
+            let inner_main_fn = self.module.add_function("main", inner_main_fn_type, None);
+            self.builder.position_at_end(main_block);
+            self.builder.build_return(Some(&self.builder.build_call(inner_main_fn, &[self.types.generic_pointer.const_null().into(), self.types.call_info.const_named_struct(&[
+                self.context.i64_type().const_zero().into(),
+                self.types.generic_pointer.const_null().into()
+            ]).into(), self.types.generic_pointer.const_null().into()], "main").try_as_basic_value().unwrap_left()));
+
+            let main_block= self.context.append_basic_block(inner_main_fn, "entry");
+            self.builder.position_at_end(main_block);
+            let call_info = inner_main_fn.get_nth_param(1).unwrap().into_struct_value();
+            let jmp_block = self
+                .builder
+                .build_extract_value(call_info, 1, "basic block address")
+                .unwrap()
+                .into_pointer_value();
+            let jump_bb = self.context.append_basic_block( inner_main_fn, "not-jmp");
+            let cont_bb = self
+                .context
+                .append_basic_block( inner_main_fn, "normal evaluation");
+            let is_jmp = self.builder.build_int_compare(
+                inkwell::IntPredicate::NE,
+                jmp_block,
+                self.types.generic_pointer.const_null(),
+                "is null",
+            );
+            self.builder
+                .build_conditional_branch(is_jmp, jump_bb, cont_bb);
+            self.builder.position_at_end(jump_bb);
+            self.builder.build_indirect_branch(jmp_block, &[]);
+            self.builder.position_at_end(cont_bb);
+            self.main = Some((inner_main_fn,cont_bb));
+            (inner_main_fn, cont_bb)
         }
+    }
+
+
+    pub fn resolve_links(&mut self) {
+        self.non_found_links = std::mem::take(&mut self.non_found_links).into_iter().filter(|link|
+        {
+            if let Some(link_info) = self.links.get(&link.0) {
+                // link.2 shouldnt be none b/c of place holder
+                if let Some(inst)  = link.2 {
+                    self.builder.position_at(link.1, &inst)
+                    
+                }
+                let call_info = self.types.call_info.const_named_struct(&[
+                    self.context.i64_type().const_zero().into(),
+                    link_info.0.into(),
+                ]);
+
+                self.builder.build_call(link_info.1, &[self.types.generic_pointer.const_null().into(), call_info.into(), self.types.generic_pointer.const_null().into()], "jump");
+            false
+            } else {
+                println!("Warning link {} not resolved bad behaviour may occur", link.0);
+            true
+            }
+        }).collect();
     }
 
     pub fn compile_program(
@@ -508,6 +561,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Err(e) => return Some(e),
             }
         }
+        let insert_bb = self.builder.get_insert_block().unwrap();
+        self.resolve_links();
+        self.builder.position_at_end(insert_bb);
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         self.main = Some((main_fn, self.builder.get_insert_block().unwrap()));

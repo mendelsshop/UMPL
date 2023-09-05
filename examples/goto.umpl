@@ -3,4 +3,4 @@ link @x  @y
         do ᚜@y᚛  !goto @x
         otherwise ᚜(print .hi.)<᚛ !print hi
     @x
-    (.done.)> !print done (using > notation)
+    (print .done.)> !print done (using > notation)
