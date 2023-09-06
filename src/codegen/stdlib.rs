@@ -19,7 +19,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_alloca(self.types.generic_pointer, "arg pointer");
         self.builder.build_store(current_node, root);
-        // let arg_cound = self.context.i64_type().const_zero();
         let mut args = [self.types.object.const_zero(); N];
         for i in 0..N {
             let arg_load =
@@ -57,6 +56,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
         args
     }
+
+    // fn build_var_arg(&mut self, action: impl Fn(BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
+
+    // }
 
     pub(super) fn make_print(&mut self) {
         // maybe make print should turn into make string
@@ -281,22 +284,73 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_function("print".into(), print_fn)
     }
 
+    // coulsd make this a in umpl defined function and have + be primitive function of 2 parameters
+    // and would probally be easier and less duplication for * / - ...
     pub(super) fn make_add(&mut self) {
-        let fn_ty = self.types.primitive_ty;
+        let fn_ty = self.types.object.fn_type(
+            &[
+                self.types.call_info.into(),
+                self.types.generic_pointer.into(),
+            ],
+            false,
+        );
         let func = self.module.add_function("add", fn_ty, None);
         self.fn_value = Some(func);
         let entry = self.context.append_basic_block(func, "entry");
+
         self.builder.position_at_end(entry);
-        let va_list = self
-            .create_entry_block_alloca(self.types.generic_pointer, "va_list")
+        let current_node = self
+            .builder
+            .build_alloca(self.types.generic_pointer, "arg pointer");
+        self.builder
+            .build_store(current_node, func.get_nth_param(1).unwrap());
+        let init = self.types.number.const_zero();
+        let sum = self.builder.build_alloca(self.types.number, "return sum");
+        self.builder.build_store(sum, init);
+        let is_done_bb = self.context.append_basic_block(func, "done args?");
+        let process_arg_bb = self.context.append_basic_block(func, "process arg");
+        let done_bb = self.context.append_basic_block(func, "done args");
+
+        self.builder.build_unconditional_branch(is_done_bb);
+        self.builder.position_at_end(is_done_bb);
+        let load_args =
+            self.builder
+                .build_load(self.types.generic_pointer, current_node, "load args");
+        let is_done = self
+            .builder
+            .build_is_null(load_args.into_pointer_value(), "mull = done args");
+        self.builder
+            .build_conditional_branch(is_done, done_bb, process_arg_bb);
+
+        self.builder.position_at_end(process_arg_bb);
+        let arg = self.builder.build_load(
+            self.types.args,
+            load_args.into_pointer_value(),
+            "actual load arg",
+        );
+        let current = self
+            .builder
+            .build_extract_value(arg.into_struct_value(), 0, "get_arg_value")
             .unwrap();
+        let current = self.actual_value(current.into_struct_value());
+        let current = self.extract_number(current).unwrap().into_float_value();
+        let old = self.builder.build_load(self.types.number, sum, "load sum");
+        let init = self
+            .builder
+            .build_float_add(old.into_float_value(), current, "add");
+        self.builder.build_store(sum, init);
+        let next_arg = self
+            .builder
+            .build_extract_value(arg.into_struct_value(), 1, "get next arg")
+            .unwrap();
+        self.builder.build_store(current_node, next_arg);
+        self.builder.build_unconditional_branch(is_done_bb);
+        self.builder.position_at_end(done_bb);
+        let sum = self
+            .builder
+            .build_load(self.types.number, sum, "load sum for returning");
         self.builder
-            .build_call(self.functions.va_start, &[va_list.into()], "init args");
-        self.builder
-            .build_va_arg(va_list, self.types.generic_pointer, "va first");
-        self.builder
-            .build_call(self.functions.va_end, &[va_list.into()], "va end");
-        self.builder.build_return(Some(&self.hempty()));
+            .build_return(Some(&self.number(sum.into_float_value())));
         self.insert_function("add".into(), func);
     }
 
@@ -334,6 +388,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     // create the hempty? function
+    // could be written in pure umpl .. efficiency
     pub fn make_hempty(&mut self) {
         let fn_ty = self.types.object.fn_type(
             &[
@@ -354,11 +409,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_function("hempty?".into(), func);
     }
 
+    // could be written in pure umpl .. efficiency
+    pub fn make_newline(&mut self) {
+        let fn_ty = self.types.object.fn_type(
+            &[
+                self.types.call_info.into(),
+                self.types.generic_pointer.into(),
+            ],
+            false,
+        );
+        let func = self.module.add_function("newline", fn_ty, None);
+        let entry = self.context.append_basic_block(func, "entry");
+        self.builder.position_at_end(entry);
+        self.builder.build_call(
+            self.functions.printf,
+            &[self
+                .builder
+                .build_global_string_ptr("\n", "newline")
+                .as_basic_value_enum()
+                .into()],
+            "print newline",
+        );
+        self.builder
+            .build_return(Some(&self.const_string(&"\n".into())));
+        self.insert_function("newline".into(), func);
+    }
+
     pub(super) fn init_stdlib(&mut self) {
         self.make_accesors();
         self.make_add();
         self.make_print();
         self.make_hempty();
+        self.make_newline();
     }
 
     fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {
