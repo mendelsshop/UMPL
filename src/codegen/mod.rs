@@ -85,6 +85,7 @@ pub struct Functions<'ctx> {
     pub va_end: FunctionValue<'ctx>,
     exit: FunctionValue<'ctx>,
     printf: FunctionValue<'ctx>,
+    rand: FunctionValue<'ctx>,
 }
 
 #[derive(Clone, Debug)]
@@ -195,6 +196,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .fn_type(&[context.i32_type().into()], false),
             Some(Linkage::External),
         );
+        let rand = module.add_function(
+            "rand",
+            context.i32_type().fn_type(&[], false),
+            Some(Linkage::External),
+        );
         let printf = module.add_function(
             "printf",
             context.i32_type().fn_type(&[types.string.into()], true),
@@ -209,6 +215,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             va_end,
             exit,
             printf,
+            rand,
         };
         kind.set_body(
             &[

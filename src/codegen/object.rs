@@ -58,14 +58,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.number(self.types.number.const_float(value))
     }
     pub(crate) fn const_boolean(&self, value: Boolean) -> StructValue<'ctx> {
-        self.boolean(self.types.boolean.const_int(
-            match value {
-                Boolean::False => 0,
-                Boolean::True => 1,
-                Boolean::Maybee => todo!(),
-            },
-            false,
-        ))
+        match value {
+            Boolean::False => self.boolean(self.types.boolean.const_int(0, false)),
+            Boolean::True => self.boolean(self.types.boolean.const_int(1, false)),
+            Boolean::Maybee => {
+                // gen psudo rand number
+                let random = self
+                    .builder
+                    .build_call(self.functions.rand, &[], "random number")
+                    .try_as_basic_value()
+                    .unwrap_left();
+                // mod it to be 0 or 1
+                let random_bool = self.builder.build_int_unsigned_rem(
+                    random.into_int_value(),
+                    self.context.i32_type().const_int(2, false),
+                    "get random bool",
+                );
+                // trunc it to bool
+                let random_bool = self.builder.build_int_truncate(
+                    random_bool,
+                    self.types.boolean,
+                    "trunc to bool",
+                );
+                self.boolean(random_bool)
+            }
+        }
     }
 
     pub(crate) fn const_string(&mut self, value: &RC<str>) -> StructValue<'ctx> {
