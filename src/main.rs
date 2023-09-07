@@ -108,10 +108,12 @@ fn repl() {
 
     let mut input = String::new();
     let mut input_new = String::new();
-    let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
+    // we use repl as opposed to jit see https://github.com/TheDan64/inkwell/issues/397
+    let mut complier =
+        { Compiler::new(&context, &module, &builder, &fpm, codegen::EngineType::Jit) };
     while let Ok(_) = {
         print!(">>> ");
-        io::stdout().flush();
+        io::stdout().flush().expect("couldn't flush output");
         io::stdin().read_line(&mut input_new)
     } {
         if input_new.trim() == "run" {
@@ -123,7 +125,7 @@ fn repl() {
             complier.compile_program(&program.1, program.0).map_or_else(
                 || {
                     complier.export_ir("bin/main");
-                    complier.run();
+                    complier.run().expect("no execution engine found");
                     println!();
                 },
                 |err| {
@@ -151,7 +153,8 @@ fn compile(file: &str, out: &str) {
 
     // Create FPM
     let fpm = init_function_optimizer(&module);
-    let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
+    let mut complier =
+        { Compiler::new(&context, &module, &builder, &fpm, codegen::EngineType::None) };
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
             // TODO: actually compile the program not just generate llvm ir
@@ -173,10 +176,11 @@ fn run(file: &str) {
     let builder = context.create_builder();
     // Create FPM
     let fpm = init_function_optimizer(&module);
-    let mut complier = { Compiler::new(&context, &module, &builder, &fpm) };
+    let mut complier =
+        { Compiler::new(&context, &module, &builder, &fpm, codegen::EngineType::Jit) };
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
-            let ret = complier.run();
+            let ret = complier.run().expect("no execution engine found");
             exit(ret);
         },
         |err| {

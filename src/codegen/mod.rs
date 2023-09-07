@@ -100,7 +100,6 @@ pub struct Compiler<'a, 'ctx> {
     // so we don't store multiple sof the same identifiers
     pub(crate) ident: HashMap<RC<str>, GlobalValue<'ctx>>,
     fn_value: Option<FunctionValue<'ctx>>,
-    jit: ExecutionEngine<'ctx>,
     links: HashMap<RC<str>, (PointerValue<'ctx>, FunctionValue<'ctx>)>,
     pub(crate) types: Types<'ctx>,
     // not were umpl functions are stored
@@ -109,6 +108,7 @@ pub struct Compiler<'a, 'ctx> {
     // used to recover where eval was in when evaling from repl
     main: Option<(FunctionValue<'ctx>, BasicBlock<'ctx>)>,
     non_found_links: Vec<(RC<str>, BasicBlock<'ctx>, Option<InstructionValue<'ctx>>)>,
+    engine: Option<ExecutionEngine<'ctx>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -131,16 +131,24 @@ pub enum TyprIndex {
     primitive = 8,
 }
 
+#[derive(Debug)]
+pub enum EngineType {
+    // for running in repl mode
+    Repl,
+    // for when running code once
+    Jit,
+    // for plain compilation
+    None,
+}
+
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn new(
         context: &'ctx Context,
         module: &'a Module<'ctx>,
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
+        ee_type: EngineType,
     ) -> Self {
-        let jit = module
-            .create_jit_execution_engine(inkwell::OptimizationLevel::None)
-            .unwrap();
         let env_ptr: PointerType<'ctx> = context
             .struct_type(&[], false)
             .ptr_type(AddressSpace::default());
@@ -241,13 +249,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             string: HashMap::new(),
             ident: HashMap::new(),
             fn_value: None,
-            jit,
             types,
             links: HashMap::new(),
             functions,
             state: vec![],
             main: None,
             non_found_links: vec![],
+            engine: Self::create_engine(module, ee_type),
+        }
+    }
+
+    // because we cannot have multiple engines per module
+    fn create_engine(
+        module: &'a Module<'ctx>,
+        ee_type: EngineType,
+    ) -> Option<ExecutionEngine<'ctx>> {
+        match ee_type {
+            EngineType::Repl => Some(module.create_execution_engine().unwrap()),
+            EngineType::Jit => Some(
+                module
+                    .create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive)
+                    .unwrap(),
+            ),
+            EngineType::None => None,
         }
     }
 
@@ -270,6 +294,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     where
         T: BasicType<'ctx>,
     {
+        // self.engine.unwrap().
         let old_block = self.builder.get_insert_block();
         let fn_value = self.current_fn_value()?;
         // if a function is already allocated it will have an entry block so its fine to unwrap
@@ -596,7 +621,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         _links: HashSet<RC<str>>,
     ) -> Option<String> {
         let (main_fn, main_block) = self.get_main();
-
         self.fn_value = Some(main_fn);
 
         self.builder.position_at_end(main_block);
@@ -661,11 +685,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn print_ir(&self) {
         self.module.print_to_stderr();
     }
-    pub fn run(&self) -> i32 {
+    pub fn run(&self) -> Option<i32> {
         unsafe {
-            self.jit
-                .run_function_as_main(self.module.get_function("main").unwrap(), &[])
-                as i32
+            self.engine.as_ref().map(|engine| {
+                // still need better soloution for only executing only need code inr repl
+                // remove module from ee so we can reuse
+                engine.remove_module(self.module).unwrap();
+                // add module back to ee
+                engine.add_module(self.module).unwrap();
+                let v = engine.run_function_as_main(self.module.get_function("main").unwrap(), &[])
+                    as i32;
+                v
+            })
         }
     }
 
