@@ -68,6 +68,9 @@ impl Analyzer {
                 self.find_links(fanction.scope_mut());
             }
             UMPL2Expr::Let(_, v) | UMPL2Expr::Quoted(v) => self.find_link(v),
+            UMPL2Expr::Module(r#mod) => {
+                self.find_links(r#mod.inner_mut());
+            }
 
         }
     }
@@ -138,6 +141,9 @@ impl Analyzer {
             }
             UMPL2Expr::Let(_, v) => self.find_label(v),
             UMPL2Expr::ComeTo(_) => todo!(),
+            UMPL2Expr::Module(r#mod) => {
+                self.find_labels(r#mod.inner_mut());
+            }
         }
     }
 

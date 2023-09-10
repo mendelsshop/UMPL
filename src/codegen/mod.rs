@@ -433,6 +433,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(block);
                 Ok(Some(self.hempty().into()))
             }
+            UMPL2Expr::Module(_) => todo!(),
         }
     }
 

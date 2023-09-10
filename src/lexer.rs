@@ -7,7 +7,7 @@ use parse_int::parse;
 use crate::{
     ast::{
         Application, Boolean, Fanction, GoThrough, If, PrintType, UMPL2Expr, Unless, Until,
-        Varidiac,
+        Varidiac, Module,
     },
     pc::{
         alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
@@ -231,6 +231,28 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
             let_stmt(),
         ]
         .to_vec(),
+    )
+}
+
+fn mod_stmt() -> Box<Parser<UMPL2Expr>> {
+    map(
+        chain(satify(|c| c.is_ascii_alphabetic()), alt(scope(umpl2expr()), try_map(stringdot(), |string|{
+            let UMPL2Expr::String(path) = string else {
+                panic!("error in parser combinator")
+            };
+            let fc = std::fs::read_to_string(path.to_string()).map_err(|e|ParseError {
+                kind: ParseErrorType::Other(format!("failed to read file {path}: {e}")),
+                input: ""
+            })?;
+            // ther has to be abtter way then leaking
+            umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
+        }))),
+        |(name, code)| {
+            let UMPL2Expr::Scope(s) = code else {
+                panic!("error in parser combinator")
+            };
+            UMPL2Expr::Module(Module::new(name.to_string(), s))
+        }
     )
 }
 

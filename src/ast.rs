@@ -47,6 +47,22 @@ pub enum UMPL2Expr {
     Link(RC<str>, Vec<RC<str>>),
     Let(RC<str>, Box<UMPL2Expr>),
     ComeTo(RC<str>),
+    Module(Module),
+}
+#[derive(Clone, Default, PartialEq, Debug)]
+pub struct Module {
+    name: String,
+    inner: Vec<UMPL2Expr>
+}
+
+impl Module {
+    pub fn new(name: String, inner: Vec<UMPL2Expr>) -> Self { Self { name, inner } }
+
+
+
+    pub fn inner_mut(&mut self) -> &mut Vec<UMPL2Expr> {
+        &mut self.inner
+    }
 }
 
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
@@ -73,6 +89,7 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
             Self::Link(_, _) => todo!(),
             Self::Let(_, _) => todo!(),
             Self::ComeTo(_) => todo!(),
+            Self::Module(_) => todo!(),
         }
     }
 }
@@ -128,6 +145,7 @@ impl core::fmt::Display for UMPL2Expr {
             Self::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
             Self::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
             Self::ComeTo(f0) => write!(f, "Come to {f0}"),
+            Self::Module(arg0) => f.debug_tuple("Module").field(arg0).finish(),
         }
     }
 }
