@@ -6,8 +6,8 @@ use parse_int::parse;
 
 use crate::{
     ast::{
-        Application, Boolean, Fanction, GoThrough, If, PrintType, UMPL2Expr, Unless, Until,
-        Varidiac, Module,
+        Application, Boolean, Fanction, GoThrough, If, Module, PrintType, UMPL2Expr, Unless, Until,
+        Varidiac,
     },
     pc::{
         alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
@@ -221,6 +221,7 @@ fn escape_string() -> Box<Parser<char>> {
 fn stmt() -> Box<Parser<UMPL2Expr>> {
     choice(
         [
+            mod_stmt(),
             if_stmt(),
             unless_stmt(),
             until_stmt(),
@@ -235,24 +236,44 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
 }
 
 fn mod_stmt() -> Box<Parser<UMPL2Expr>> {
-    map(
-        chain(satify(|c| c.is_ascii_alphabetic()), alt(scope(umpl2expr()), try_map(stringdot(), |string|{
-            let UMPL2Expr::String(path) = string else {
-                panic!("error in parser combinator")
-            };
-            let fc = std::fs::read_to_string(path.to_string()).map_err(|e|ParseError {
-                kind: ParseErrorType::Other(format!("failed to read file {path}: {e}")),
-                input: ""
-            })?;
-            // ther has to be abtter way then leaking
-            umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
-        }))),
-        |(name, code)| {
-            let UMPL2Expr::Scope(s) = code else {
-                panic!("error in parser combinator")
-            };
-            UMPL2Expr::Module(Module::new(name.to_string(), s))
-        }
+    keep_right(
+        string("module"),
+        keep_right(
+            ws_or_comment(),
+            map(
+                chain(
+                    satify(|c| c.is_ascii_alphabetic()),
+                    keep_right(
+                        ws_or_comment(),
+                        alt(
+                            scope(umpl2expr()),
+                            try_map(stringdot(), |string| {
+                                let UMPL2Expr::String(path) = string else {
+                                    panic!("error in parser combinator")
+                                };
+                                let fc =
+                                    std::fs::read_to_string(path.to_string()).map_err(|e| {
+                                        ParseError {
+                                            kind: ParseErrorType::Other(format!(
+                                                "failed to read file {path}: {e}"
+                                            )),
+                                            input: "",
+                                        }
+                                    })?;
+                                // ther has to be abtter way then leaking
+                                umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
+                            }),
+                        ),
+                    ),
+                ),
+                |(name, code)| {
+                    let UMPL2Expr::Scope(s) = code else {
+                        panic!("error in parser combinator")
+                    };
+                    UMPL2Expr::Module(Module::new(name.to_string(), s))
+                },
+            ),
+        ),
     )
 }
 

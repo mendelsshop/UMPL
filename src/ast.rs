@@ -52,13 +52,13 @@ pub enum UMPL2Expr {
 #[derive(Clone, Default, PartialEq, Debug)]
 pub struct Module {
     name: String,
-    inner: Vec<UMPL2Expr>
+    inner: Vec<UMPL2Expr>,
 }
 
 impl Module {
-    pub fn new(name: String, inner: Vec<UMPL2Expr>) -> Self { Self { name, inner } }
-
-
+    pub fn new(name: String, inner: Vec<UMPL2Expr>) -> Self {
+        Self { name, inner }
+    }
 
     pub fn inner_mut(&mut self) -> &mut Vec<UMPL2Expr> {
         &mut self.inner
