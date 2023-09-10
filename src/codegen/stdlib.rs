@@ -389,24 +389,50 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     // create the hempty? function
     // could be written in pure umpl .. efficiency
-    pub fn make_hempty(&mut self) {
-        let fn_ty = self.types.object.fn_type(
-            &[
-                self.types.call_info.into(),
-                self.types.generic_pointer.into(),
-            ],
-            false,
-        );
-        let func = self.module.add_function("hempty?", fn_ty, None);
-        let entry = self.context.append_basic_block(func, "hempty?");
-        self.builder.position_at_end(entry);
-        self.fn_value = Some(func);
-        let args = self
-            .extract_arguements_primitive::<1>(func.get_nth_param(1).unwrap().into_pointer_value());
-        let args = self.actual_value(args[0]);
-        let is_hempty = self.is_hempty(args);
-        self.builder.build_return(Some(&self.boolean(is_hempty)));
-        self.insert_function("hempty?".into(), func);
+    pub fn make_is_type(&mut self) {
+        macro_rules! is_type {
+            ($type:literal,$typeindex:ident) => {{
+                let fn_ty = self.types.object.fn_type(
+                    &[
+                        self.types.call_info.into(),
+                        self.types.generic_pointer.into(),
+                    ],
+                    false,
+                );
+                let func = self
+                    .module
+                    .add_function(&format!("{}?", $type), fn_ty, None);
+                let entry = self
+                    .context
+                    .append_basic_block(func, &format!("{}?", $type));
+                self.builder.position_at_end(entry);
+                self.fn_value = Some(func);
+                let args = self.extract_arguements_primitive::<1>(
+                    func.get_nth_param(1).unwrap().into_pointer_value(),
+                );
+                let args = self.actual_value(args[0]);
+                let is_type = {
+                    let arg_type = self.extract_type(args).unwrap();
+                    self.builder.build_int_compare(
+                        inkwell::IntPredicate::EQ,
+                        arg_type.into_int_value(),
+                        self.types.ty.const_int(TyprIndex::$typeindex as u64, false),
+                        "is hempty",
+                    )
+                };
+                self.builder.build_return(Some(&self.boolean(is_type)));
+                self.insert_function(format!("{}?", $type).into(), func);
+            }};
+        }
+        is_type!("hempty", hempty);
+        is_type!("number", number);
+        is_type!("boolean", boolean);
+        is_type!("string", string);
+        is_type!("symbol", symbol);
+        is_type!("lambda", lambda);
+        is_type!("cons", cons);
+        is_type!("thunk", thunk);
+        is_type!("primitive", primitive)
     }
 
     // could be written in pure umpl .. efficiency
@@ -439,7 +465,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_accesors();
         self.make_add();
         self.make_print();
-        self.make_hempty();
+        self.make_is_type();
         self.make_newline();
     }
 
