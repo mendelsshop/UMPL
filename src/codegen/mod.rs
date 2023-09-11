@@ -109,6 +109,7 @@ pub struct Compiler<'a, 'ctx> {
     main: Option<(FunctionValue<'ctx>, BasicBlock<'ctx>)>,
     non_found_links: Vec<(RC<str>, BasicBlock<'ctx>, Option<InstructionValue<'ctx>>)>,
     engine: Option<ExecutionEngine<'ctx>>,
+    module_list: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -256,6 +257,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             main: None,
             non_found_links: vec![],
             engine: Self::create_engine(module, ee_type),
+            module_list: vec![],
         }
     }
 
@@ -433,7 +435,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(block);
                 Ok(Some(self.hempty().into()))
             }
-            UMPL2Expr::Module(_) => todo!(),
+            UMPL2Expr::Module(m) => {
+                // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
+                // one way to do this is to keep a list of modules with thein envs including one for the root ...
+                self.module_list.push(m.name().to_string());
+                for expr in m.inner().iter() {
+                    // self.print_ir();
+                   self.compile_expr(expr)?;
+                }
+                self.module_list.pop();
+                Ok(Some(self.hempty().into()))
+            }
         }
     }
 

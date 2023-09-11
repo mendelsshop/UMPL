@@ -150,7 +150,6 @@ fn compile(file: &str, out: &str) {
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
-
     // Create FPM
     let fpm = init_function_optimizer(&module);
     let mut complier =

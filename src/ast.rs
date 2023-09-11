@@ -63,6 +63,14 @@ impl Module {
     pub fn inner_mut(&mut self) -> &mut Vec<UMPL2Expr> {
         &mut self.inner
     }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    pub fn inner(&self) -> &[UMPL2Expr] {
+        self.inner.as_ref()
+    }
 }
 
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {

@@ -12,7 +12,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         if function.verify(true) {
             self.fpm.run_on(&function);
             let p = self.primitive(function.as_global_value().as_pointer_value());
-            self.insert_lambda(name, p);
+            let gloabl_lambda = self.module.add_global(p.get_type(), None, &name);
+            gloabl_lambda.set_initializer(&p);
+            self.insert_variable(name, gloabl_lambda.as_pointer_value())
         } else {
             println!("Failed to verify function {name}");
             self.print_ir();
@@ -21,9 +23,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub(super) fn insert_lambda(&mut self, name: RC<str>, lambda: StructValue<'ctx>) {
-        let gloabl_lambda = self.module.add_global(lambda.get_type(), None, &name);
-        gloabl_lambda.set_initializer(&lambda);
-        self.insert_variable(name, gloabl_lambda.as_pointer_value())
+        let name = self
+            .module_list
+            .iter()
+            .map(|m| m.to_string() + "#")
+            .collect::<String>()
+            + &name;
+        let ty = self.types.object;
+        let lambda_ptr = self.create_entry_block_alloca(ty, &name).unwrap();
+        self.builder.build_store(lambda_ptr, lambda);
+        self.insert_variable(name.into(), lambda_ptr)
     }
 
     pub(super) fn new_env(&mut self) {
