@@ -94,13 +94,13 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                 for mut accesor in accesors {
                     if accesor == ">>" {
                         accesor.clear();
-                        accesor += "print"
+                        accesor += "print";
                     } else if accesor == ">" {
                         // TODO: make printline function just calls print + newline
                         accesor.clear();
-                        accesor += "printline"
+                        accesor += "printline";
                     }
-                    // if it says to ot print we just ignore it 
+                    // if it says to ot print we just ignore it
                     if accesor == "<" {
                         continue;
                     }

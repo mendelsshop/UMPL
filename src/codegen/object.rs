@@ -125,7 +125,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         )
     }
 
-    pub(super) fn const_thunk(&mut self, object: UMPL2Expr) -> Option<StructValue<'ctx>> {
+    pub(super) fn const_thunk(&mut self, object: &UMPL2Expr) -> Option<StructValue<'ctx>> {
         let env = self.get_scope();
         let old_fn = self.fn_value;
         let old_block = self.builder.get_insert_block();
@@ -152,12 +152,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap();
             let arg = self
                 .builder
-                .build_extract_value(envs, i.try_into().unwrap(), "load captured")
+                .build_extract_value(envs, i, "load captured")
                 .unwrap();
             self.builder.build_store(alloca, arg);
             self.insert_variable(cn.clone(), alloca);
         }
-        let ret = self.compile_expr(&object);
+        let ret = self.compile_expr(object);
         match ret {
             Ok(v) => {
                 let v = self.actual_value(v?.into_struct_value());

@@ -5,7 +5,7 @@ use super::{Compiler, TyprIndex};
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(crate) fn compile_if(
         &mut self,
-        if_stmt: &Box<crate::ast::If>,
+        if_stmt: &crate::ast::If,
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         let parent = self.current_fn_value()?;
         let thunked = return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();

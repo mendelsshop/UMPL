@@ -148,7 +148,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         module: &'a Module<'ctx>,
         builder: &'a Builder<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
-        ee_type: EngineType,
+        ee_type: &EngineType,
     ) -> Self {
         let env_ptr: PointerType<'ctx> = context
             .struct_type(&[], false)
@@ -264,7 +264,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     // because we cannot have multiple engines per module
     fn create_engine(
         module: &'a Module<'ctx>,
-        ee_type: EngineType,
+        ee_type: &EngineType,
     ) -> Option<ExecutionEngine<'ctx>> {
         match ee_type {
             EngineType::Repl => Some(module.create_execution_engine().unwrap()),
@@ -321,7 +321,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::String(value) => Ok(Some(self.const_string(value).as_basic_value_enum())),
             UMPL2Expr::Fanction(r#fn) => self.compile_function(r#fn),
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
-            UMPL2Expr::Scope(_) => unreachable!(),
+
             UMPL2Expr::If(if_stmt) => self.compile_if(if_stmt),
             UMPL2Expr::Unless(_) => todo!(),
             // TODO: keep in mind the fact that the loop might be in outer function
@@ -410,7 +410,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
-            UMPL2Expr::Link(_, _) => unreachable!(),
+            UMPL2Expr::Link(_, _) | UMPL2Expr::Scope(_) => unreachable!(),
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;
@@ -438,7 +438,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
                 // one way to do this is to keep a list of modules with thein envs including one for the root ...
                 self.module_list.push(m.name().to_string());
-                for expr in m.inner().iter() {
+                for expr in m.inner() {
                     // self.print_ir();
                     self.compile_expr(expr)?;
                 }
@@ -599,7 +599,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if let Some(link_info) = self.links.get(&link.0) {
                     // link.2 shouldnt be none b/c of place holder
                     if let Some(inst) = link.2 {
-                        self.builder.position_at(link.1, &inst)
+                        self.builder.position_at(link.1, &inst);
                     }
                     let call_info = self.types.call_info.const_named_struct(&[
                         self.context.i64_type().const_zero().into(),
@@ -637,7 +637,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.position_at_end(main_block);
         if let Some(term) = main_block.get_terminator() {
-            term.erase_from_basic_block()
+            term.erase_from_basic_block();
         }
 
         for expr in program {
@@ -705,9 +705,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 engine.remove_module(self.module).unwrap();
                 // add module back to ee
                 engine.add_module(self.module).unwrap();
-                let v = engine.run_function_as_main(self.module.get_function("main").unwrap(), &[])
-                    as i32;
-                v
+                engine.run_function_as_main(self.module.get_function("main").unwrap(), &[])
             })
         }
     }

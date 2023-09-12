@@ -56,6 +56,7 @@ pub struct Module {
 }
 
 impl Module {
+    #[must_use]
     pub fn new(name: String, inner: Vec<UMPL2Expr>) -> Self {
         Self { name, inner }
     }
@@ -64,10 +65,12 @@ impl Module {
         &mut self.inner
     }
 
+    #[must_use]
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
 
+    #[must_use]
     pub fn inner(&self) -> &[UMPL2Expr] {
         self.inner.as_ref()
     }

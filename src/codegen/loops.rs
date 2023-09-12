@@ -36,7 +36,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(crate) fn compile_for_loop(
         &mut self,
-        go: &Box<crate::ast::GoThrough>,
+        go: &crate::ast::GoThrough,
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         // iterates with `in order`
         let name = go.ident();
@@ -306,7 +306,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(crate) fn compile_while_loop(
         &mut self,
-        until_stmt: &Box<crate::ast::Until>,
+        until_stmt: &crate::ast::Until,
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         let loop_bb = self
             .context

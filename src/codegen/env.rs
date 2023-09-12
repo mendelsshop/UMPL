@@ -14,7 +14,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let p = self.primitive(function.as_global_value().as_pointer_value());
             let gloabl_lambda = self.module.add_global(p.get_type(), None, &name);
             gloabl_lambda.set_initializer(&p);
-            self.insert_variable(name, gloabl_lambda.as_pointer_value())
+            self.insert_variable(name, gloabl_lambda.as_pointer_value());
         } else {
             println!("Failed to verify function {name}");
             self.print_ir();
@@ -22,17 +22,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn insert_lambda(&mut self, name: RC<str>, lambda: StructValue<'ctx>) {
+    pub(super) fn insert_lambda(&mut self, name: &RC<str>, lambda: StructValue<'ctx>) {
         let name = self
             .module_list
             .iter()
             .map(|m| m.to_string() + "#")
             .collect::<String>()
-            + &name;
+            + name;
         let ty = self.types.object;
         let lambda_ptr = self.create_entry_block_alloca(ty, &name).unwrap();
         self.builder.build_store(lambda_ptr, lambda);
-        self.insert_variable(name.into(), lambda_ptr)
+        self.insert_variable(name.into(), lambda_ptr);
     }
 
     pub(super) fn new_env(&mut self) {
@@ -64,8 +64,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let env_pointer = self
             .create_entry_block_alloca(env_struct_type, "env")
             .unwrap();
-        // global_save.set_initializer(&env_struct_type.const_zero());
-        // let env_pointer = global_save.as_pointer_value();
 
         for (i, v) in value.iter().enumerate() {
             let value = self.get_var(v).unwrap();

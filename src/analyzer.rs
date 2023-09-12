@@ -109,7 +109,6 @@ impl Analyzer {
             UMPL2Expr::Link(_, _) => {
               unreachable!()
             }
-            UMPL2Expr::Quoted(v) => self.find_label(v),
             UMPL2Expr::Application(aplication) => self.find_labels(aplication.args_mut()),
             UMPL2Expr::Stop(s) => {
                 self.find_label(s);
@@ -139,7 +138,7 @@ impl Analyzer {
             UMPL2Expr::Fanction(fanction) => {
                 self.find_labels(fanction.scope_mut());
             }
-            UMPL2Expr::Let(_, v) => self.find_label(v),
+            UMPL2Expr::Let(_, v) | UMPL2Expr::Quoted(v) => self.find_label(v),
             UMPL2Expr::ComeTo(_) => todo!(),
             UMPL2Expr::Module(r#mod) => {
                 self.find_labels(r#mod.inner_mut());

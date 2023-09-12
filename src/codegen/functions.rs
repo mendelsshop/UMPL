@@ -115,7 +115,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap();
             let arg = self
                 .builder
-                .build_extract_value(envs, i.try_into().unwrap(), "load captured")
+                .build_extract_value(envs, i, "load captured")
                 .unwrap();
             self.builder.build_store(alloca, arg);
             self.insert_variable(cn.clone(), alloca);
@@ -141,7 +141,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         if let Ok(lambda) = self.const_lambda(fn_value, env.1) {
             self.pop_env();
             let ret = if r#fn.name().is_some() {
-                self.insert_lambda(name.into(), lambda);
+                self.insert_lambda(&(name).into(), lambda);
                 self.hempty()
             } else {
                 lambda
@@ -189,8 +189,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .skip(1)
                 .try_fold(null, |init, current| {
                     let ptr = self.builder.build_alloca(self.types.args, "add arg");
-                    self.builder
-                        .build_store(ptr, self.const_thunk(current.clone())?);
+                    self.builder.build_store(ptr, self.const_thunk(current)?);
                     let next = self
                         .builder
                         .build_struct_gep(self.types.args, ptr, 1, "next arg")

@@ -281,7 +281,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             (&args, symbol_block),
         ]);
         self.builder.build_return(Some(&phi.as_basic_value()));
-        self.insert_function("print".into(), print_fn)
+        self.insert_function("print".into(), print_fn);
     }
 
     // coulsd make this a in umpl defined function and have + be primitive function of 2 parameters
@@ -432,7 +432,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         is_type!("lambda", lambda);
         is_type!("cons", cons);
         is_type!("thunk", thunk);
-        is_type!("primitive", primitive)
+        is_type!("primitive", primitive);
     }
 
     // could be written in pure umpl .. efficiency
@@ -473,7 +473,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let null = self.types.generic_pointer.const_null();
         args.iter().fold(null, |init, current| {
             let ptr = self.builder.build_alloca(self.types.args, "add arg");
-            self.builder.build_store(ptr, current.clone());
+            self.builder.build_store(ptr, *current);
             let next = self
                 .builder
                 .build_struct_gep(self.types.args, ptr, 1, "next arg")

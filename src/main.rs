@@ -110,12 +110,14 @@ fn repl() {
     let mut input_new = String::new();
     // we use repl as opposed to jit see https://github.com/TheDan64/inkwell/issues/397
     let mut complier =
-        { Compiler::new(&context, &module, &builder, &fpm, codegen::EngineType::Jit) };
-    while let Ok(_) = {
+        { Compiler::new(&context, &module, &builder, &fpm, &codegen::EngineType::Jit) };
+    while {
         print!(">>> ");
         io::stdout().flush().expect("couldn't flush output");
         io::stdin().read_line(&mut input_new)
-    } {
+    }
+    .is_ok()
+    {
         if input_new.trim() == "run" {
             // really eneffecient to create a new compiler every time (and not whats expected either)
             // but currently there is no way to add onto main function after first compile
@@ -152,8 +154,15 @@ fn compile(file: &str, out: &str) {
     let builder = context.create_builder();
     // Create FPM
     let fpm = init_function_optimizer(&module);
-    let mut complier =
-        { Compiler::new(&context, &module, &builder, &fpm, codegen::EngineType::None) };
+    let mut complier = {
+        Compiler::new(
+            &context,
+            &module,
+            &builder,
+            &fpm,
+            &codegen::EngineType::None,
+        )
+    };
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
             // TODO: actually compile the program not just generate llvm ir
@@ -176,7 +185,7 @@ fn run(file: &str) {
     // Create FPM
     let fpm = init_function_optimizer(&module);
     let mut complier =
-        { Compiler::new(&context, &module, &builder, &fpm, codegen::EngineType::Jit) };
+        { Compiler::new(&context, &module, &builder, &fpm, &codegen::EngineType::Jit) };
     complier.compile_program(&program.1, program.0).map_or_else(
         || {
             let ret = complier.run().expect("no execution engine found");
