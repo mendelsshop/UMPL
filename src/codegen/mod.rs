@@ -410,8 +410,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
-            UMPL2Expr::Link(_, _) => todo!(),
-            // UMPL2Expr::Tree(_) => todo!(),
+            UMPL2Expr::Link(_, _) => unreachable!(),
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
                 let ty = self.types.object;
@@ -441,7 +440,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.module_list.push(m.name().to_string());
                 for expr in m.inner().iter() {
                     // self.print_ir();
-                   self.compile_expr(expr)?;
+                    self.compile_expr(expr)?;
                 }
                 self.module_list.pop();
                 Ok(Some(self.hempty().into()))

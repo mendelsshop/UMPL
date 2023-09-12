@@ -6,8 +6,7 @@ use parse_int::parse;
 
 use crate::{
     ast::{
-        Application, Boolean, Fanction, GoThrough, If, Module, PrintType, UMPL2Expr, Unless, Until,
-        Varidiac,
+        Application, Boolean, Fanction, GoThrough, If, Module, UMPL2Expr, Unless, Until, Varidiac,
     },
     pc::{
         alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
@@ -72,22 +71,40 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                     ),
                 )(input)
             }),
-            many(keep_right(
-                char('^'),
-                choice(vec![string("car"), string("cdr"), string("cgr")]),
-            )),
+            many(choice(vec![
+                keep_right(
+                    char('^'),
+                    choice(vec![string("car"), string("cdr"), string("cgr")]),
+                ),
+                string(">"),
+                string(">>"),
+                string("<"),
+            ])),
         ),
         |r| {
             if let Some(mut accesors) = r.1 {
                 let first_acces = accesors.next().unwrap();
                 let new_acces = |accesor: String, expr| {
-                    UMPL2Expr::Application(Application::new(
-                        vec![UMPL2Expr::Ident(accesor.into()), expr],
-                        PrintType::None,
-                    ))
+                    UMPL2Expr::Application(Application::new(vec![
+                        UMPL2Expr::Ident(accesor.into()),
+                        expr,
+                    ]))
                 };
                 let mut base = new_acces(first_acces, r.0);
-                for accesor in accesors {
+                for mut accesor in accesors {
+                    if accesor == ">>" {
+                        accesor.clear();
+                        accesor += "print"
+                    } else if accesor == ">" {
+                        // TODO: make printline function just calls print + newline
+                        accesor.clear();
+                        accesor += "printline"
+                    }
+                    // if it says to ot print we just ignore it 
+                    if accesor == "<" {
+                        continue;
+                    }
+
                     base = new_acces(accesor, base);
                 }
                 base
@@ -100,29 +117,15 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
 
 fn application() -> Box<Parser<UMPL2Expr>> {
     map(
-        chain(
-            inbetween(
-                keep_right(ws_or_comment(), any_of(call_start().iter().copied())),
-                many(umpl2expr()),
-                opt(keep_right(
-                    ws_or_comment(),
-                    any_of(call_end().iter().copied()),
-                )),
-            ),
-            alt(
-                map(char('<'), |_| PrintType::None),
-                map(chain(char('>'), opt(char('>'))), |r| match r.1 {
-                    None => PrintType::PrintLN,
-                    Some(_) => PrintType::Print,
-                }),
-            ),
+        inbetween(
+            keep_right(ws_or_comment(), any_of(call_start().iter().copied())),
+            many(umpl2expr()),
+            opt(keep_right(
+                ws_or_comment(),
+                any_of(call_end().iter().copied()),
+            )),
         ),
-        |r| {
-            UMPL2Expr::Application(Application::new(
-                r.0.map_or_else(Vec::new, Iterator::collect),
-                r.1,
-            ))
-        },
+        |r| UMPL2Expr::Application(Application::new(r.map_or_else(Vec::new, Iterator::collect))),
     )
 }
 
@@ -535,9 +538,10 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
 
 #[cfg(test)]
 mod tests {
+    // TODO: remake some of thests now that >> > < are valid in any expression
     use crate::{
         ast::{Application, Fanction, GoThrough, If, Unless, Until},
-        lexer::{parse_umpl, Boolean, PrintType, UMPL2Expr, Varidiac},
+        lexer::{parse_umpl, Boolean, UMPL2Expr, Varidiac},
     };
 
     #[test]
@@ -603,15 +607,12 @@ mod tests {
             test_result.unwrap(),
             UMPL2Expr::GoThrough(Box::new(GoThrough::new(
                 "a".into(),
-                UMPL2Expr::Application(Application::new(
-                    vec![
-                        UMPL2Expr::Ident("tree".into()),
-                        UMPL2Expr::Number(5.0),
-                        UMPL2Expr::Number(6.0),
-                        UMPL2Expr::Number(7.0)
-                    ],
-                    PrintType::None
-                )),
+                UMPL2Expr::Application(Application::new(vec![
+                    UMPL2Expr::Ident("tree".into()),
+                    UMPL2Expr::Number(5.0),
+                    UMPL2Expr::Number(6.0),
+                    UMPL2Expr::Number(7.0)
+                ],)),
                 vec![UMPL2Expr::String("ab/".into())]
             )))
         );
@@ -669,14 +670,11 @@ mod tests {
         assert!(test_result.is_ok());
         assert_eq!(
             test_result.unwrap(),
-            UMPL2Expr::Application(Application::new(
-                vec![
-                    UMPL2Expr::Ident("mul".into()),
-                    UMPL2Expr::Number(5.0),
-                    UMPL2Expr::Number(16.0)
-                ],
-                PrintType::Print
-            ))
+            UMPL2Expr::Application(Application::new(vec![
+                UMPL2Expr::Ident("mul".into()),
+                UMPL2Expr::Number(5.0),
+                UMPL2Expr::Number(16.0)
+            ],))
         );
     }
 

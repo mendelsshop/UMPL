@@ -211,23 +211,18 @@ impl Fanction {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Application {
     args: Vec<UMPL2Expr>,
-    print: PrintType,
 }
 
 impl<'ctx, 'a> FlattenAst<'a, 'ctx> for Application {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        let left_tree = self.args.flatten(compiler);
-        let this = compiler.const_symbol(&format!("{:?}", self.print).into());
-        let this = compiler.const_cons(compiler.hempty(), this, compiler.hempty());
-        let right_tree = compiler.hempty();
-        compiler.const_cons(left_tree, this, right_tree)
+        self.args.flatten(compiler)
     }
 }
 
 impl Application {
     #[must_use]
-    pub fn new(args: Vec<UMPL2Expr>, print: PrintType) -> Self {
-        Self { args, print }
+    pub fn new(args: Vec<UMPL2Expr>) -> Self {
+        Self { args }
     }
 
     pub fn args_mut(&mut self) -> &mut Vec<UMPL2Expr> {
@@ -416,13 +411,6 @@ pub enum Varidiac {
     /// denotes that besides the usual arg count function will take extra args
     /// in form of tree (requires at least 0 args)
     AtLeast0,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PrintType {
-    None,
-    Print,
-    PrintLN,
 }
 
 macro_rules! get_expr {
