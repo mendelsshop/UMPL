@@ -63,15 +63,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn make_print(&mut self) {
         // maybe make print should turn into make string
-
-        let print_fn_ty: FunctionType<'_> = self.types.object.fn_type(
-            &[
-                self.types.call_info.into(),
-                self.types.generic_pointer.into(),
-            ],
-            false,
-        );
-        let print_fn = self.module.add_function("print", print_fn_ty, None);
+        let print_fn = self
+            .module
+            .add_function("print", self.types.primitive_ty, None);
         self.fn_value = Some(print_fn);
         let entry_block = self.context.append_basic_block(print_fn, "entry");
         let bool_block = self.context.append_basic_block(print_fn, "bool");
@@ -287,14 +281,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     // coulsd make this a in umpl defined function and have + be primitive function of 2 parameters
     // and would probally be easier and less duplication for * / - ...
     pub(super) fn make_add(&mut self) {
-        let fn_ty = self.types.object.fn_type(
-            &[
-                self.types.call_info.into(),
-                self.types.generic_pointer.into(),
-            ],
-            false,
-        );
-        let func = self.module.add_function("add", fn_ty, None);
+        let func = self
+            .module
+            .add_function("add", self.types.primitive_ty, None);
         self.fn_value = Some(func);
         let entry = self.context.append_basic_block(func, "entry");
 
@@ -355,15 +344,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub(super) fn make_accesors(&mut self) {
-        let fn_ty = self.types.object.fn_type(
-            &[
-                self.types.call_info.into(),
-                self.types.generic_pointer.into(),
-            ],
-            false,
-        );
         let mut accesor = |idx, name| {
-            let func = self.module.add_function(name, fn_ty, None);
+            let func = self
+                .module
+                .add_function(name, self.types.primitive_ty, None);
             let entry = self.context.append_basic_block(func, name);
             self.builder.position_at_end(entry);
             self.fn_value = Some(func);
@@ -371,9 +355,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let args = self.extract_arguements_primitive::<1>(
                 func.get_nth_param(1).unwrap().into_pointer_value(),
             );
-            // self.print_ir();
             let args = self.actual_value(args[0]);
-            // self.print_ir();
             let cons_object = self.extract_cons(args).unwrap().into_struct_value();
             let car = self
                 .builder
@@ -392,16 +374,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn make_is_type(&mut self) {
         macro_rules! is_type {
             ($type:literal,$typeindex:ident) => {{
-                let fn_ty = self.types.object.fn_type(
-                    &[
-                        self.types.call_info.into(),
-                        self.types.generic_pointer.into(),
-                    ],
-                    false,
-                );
-                let func = self
-                    .module
-                    .add_function(&format!("{}?", $type), fn_ty, None);
+                let func =
+                    self.module
+                        .add_function(&format!("{}?", $type), self.types.primitive_ty, None);
                 let entry = self
                     .context
                     .append_basic_block(func, &format!("{}?", $type));
@@ -437,14 +412,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     // could be written in pure umpl .. efficiency
     pub fn make_newline(&mut self) {
-        let fn_ty = self.types.object.fn_type(
-            &[
-                self.types.call_info.into(),
-                self.types.generic_pointer.into(),
-            ],
-            false,
-        );
-        let func = self.module.add_function("newline", fn_ty, None);
+        let func = self
+            .module
+            .add_function("newline", self.types.primitive_ty, None);
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
         self.builder.build_call(
@@ -461,12 +431,37 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_function("newline".into(), func);
     }
 
+    fn make_error(&mut self) {
+        let func = self
+            .module
+            .add_function("error", self.types.primitive_ty, None);
+        let entry = self.context.append_basic_block(func, "entry");
+        self.builder.position_at_end(entry);
+        self.fn_value = Some(func);
+
+        let args = self
+            .extract_arguements_primitive::<1>(func.get_nth_param(1).unwrap().into_pointer_value());
+        let args = self.actual_value(args[0]);
+        let msg = self.extract_string(args).unwrap(); // TODO: should allow for symbols also (or maybe anything printable)
+
+        self.builder
+            .build_call(self.functions.printf, &[msg.into()], "print");
+        self.builder.build_call(
+            self.functions.exit,
+            &[self.context.i32_type().const_int(1, false).into()],
+            "exit",
+        );
+        self.builder.build_unreachable();
+        self.insert_function("error".into(), func);
+    }
+
     pub(super) fn init_stdlib(&mut self) {
         self.make_accesors();
         self.make_add();
         self.make_print();
         self.make_is_type();
         self.make_newline();
+        self.make_error();
     }
 
     fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {

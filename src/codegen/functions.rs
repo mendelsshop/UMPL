@@ -55,18 +55,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .name()
             .map_or("lambda".to_string(), |name| name.to_string());
         // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
-        // arg_types.insert(0, self.types.call_info.into());
-        // arg_types.insert(0, env.0.ptr_type(AddressSpace::default()).into());
-        let ret_type = self.types.object;
-        let fn_type = ret_type.fn_type(
-            &[
-                self.types.generic_pointer.into(),
-                self.types.call_info.into(),
-                self.types.generic_pointer.into(),
-            ],
-            false,
-        );
-        let fn_value = self.module.add_function(&name, fn_type, None);
+        let fn_value = self.module.add_function(&name, self.types.lambda_ty, None);
         for (name, arg) in fn_value.get_param_iter().skip(2).enumerate() {
             arg.set_name(&name.to_string());
         }
