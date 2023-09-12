@@ -418,11 +418,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Link(_, _) | UMPL2Expr::Scope(_) => unreachable!(),
             UMPL2Expr::Let(i, v) => {
                 let v = return_none!(self.compile_expr(v)?);
-                let ty = self.types.object;
-                let ptr = self.create_entry_block_alloca(ty, i).unwrap();
-                self.builder.build_store(ptr, v);
-                self.insert_variable(i.clone(), ptr);
-                return Ok(Some(self.types.boolean.const_zero().as_basic_value_enum()));
+
+                Ok(self.insert_variable_new_ptr(i.clone(), v))
             }
             // create new basic block use uncdoital br to new bb
             // store the block address and the current fn_value in some sort of hashmap with the name as the key
@@ -451,6 +448,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(Some(self.hempty().into()))
             }
         }
+    }
+
+    fn insert_variable_new_ptr(
+        &mut self,
+        i: RC<str>,
+        v: BasicValueEnum<'ctx>,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let ty = self.types.object;
+        let ptr = self.create_entry_block_alloca(ty, &i).unwrap();
+        self.builder.build_store(ptr, v);
+        self.insert_variable(i.clone(), ptr);
+        Some(self.types.boolean.const_zero().as_basic_value_enum())
     }
 
     fn actual_value(&self, thunked: StructValue<'ctx>) -> StructValue<'ctx> {

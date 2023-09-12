@@ -452,6 +452,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_function("error".into(), func);
     }
 
+    pub fn make_constants(&mut self) {
+        // pi
+        let pi_value = self.const_number(3.14);
+        self.insert_variable_new_ptr("pi".into(), pi_value.into());
+        // nil
+    }
+
     pub(super) fn init_stdlib(&mut self) {
         self.make_accesors();
         self.make_add();
@@ -459,6 +466,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_is_type();
         self.make_newline();
         self.make_error();
+        self.make_constants();
     }
 
     fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {

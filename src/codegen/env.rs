@@ -29,10 +29,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .map(|m| m.to_string() + "#")
             .collect::<String>()
             + name;
-        let ty = self.types.object;
-        let lambda_ptr = self.create_entry_block_alloca(ty, &name).unwrap();
-        self.builder.build_store(lambda_ptr, lambda);
-        self.insert_variable(name.into(), lambda_ptr);
+        self.insert_variable_new_ptr(name.into(), lambda.into());
     }
 
     pub(super) fn new_env(&mut self) {
