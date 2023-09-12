@@ -1,6 +1,6 @@
 use inkwell::values::BasicValueEnum;
 
-use super::{Compiler, TyprIndex};
+use super::Compiler;
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(crate) fn compile_if(
@@ -10,24 +10,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let parent = self.current_fn_value()?;
         let thunked = return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
         let cond_struct = self.actual_value(thunked);
-        // TODO: dont assume a bool
-        let bool_val = self.extract_bool(cond_struct).unwrap().into_int_value();
-        let object_type = self.extract_type(cond_struct).unwrap().into_int_value();
-        // if its not a bool type
-        let cond = self.builder.build_int_compare(
-            inkwell::IntPredicate::NE,
-            object_type,
-            self.types.ty.const_int(TyprIndex::boolean as u64, false),
-            "if:cond:boolean?",
-        );
-
-        // conditinal: either not bool or true
-        let cond = self.builder.build_or(bool_val, cond, "if:cond:false?");
+        let cond = self.is_false(cond_struct.into());
         let then_bb = self.context.append_basic_block(parent, "then");
         let else_bb = self.context.append_basic_block(parent, "else");
         let cont_bb = self.context.append_basic_block(parent, "ifcont");
         self.builder
-            .build_conditional_branch(cond, then_bb, else_bb);
+            .build_conditional_branch(cond, else_bb, then_bb);
         self.builder.position_at_end(then_bb);
         let then_val = self.compile_scope(if_stmt.alt())?;
         if then_val.is_some() {

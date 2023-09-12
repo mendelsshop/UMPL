@@ -1,7 +1,4 @@
-use inkwell::{
-    types::FunctionType,
-    values::{BasicValue, BasicValueEnum, PointerValue, StructValue},
-};
+use inkwell::values::{BasicValue, BasicValueEnum, PointerValue, StructValue};
 
 use super::{Compiler, TyprIndex};
 

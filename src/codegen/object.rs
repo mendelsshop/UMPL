@@ -1,4 +1,6 @@
-use inkwell::values::{FloatValue, FunctionValue, IntValue, PointerValue, StructValue};
+use inkwell::values::{
+    BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue, StructValue,
+};
 
 use crate::{
     ast::{Boolean, UMPL2Expr},
@@ -93,6 +95,36 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(crate) fn const_symbol(&mut self, value: &RC<str>) -> StructValue<'ctx> {
         let str = self.make_string(Some(TableAccess::Symbol), value);
         self.symbol(str)
+    }
+
+    pub(crate) fn is_false(&self, object: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
+        let object_type = self
+            .extract_type(object.into_struct_value())
+            .unwrap()
+            .into_int_value();
+        let is_bool = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            object_type,
+            self.types.ty.const_int(TyprIndex::boolean as u64, false),
+            "boolean?",
+        );
+        let bool_val = self
+            .builder
+            .build_extract_value(
+                object.into_struct_value(),
+                TyprIndex::boolean as u32 + 1,
+                "get boolean value",
+            )
+            .unwrap()
+            .into_int_value();
+        let is_false = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ,
+            bool_val,
+            self.types.boolean.const_zero(),
+            "false?",
+        );
+        self.builder
+            .build_and(is_bool, is_false, "is boolean and false?")
     }
 
     fn make_string(

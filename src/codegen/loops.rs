@@ -330,20 +330,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let expr = return_none!(self.compile_expr(until_stmt.cond())?);
         let expr = self.actual_value(expr.into_struct_value());
-        let bool_val = self.extract_bool(expr).unwrap().into_int_value();
-        let object_type = self.extract_type(expr).unwrap().into_int_value();
-        // if its not a bool type
-        let cond = self.builder.build_int_compare(
-            inkwell::IntPredicate::NE,
-            object_type,
-            self.types.ty.const_int(TyprIndex::boolean as u64, false),
-            "if:cond:boolean?",
-        );
-
-        // conditinal: either not bool or true
-        let cond = self.builder.build_or(bool_val, cond, "if:cond:false?");
+        let cond = self.is_false(expr.into());
         self.builder
-            .build_conditional_branch(cond, loop_bb, done_bb);
+            .build_conditional_branch(cond, done_bb, loop_bb);
         // if we break b/c condition not met the loop return hempty
         phi_return.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.builder.position_at_end(loop_bb);
