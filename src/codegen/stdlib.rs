@@ -1,5 +1,10 @@
 use inkwell::values::{BasicValue, BasicValueEnum, PointerValue, StructValue};
 
+use crate::{
+    ast::{Application, FlattenAst, UMPL2Expr},
+    interior_mut::RC,
+};
+
 use super::{Compiler, TyprIndex};
 
 /// provides a standard library and adds the functions to the root envoirment
@@ -135,7 +140,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.build_unconditional_branch(ret_block);
             self.builder.get_insert_block().unwrap()
         };
-        let bool_block = print_type(bool_block, Self::extract_bool, "%i", "boolean");
+        let bool_block = {
+            self.builder.position_at_end(bool_block);
+            let val = self.extract_bool(args).unwrap();
+            let true_str = self
+                .builder
+                .build_global_string_ptr("true", "true")
+                .as_basic_value_enum();
+            let false_str = self
+                .builder
+                .build_global_string_ptr("false", "false")
+                .as_basic_value_enum();
+            self.builder.build_call(
+                print,
+                &[self
+                    .builder
+                    .build_select(val.into_int_value(), true_str, false_str, "bool print")
+                    .into()],
+                &format!("print boolean"),
+            );
+            self.builder.build_unconditional_branch(ret_block);
+            self.builder.get_insert_block().unwrap()
+        };
         let number_block = print_type(number_block, Self::extract_number, "%f", "number");
         let string_block = print_type(string_block, Self::extract_string, "%s", "string");
         let symbol_block = print_type(symbol_block, Self::extract_symbol, "%s", "symbol");
@@ -452,11 +478,39 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_function("error".into(), func);
     }
 
+    pub fn make_logical(&mut self) {
+        // not
+        let func = self
+            .module
+            .add_function("error", self.types.primitive_ty, None);
+        let entry = self.context.append_basic_block(func, "entry");
+        self.builder.position_at_end(entry);
+        self.fn_value = Some(func);
+
+        let args = self
+            .extract_arguements_primitive::<1>(func.get_nth_param(1).unwrap().into_pointer_value());
+        let args = self.actual_value(args[0]);
+        // is_false returns true if false otherwise false, so no need for an actual not
+        let bool_val = self.is_false(args.into());
+        let not_obj = self.boolean(bool_val);
+        self.builder.build_return(Some(&not_obj));
+        self.insert_function("not".into(), func);
+    }
+
     pub fn make_constants(&mut self) {
         // pi
         let pi_value = self.const_number(3.14);
-        self.insert_variable_new_ptr("pi".into(), pi_value.into());
+        self.insert_constant("pi".into(), pi_value.into());
         // nil
+        let nil_value = UMPL2Expr::Application(Application::new(vec![])).flatten(self);
+        self.insert_constant("nil".into(), nil_value.into());
+    }
+
+    // insert constants needed for stdlib variables like nil and pi, becuase there is no main function to init them in, so we make them globals
+    fn insert_constant(&mut self, name: RC<str>, value: BasicValueEnum<'ctx>) {
+        let ptr = self.module.add_global(self.types.object, None, &name);
+        ptr.set_initializer(&value);
+        self.insert_variable(name, ptr.as_pointer_value())
     }
 
     pub(super) fn init_stdlib(&mut self) {
@@ -467,6 +521,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_newline();
         self.make_error();
         self.make_constants();
+        self.make_logical();
     }
 
     fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {

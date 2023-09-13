@@ -97,6 +97,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.symbol(str)
     }
 
+    /// returns true if false otherwise false
     pub(crate) fn is_false(&self, object: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
         let object_type = self
             .extract_type(object.into_struct_value())

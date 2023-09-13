@@ -72,25 +72,24 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                 )(input)
             }),
             many(choice(vec![
+                // match >> before > so >> doesn't become >, >
+                string(">>"),
+                string(">"),
+                string("<"),
                 keep_right(
                     char('^'),
                     choice(vec![string("car"), string("cdr"), string("cgr")]),
                 ),
-                string(">"),
-                string(">>"),
-                string("<"),
             ])),
         ),
-        |r| {
-            if let Some(mut accesors) = r.1 {
-                let first_acces = accesors.next().unwrap();
+        |mut r| {
+            if let Some(accesors) = r.1 {
                 let new_acces = |accesor: String, expr| {
                     UMPL2Expr::Application(Application::new(vec![
                         UMPL2Expr::Ident(accesor.into()),
                         expr,
                     ]))
                 };
-                let mut base = new_acces(first_acces, r.0);
                 for mut accesor in accesors {
                     if accesor == ">>" {
                         accesor.clear();
@@ -100,14 +99,14 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                         accesor.clear();
                         accesor += "printline";
                     }
-                    // if it says to ot print we just ignore it
+                    // if it says to not print we just ignore it
                     if accesor == "<" {
                         continue;
                     }
 
-                    base = new_acces(accesor, base);
+                    r.0 = new_acces(accesor, r.0);
                 }
-                base
+                r.0
             } else {
                 r.0
             }
