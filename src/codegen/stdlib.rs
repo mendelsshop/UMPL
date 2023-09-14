@@ -482,7 +482,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // not
         let func = self
             .module
-            .add_function("error", self.types.primitive_ty, None);
+            .add_function("not", self.types.primitive_ty, None);
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
         self.fn_value = Some(func);
@@ -513,6 +513,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_variable(name, ptr.as_pointer_value())
     }
 
+    fn make_println(&mut self) {
+        let func = self
+            .module
+            .add_function("println", self.types.primitive_ty, None);
+        let entry = self.context.append_basic_block(func, "entry");
+        self.builder.position_at_end(entry);
+        self.fn_value = Some(func);
+
+        let args = func.get_nth_param(1).unwrap().into_pointer_value();
+        let call_info = self.types.call_info.const_named_struct(&[
+            self.context.i64_type().const_int(1, false).into(),
+            self.types.generic_pointer.const_null().into(),
+        ]);
+        let res = self.builder.build_call(self.module.get_function("print").unwrap(), &[call_info.into(), args.into()], "print").try_as_basic_value().unwrap_left();
+        self.builder.build_call(
+            self.functions.printf,
+            &[self
+                .builder
+                .build_global_string_ptr("\n", "newline")
+                .as_basic_value_enum()
+                .into()],
+            "print newline",
+        );
+        self.builder.build_return(Some(&res));
+        self.insert_function("println".into(), func);
+
+    }
+
     pub(super) fn init_stdlib(&mut self) {
         self.make_accesors();
         self.make_add();
@@ -522,6 +550,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.make_error();
         self.make_constants();
         self.make_logical();
+        // println has to be initalized after print
+        self.make_println();
     }
 
     fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {

@@ -97,7 +97,7 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                     } else if accesor == ">" {
                         // TODO: make printline function just calls print + newline
                         accesor.clear();
-                        accesor += "printline";
+                        accesor += "println";
                     }
                     // if it says to not print we just ignore it
                     if accesor == "<" {
