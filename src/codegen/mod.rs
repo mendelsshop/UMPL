@@ -20,6 +20,8 @@ use crate::{
     ast::{FlattenAst, UMPL2Expr},
     interior_mut::RC,
 };
+
+use self::env::VarType;
 macro_rules! return_none {
     ($expr:expr) => {
         match $expr {
@@ -92,7 +94,7 @@ pub struct Functions<'ctx> {
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     pub(crate) module: &'a Module<'ctx>,
-    variables: Vec<(HashMap<RC<str>, PointerValue<'ctx>>, Vec<RC<str>>)>,
+    variables: Vec<(HashMap<RC<str>, VarType<'a, 'ctx>>, Vec<RC<str>>)>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     pub(crate) string: HashMap<RC<str>, GlobalValue<'ctx>>,
@@ -324,11 +326,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Number(value) => Ok(Some(self.const_number(*value).as_basic_value_enum())),
             UMPL2Expr::Bool(value) => Ok(Some(self.const_boolean(*value).as_basic_value_enum())),
             UMPL2Expr::String(value) => Ok(Some(self.const_string(value).as_basic_value_enum())),
-            UMPL2Expr::Fanction(r#fn) => self.compile_function(r#fn),
+            // UMPL2Expr::Fanction(r#fn) => self.compile_function(r#fn),
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
 
-            UMPL2Expr::If(if_stmt) => self.compile_if(if_stmt),
-            UMPL2Expr::Unless(_) => todo!(),
+            // UMPL2Expr::If(if_stmt) => self.compile_if(if_stmt),
+            // UMPL2Expr::Unless(_) => todo!(),
             // TODO: keep in mind the fact that the loop might be in outer function
             UMPL2Expr::Stop(s) => {
                 let res = return_none!(self.compile_expr(s)?);
@@ -375,9 +377,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 );
                 Ok(None)
             }
-            UMPL2Expr::Until(until_stmt) => self.compile_while_loop(until_stmt),
-            UMPL2Expr::GoThrough(go) => self.compile_for_loop(go),
-            UMPL2Expr::ContiueDoing(scope) => self.compile_loop(scope),
+            // UMPL2Expr::Until(until_stmt) => self.compile_while_loop(until_stmt),
+            // UMPL2Expr::GoThrough(go) => self.compile_for_loop(go),
+            // UMPL2Expr::ContiueDoing(scope) => self.compile_loop(scope),
             UMPL2Expr::Application(application) => self.compile_application(application),
             UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
             // try to retrieve the function and block address from the goto hashmap
@@ -415,12 +417,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
-            UMPL2Expr::Link(_, _) | UMPL2Expr::Scope(_) => unreachable!(),
-            UMPL2Expr::Let(i, v) => {
-                let v = return_none!(self.compile_expr(v)?);
+            // UMPL2Expr::Link(_, _) | 
+            UMPL2Expr::Scope(_) => unreachable!(),
+            // UMPL2Expr::Let(i, v) => {
+            //     let v = return_none!(self.compile_expr(v)?);
 
-                Ok(self.insert_variable_new_ptr(i.clone(), v))
-            }
+            //     Ok(self.insert_variable_new_ptr(i.clone(), v))
+            // }
             // create new basic block use uncdoital br to new bb
             // store the block address and the current fn_value in some sort of hashmap with the name as the key
             UMPL2Expr::ComeTo(n) => {
@@ -436,17 +439,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(block);
                 Ok(Some(self.hempty().into()))
             }
-            UMPL2Expr::Module(m) => {
-                // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
-                // one way to do this is to keep a list of modules with thein envs including one for the root ...
-                self.module_list.push(m.name().to_string());
-                for expr in m.inner() {
-                    // self.print_ir();
-                    self.compile_expr(expr)?;
-                }
-                self.module_list.pop();
-                Ok(Some(self.hempty().into()))
-            }
+            // UMPL2Expr::Module(m) => {
+            //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
+            //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
+            //     self.module_list.push(m.name().to_string());
+            //     for expr in m.inner() {
+            //         // self.print_ir();
+            //         self.compile_expr(expr)?;
+            //     }
+            //     self.module_list.pop();
+            //     Ok(Some(self.hempty().into()))
+            // }
         }
     }
 
@@ -520,9 +523,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn is_null(&self, pv: PointerValue<'ctx>) -> IntValue<'ctx> {
-        // let thingload = self.builder.build_load(ty, pv, "null check");
         self.builder.build_is_null(pv, "null check")
-        // self.builder.build_int_compare(inkwell::IntPredicate::EQ, thingload, self.types.generic_pointer.const_null().into(), "null check");
     }
 
     fn is_hempty(&self, arg: StructValue<'ctx>) -> inkwell::values::IntValue<'ctx> {
@@ -536,11 +537,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         is_hempty
     }
 
+    fn init_special_forms(&mut self) {
+        self.insert_special_form("if".into(), Self::special_form_if);
+        self.insert_special_form("loop".into(), Self::special_form_loop);
+        self.insert_special_form("for".into(), Self::special_form_for_loop);
+        self.insert_special_form("while".into(), Self::special_form_while_loop);
+        self.insert_special_form("lambda".into(), Self::special_form_lambda);
+        self.insert_special_form("define".into(), Self::special_form_define);
+    }
+
     pub fn get_main(&mut self) -> (FunctionValue<'ctx>, BasicBlock<'ctx>) {
         if let Some((function, block)) = self.main {
             (function, block)
         } else {
             self.new_env();
+            self.init_special_forms();
             self.init_stdlib();
             self.new_env();
             let main_fn_type = self.context.i32_type().fn_type(&[], false);

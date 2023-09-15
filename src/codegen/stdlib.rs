@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 use inkwell::values::{BasicValue, BasicValueEnum, PointerValue, StructValue};
 
 use crate::{
@@ -157,7 +159,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .builder
                     .build_select(val.into_int_value(), true_str, false_str, "bool print")
                     .into()],
-                &format!("print boolean"),
+                "print boolean",
             );
             self.builder.build_unconditional_branch(ret_block);
             self.builder.get_insert_block().unwrap()
@@ -499,7 +501,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn make_constants(&mut self) {
         // pi
-        let pi_value = self.const_number(3.14);
+        let pi_value = self.const_number(PI);
         self.insert_constant("pi".into(), pi_value.into());
         // nil
         let nil_value = UMPL2Expr::Application(Application::new(vec![])).flatten(self);
@@ -510,7 +512,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn insert_constant(&mut self, name: RC<str>, value: BasicValueEnum<'ctx>) {
         let ptr = self.module.add_global(self.types.object, None, &name);
         ptr.set_initializer(&value);
-        self.insert_variable(name, ptr.as_pointer_value())
+        self.insert_variable(name, ptr.as_pointer_value());
     }
 
     fn make_println(&mut self) {
@@ -526,7 +528,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.context.i64_type().const_int(1, false).into(),
             self.types.generic_pointer.const_null().into(),
         ]);
-        let res = self.builder.build_call(self.module.get_function("print").unwrap(), &[call_info.into(), args.into()], "print").try_as_basic_value().unwrap_left();
+        let res = self
+            .builder
+            .build_call(
+                self.module.get_function("print").unwrap(),
+                &[call_info.into(), args.into()],
+                "print",
+            )
+            .try_as_basic_value()
+            .unwrap_left();
         self.builder.build_call(
             self.functions.printf,
             &[self
@@ -538,7 +548,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         self.builder.build_return(Some(&res));
         self.insert_function("println".into(), func);
-
     }
 
     pub(super) fn init_stdlib(&mut self) {

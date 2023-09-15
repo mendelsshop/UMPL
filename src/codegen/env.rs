@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue, StructValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
-use crate::interior_mut::RC;
+use crate::{ast::UMPL2Expr, interior_mut::RC};
 
 use super::Compiler;
 
@@ -22,15 +22,30 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn insert_lambda(&mut self, name: &RC<str>, lambda: StructValue<'ctx>) {
-        let name = self
-            .module_list
-            .iter()
-            .map(|m| m.to_string() + "#")
-            .collect::<String>()
-            + name;
-        self.insert_variable_new_ptr(name.into(), lambda.into());
+    pub fn special_form_define(&mut self, exprs: &[UMPL2Expr]) ->  Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() != 2 {
+            return Err("define must have 2 expressions".to_string());
+        }
+        match &exprs[0] {
+            UMPL2Expr::Ident(i) => {
+                let v = return_none!(self.compile_expr(&exprs[1])?);
+                self.insert_variable_new_ptr(i.clone(), v);
+                Ok(Some(self.hempty().into()))
+            },
+            UMPL2Expr::Application(app) => todo!("define for functions"),
+            _ => Err("first expression must be either an identifier or a function head".to_string())
+        }
     }
+
+    // pub(super) fn insert_lambda(&mut self, name: &RC<str>, lambda: StructValue<'ctx>) {
+    //     let name = self
+    //         .module_list
+    //         .iter()
+    //         .map(|m| m.to_string() + "#")
+    //         .collect::<String>()
+    //         + name;
+    //     self.insert_variable_new_ptr(name.into(), lambda.into());
+    // }
 
     pub(super) fn new_env(&mut self) {
         self.variables.push((HashMap::new(), vec![]));
@@ -42,7 +57,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn insert_variable(&mut self, name: RC<str>, value: PointerValue<'ctx>) {
         if let Some(scope) = self.variables.last_mut() {
-            scope.0.insert(name.clone(), value);
+            scope.0.insert(name.clone(), VarType::Lisp(value));
             scope.1.push(name);
         }
     }
@@ -77,7 +92,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.variables.last().unwrap().1.iter()
     }
 
-    fn get_variable(&self, name: &RC<str>) -> Option<PointerValue<'ctx>> {
+    // returns a procedure macro or special form, while get var returns only a lisp expression (so could be a proc)
+    pub fn get_variable(&self, name: &RC<str>) -> Option<VarType<'a, 'ctx>> {
         self.variables
             .iter()
             .rev()
@@ -89,7 +105,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn get_var(&self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
         let ptr = self.get_variable(s).ok_or(format!("{s} not found"))?;
-        // ptr.print_to_stderr();
+        let VarType::Lisp(ptr) = ptr else {
+            return Err("attempted to lookup variable but whas not a variable: ".to_string() + s);
+        };
         Ok(self.builder.build_load(self.types.object, ptr, s))
     }
+
+    pub fn insert_special_form(
+        &mut self,
+        name: RC<str>,
+        func: fn(
+            &mut Compiler<'a, 'ctx>,
+            &[UMPL2Expr],
+        ) -> Result<Option<BasicValueEnum<'ctx>>, String>,
+    ) {
+        if let Some(scope) = self.variables.last_mut() {
+            scope.0.insert(name.clone(), VarType::SpecialForm(func));
+            scope.1.push(name);
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum VarType<'a, 'ctx> {
+    Lisp(PointerValue<'ctx>),
+    SpecialForm(
+        fn(&mut Compiler<'a, 'ctx>, &[UMPL2Expr]) -> Result<Option<BasicValueEnum<'ctx>>, String>,
+    ),
+    Macro,
 }

@@ -22,32 +22,36 @@ pub enum UMPL2Expr {
     Bool(Boolean),
     Number(f64),
     String(RC<str>),
+    // could become (begin exprs)
     Scope(Vec<UMPL2Expr>),
     Ident(RC<str>),
-    // second 2 are scopes
-    If(Box<If>),
-    // second 2 are scopes
-    Unless(Box<Unless>),
+    // // second 2 are scopes
+    // If(Box<If>),
+    // // second 2 are scopes
+    // Unless(Box<Unless>),
+    // could become (stop expr)
     Stop(Box<UMPL2Expr>),
+    // could become (skip)
     Skip,
-    // last one is scope
-    Until(Box<Until>),
-    // last one is scope
-    GoThrough(Box<GoThrough>),
-    // last one is scope
-    ContiueDoing(Vec<UMPL2Expr>),
-    // last one is scope
-    Fanction(Fanction),
+    // // last one is scope
+    // Until(Box<Until>),
+    // // last one is scope
+    // GoThrough(Box<GoThrough>),
+    // // last one is scope
+    // ContiueDoing(Vec<UMPL2Expr>),
+    // // last one is scope
+    // Fanction(Fanction),
     Application(Application),
+    // could become (quote expr)
     Quoted(Box<UMPL2Expr>),
     Label(RC<str>),
     FnParam(usize),
     #[default]
     Hempty,
-    Link(RC<str>, Vec<RC<str>>),
-    Let(RC<str>, Box<UMPL2Expr>),
+    // Link(RC<str>, Vec<RC<str>>),
+    // Let(RC<str>, Box<UMPL2Expr>),
     ComeTo(RC<str>),
-    Module(Module),
+    // Module(Module),
 }
 #[derive(Clone, Default, PartialEq, Debug)]
 pub struct Module {
@@ -84,23 +88,23 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
             Self::String(c) => compiler.const_string(&c),
             Self::Scope(_) => unreachable!(),
             Self::Ident(i) => compiler.const_symbol(&i),
-            Self::If(_) => todo!(),
-            Self::Unless(_) => todo!(),
+            // Self::If(_) => todo!(),
+            // Self::Unless(_) => todo!(),
             Self::Stop(_) => todo!(),
             Self::Skip => todo!(),
-            Self::Until(_) => todo!(),
-            Self::GoThrough(_) => todo!(),
-            Self::ContiueDoing(_) => todo!(),
-            Self::Fanction(_) => todo!(),
+            // Self::Until(_) => todo!(),
+            // Self::GoThrough(_) => todo!(),
+            // Self::ContiueDoing(_) => todo!(),
+            // Self::Fanction(_) => todo!(),
             Self::Application(a) => a.flatten(compiler),
             Self::Quoted(_) => todo!(),
             Self::Label(_) => todo!(),
             Self::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
             Self::Hempty => compiler.hempty(),
-            Self::Link(_, _) => todo!(),
-            Self::Let(_, _) => todo!(),
+            // Self::Link(_, _) => todo!(),
+            // Self::Let(_, _) => todo!(),
             Self::ComeTo(_) => todo!(),
-            Self::Module(_) => todo!(),
+            // Self::Module(_) => todo!(),
         }
     }
 }
@@ -140,23 +144,23 @@ impl core::fmt::Display for UMPL2Expr {
             Self::String(f0) => write!(f, "{f0}"),
             Self::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
             Self::Ident(f0) => write!(f, "{f0}"),
-            Self::If(f0) => f.debug_tuple("If").field(&f0).finish(),
-            Self::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
+            // Self::If(f0) => f.debug_tuple("If").field(&f0).finish(),
+            // Self::Unless(f0) => f.debug_tuple("Unless").field(&f0).finish(),
             Self::Stop(f0) => f.debug_tuple("Stop").field(&f0).finish(),
             Self::Skip => write!(f, "skip"),
-            Self::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
-            Self::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
-            Self::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
-            Self::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
+            // Self::Until(f0) => f.debug_tuple("Until").field(&f0).finish(),
+            // Self::GoThrough(f0) => f.debug_tuple("GoThrough").field(&f0).finish(),
+            // Self::ContiueDoing(f0) => f.debug_tuple("ContiueDoing").field(&f0).finish(),
+            // Self::Fanction(f0) => f.debug_tuple("Fanction").field(&f0).finish(),
             Self::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
             Self::Quoted(f0) => f.debug_tuple("Quoted").field(&f0).finish(),
             Self::Label(f0) => write!(f, "@{f0}"),
             Self::FnParam(f0) => write!(f, "'{f0}"),
             Self::Hempty => write!(f, "hempty"),
-            Self::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
-            Self::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
+            // Self::Link(f0, f1) => f.debug_tuple("Link").field(&f0).field(&f1).finish(),
+            // Self::Let(f0, f1) => f.debug_tuple("Let").field(&f0).field(&f1).finish(),
             Self::ComeTo(f0) => write!(f, "Come to {f0}"),
-            Self::Module(arg0) => f.debug_tuple("Module").field(arg0).finish(),
+            // Self::Module(arg0) => f.debug_tuple("Module").field(arg0).finish(),
         }
     }
 }

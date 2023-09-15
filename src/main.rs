@@ -183,6 +183,7 @@ fn run(file: &str) {
     let module = context.create_module(file);
     let builder = context.create_builder();
     // Create FPM
+    println!("{:?}", program.1);
     let fpm = init_function_optimizer(&module);
     let mut complier =
         { Compiler::new(&context, &module, &builder, &fpm, &codegen::EngineType::Jit) };

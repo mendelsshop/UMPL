@@ -1,9 +1,9 @@
-let cons  fanction  2 ᚜ !using let to get around emoji name requirements
+let cons  fn  2 ᚜ !using let to get around emoji name requirements
     ! we have save the the parameter passed into cons because the inner function "overwrites" the first parameter temporaraly
     let x '0"
     let y '1'
     !implicitly returning inner function we could also write stop fanction 1 ...
-    fanction  1 ᚜
+    fn  1 ᚜
         if '0'
             do ᚜x᚛
             otherwise ᚜y᚛

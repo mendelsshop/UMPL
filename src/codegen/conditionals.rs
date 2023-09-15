@@ -1,14 +1,18 @@
+
 use inkwell::values::BasicValueEnum;
+
+use crate::ast::UMPL2Expr;
 
 use super::Compiler;
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub(crate) fn compile_if(
-        &mut self,
-        if_stmt: &crate::ast::If,
-    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+    // special form if
+    pub fn special_form_if(&mut self, exprs: &[UMPL2Expr]) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() < 2 || exprs.len() > 3 {
+            return Err("bad form for if expression".to_string());
+        }
         let parent = self.current_fn_value()?;
-        let thunked = return_none!(self.compile_expr(if_stmt.cond())?).into_struct_value();
+        let thunked = return_none!(self.compile_expr(&exprs[0])?).into_struct_value();
         let cond_struct = self.actual_value(thunked);
         let cond = self.is_false(cond_struct.into());
         let then_bb = self.context.append_basic_block(parent, "then");
@@ -16,20 +20,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let cont_bb = self.context.append_basic_block(parent, "ifcont");
         self.builder
             .build_conditional_branch(cond, else_bb, then_bb);
-        self.builder.position_at_end(then_bb);
-        let then_val = self.compile_scope(if_stmt.alt())?;
-        if then_val.is_some() {
-            self.builder.build_unconditional_branch(cont_bb);
-        }
-        let then_bb = self.builder.get_insert_block().unwrap();
 
-        // build else block
+        // else block
         self.builder.position_at_end(else_bb);
-        let else_val = self.compile_scope(if_stmt.cons())?;
+        let else_val = if let Some(alt) = exprs.get(2) {
+            if let UMPL2Expr::Scope(s) = alt {
+                self.compile_scope(s)?
+            } else {
+                return Err("if alt is not a scope".to_string());
+            }
+        } else {
+            Some(self.const_boolean(crate::ast::Boolean::False).into())
+        };
         if else_val.is_some() {
             self.builder.build_unconditional_branch(cont_bb);
         }
         let else_bb = self.builder.get_insert_block().unwrap();
+
+        // build else block
+        self.builder.position_at_end(then_bb);
+        let then_val = if let UMPL2Expr::Scope(s) = &exprs[1] {
+            self.compile_scope(s)?
+        } else {
+            return Err("if alt is not a scope".to_string());
+        };
+        if then_val.is_some() {
+            self.builder.build_unconditional_branch(cont_bb);
+        }
+        let then_bb = self.builder.get_insert_block().unwrap();
 
         // emit merge block
         self.builder.position_at_end(cont_bb);

@@ -5,10 +5,16 @@ use crate::{ast::UMPL2Expr, interior_mut::RC};
 use super::{Compiler, EvalType, TyprIndex};
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub(crate) fn compile_loop(
+    pub(crate) fn special_form_loop(
         &mut self,
-        scope: &Vec<UMPL2Expr>,
+        exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() != 1 {
+            return Err("Expected a single expression for a loop".to_string());
+        }
+        let UMPL2Expr::Scope(scope) = &exprs[0] else {
+            return  Err("Expected a scope for a loop".to_string());
+        };
         let loop_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop");
@@ -34,15 +40,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(Some(phi_return.as_basic_value()))
     }
 
-    pub(crate) fn compile_for_loop(
+    pub(crate) fn special_form_for_loop(
         &mut self,
-        go: &crate::ast::GoThrough,
+        exprs: &[UMPL2Expr]
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() != 3 {
+            return Err("Expected 3 expression for for loop".to_string());
+        }
         // iterates with `in order`
-        let name = go.ident();
-        let iter = go.iter();
-        let iter = return_none!(self.compile_expr(iter)?).into_struct_value();
-        let phi = self.make_iter(iter, name.into(), go.scope())?;
+        let UMPL2Expr::Ident(name) = &exprs[0] else {
+            return  Err("no identifier to usef for iteration".to_string());
+        };
+        let iter = &exprs[1];
+        let iter = return_none!(self.compile_expr(&iter)?).into_struct_value();
+        let UMPL2Expr::Scope(iter_scope) = &exprs[2]  else {
+            return  Err("Expected a scope for a loop".to_string());
+        };
+        let phi = self.make_iter(iter, name.clone(), iter_scope)?;
         Ok(Some(phi.as_basic_value()))
     }
 
@@ -304,10 +318,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(phi)
     }
 
-    pub(crate) fn compile_while_loop(
+    pub(crate) fn special_form_while_loop(
         &mut self,
-        until_stmt: &crate::ast::Until,
+        exprs: &[UMPL2Expr]
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() != 2 {
+            return  Err("expected 2 expression for while loop".to_string());
+        }
         let loop_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop");
@@ -327,8 +344,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         });
 
         self.builder.position_at_end(loop_start_bb);
-
-        let expr = return_none!(self.compile_expr(until_stmt.cond())?);
+        
+        let expr = return_none!(self.compile_expr(&exprs[0])?);
         let expr = self.actual_value(expr.into_struct_value());
         let cond = self.is_false(expr.into());
         self.builder
@@ -336,7 +353,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // if we break b/c condition not met the loop return hempty
         phi_return.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.builder.position_at_end(loop_bb);
-        for expr in until_stmt.scope() {
+        let UMPL2Expr::Scope(scope) = &exprs[1] else {
+            return  Err("while loop with scope".to_string());
+        };
+        for expr in scope {
             self.compile_expr(expr)?;
         }
         self.builder.build_unconditional_branch(loop_start_bb);

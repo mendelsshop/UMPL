@@ -1,18 +1,21 @@
 use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, PointerValue};
 
-use crate::ast::Fanction;
+use crate::ast::UMPL2Expr;
 
 use super::{Compiler, EvalType, TyprIndex};
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    fn extract_arguements(&mut self, root: PointerValue<'ctx>, functiontype: &Fanction) {
+    fn extract_arguements(&mut self, root: PointerValue<'ctx>,  exprs: &[UMPL2Expr]) {
         let current_node = self
             .builder
             .build_alloca(self.types.generic_pointer, "arg pointer");
         self.builder.build_store(current_node, root);
         // let arg_cound = self.context.i64_type().const_zero();
-
-        for i in 0..functiontype.param_count() {
+        let UMPL2Expr::Number(n) = &exprs[0] else {
+            todo!("this function should return result so this can error")
+        };
+        
+        for i in 0..(n.floor() as u32) {
             let arg_load =
                 self.builder
                     .build_load(self.types.generic_pointer, current_node, "arg_load");
@@ -42,20 +45,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(crate) fn compile_function(
+    pub(crate) fn special_form_lambda(
         &mut self,
-        r#fn: &crate::ast::Fanction,
+        exprs: &[UMPL2Expr]
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        let body = if exprs.len() == 2 {
+            &exprs[1]
+        } else if exprs.len() == 3 {
+            &exprs[2]
+        } else {
+            return Err("lambda expression needs at least 2 subexpressions".to_string());
+        };
         // if its var arg dont make it var arg, just make it arg_count+1  number of parameters
         let env = self.get_scope();
         let old_fn = self.fn_value;
         let old_block = self.builder.get_insert_block();
-        let body = r#fn.scope();
-        let name = r#fn
-            .name()
-            .map_or("lambda".to_string(), |name| name.to_string());
+        let UMPL2Expr::Scope(body) = body else {
+            return  Err("while loop without scope".to_string());
+        };
+
         // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
-        let fn_value = self.module.add_function(&name, self.types.lambda_ty, None);
+        let fn_value = self.module.add_function("lambda", self.types.lambda_ty, None);
         for (name, arg) in fn_value.get_param_iter().skip(2).enumerate() {
             arg.set_name(&name.to_string());
         }
@@ -110,7 +120,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.insert_variable(cn.clone(), alloca);
         }
         let args = fn_value.get_nth_param(2).unwrap().into_pointer_value();
-        self.extract_arguements(args, r#fn);
+        self.extract_arguements(args, exprs);
         self.builder
             .position_at_end(fn_value.get_last_basic_block().unwrap());
         self.state.push(EvalType::Function);
@@ -125,17 +135,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.position_at_end(end);
         }
         self.fn_value = old_fn;
-
+        self.pop_env();
         // return the whole thing after verification and optimization
         if let Ok(lambda) = self.const_lambda(fn_value, env.1) {
-            self.pop_env();
-            let ret = if r#fn.name().is_some() {
-                self.insert_lambda(&(name).into(), lambda);
-                self.hempty()
-            } else {
-                lambda
-            };
-            Ok(Some(ret.as_basic_value_enum()))
+
+
+            Ok(Some(lambda.as_basic_value_enum()))
         } else {
             println!();
             self.print_ir();
@@ -151,7 +156,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         application: &crate::ast::Application,
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        let op = return_none!(self.compile_expr(&application.args()[0])?);
+        let op = if let UMPL2Expr::Ident(ident) = &application.args()[0] {
+            if let Some(var) = self.get_variable(ident) {
+                match var {
+                    super::env::VarType::Lisp(val) => {
+                        self.builder.build_load(self.types.object, val, ident)
+                    }
+                    super::env::VarType::SpecialForm(sf) => {
+                        return sf(self, &application.args()[1..]);
+                    }
+                    super::env::VarType::Macro => todo!(),
+                }
+            } else {
+                return Err(format!("variable '{ident}' not found",));
+            }
+        } else {
+            return_none!(self.compile_expr(&application.args()[0])?)
+        };
         let arg_len = application.args().len();
         let call_info = self.types.call_info.const_named_struct(&[
             self.context

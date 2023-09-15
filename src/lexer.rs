@@ -5,25 +5,13 @@ use std::iter;
 use parse_int::parse;
 
 use crate::{
-    ast::{
-        Application, Boolean, Fanction, GoThrough, If, Module, UMPL2Expr, Unless, Until, Varidiac,
-    },
+    ast::{Application, Boolean, UMPL2Expr},
     pc::{
-        alt, any_of, chain, char, choice, inbetween, integer, keep_left, keep_right, many, many1,
+        alt, any_of, chain, char, choice, inbetween, keep_left, keep_right, many, many1,
         map, not_any_of, not_char, opt, satify, seq, string, try_map, ParseError, ParseErrorType,
         Parser,
-    },
+    }, interior_mut::RC,
 };
-
-impl Varidiac {
-    const fn from_char(c: char) -> Option<Self> {
-        match c {
-            '*' => Some(Self::AtLeast0),
-            '+' => Some(Self::AtLeast1),
-            _ => None,
-        }
-    }
-}
 
 fn ws_or_comment() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
     map(
@@ -66,6 +54,7 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                             ident_umpl(),
                             application(),
                             special_start(),
+                            scope(umpl2expr()),
                         ]
                         .to_vec(),
                     ),
@@ -106,10 +95,8 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
 
                     r.0 = new_acces(accesor, r.0);
                 }
-                r.0
-            } else {
-                r.0
             }
+            r.0
         },
     )
 }
@@ -225,7 +212,7 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
         [
             mod_stmt(),
             if_stmt(),
-            unless_stmt(),
+            // unless_stmt(),
             until_stmt(),
             go_through_stmt(),
             continue_doing_stmt(),
@@ -239,7 +226,7 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
 
 fn mod_stmt() -> Box<Parser<UMPL2Expr>> {
     keep_right(
-        string("module"),
+        string("mod"),
         keep_right(
             ws_or_comment(),
             map(
@@ -262,17 +249,18 @@ fn mod_stmt() -> Box<Parser<UMPL2Expr>> {
                                             input: "",
                                         }
                                     })?;
-                                // ther has to be abtter way then leaking
+                                // ther has to be abtter way then leaking maybe if moved this to eval we wuld need to leak
                                 umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
                             }),
                         ),
                     ),
                 ),
                 |(name, code)| {
-                    let UMPL2Expr::Scope(s) = code else {
-                        panic!("error in parser combinator")
-                    };
-                    UMPL2Expr::Module(Module::new(name.to_string(), s))
+                    UMPL2Expr::Application(Application::new(vec![
+                        UMPL2Expr::Ident("module".into()),
+                        UMPL2Expr::Ident(name.to_string().into()),
+                        code,
+                    ]))
                 },
             ),
         ),
@@ -286,10 +274,11 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
             chain(keep_right(ws_or_comment(), ident_umpl()), umpl2expr()),
         ),
         |r| {
-            let UMPL2Expr::Ident(let_ident) = r.0 else {
-                panic!()
-            };
-            UMPL2Expr::Let(let_ident, Box::new(r.1))
+            UMPL2Expr::Application(Application::new(vec![
+                UMPL2Expr::Ident("define".into()),
+                r.0,
+                r.1,
+            ]))
         },
     )
 }
@@ -299,34 +288,7 @@ fn if_stmt() -> Box<Parser<UMPL2Expr>> {
         seq(vec![
             keep_right(string("if"), umpl2expr()),
             keep_right(
-                keep_right(ws_or_comment(), string("do")),
-                scope(umpl2expr()),
-            ),
-            keep_right(
-                keep_right(ws_or_comment(), string("otherwise")),
-                scope(umpl2expr()),
-            ),
-        ]),
-        |mut r| {
-            let cond = r.next().unwrap_or_default();
-            let cons = get_scope(r.next());
-            let alt = get_scope(r.next());
-            UMPL2Expr::If(Box::new(If::new(cond, cons, alt)))
-        },
-    )
-}
-
-fn get_scope(i: Option<UMPL2Expr>) -> Vec<UMPL2Expr> {
-    i.and_then(UMPL2Expr::get_scope_owned).unwrap_or_default()
-}
-
-// TODO: unless maybe should follow form wher condition not in the beginning
-fn unless_stmt() -> Box<Parser<UMPL2Expr>> {
-    map(
-        seq(vec![
-            keep_right(string("unless"), umpl2expr()),
-            keep_right(
-                keep_right(ws_or_comment(), string("than")),
+                keep_right(ws_or_comment(), string("then")),
                 scope(umpl2expr()),
             ),
             keep_right(
@@ -335,27 +297,30 @@ fn unless_stmt() -> Box<Parser<UMPL2Expr>> {
             ),
         ]),
         |mut r| {
+            let if_ident = UMPL2Expr::Ident("if".into());
             let cond = r.next().unwrap_or_default();
-            let alt = get_scope(r.next());
-            let cons = get_scope(r.next());
-            UMPL2Expr::Unless(Box::new(Unless::new(cond, alt, cons)))
+            let cons = r.next().unwrap();
+            let alt = r.next().unwrap();
+            UMPL2Expr::Application(Application::new(vec![if_ident, cond, cons, alt]))
         },
     )
+}
+
+fn get_scope(i: Option<UMPL2Expr>) -> Vec<UMPL2Expr> {
+    i.and_then(UMPL2Expr::get_scope_owned).unwrap_or_default()
 }
 
 fn until_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         seq(vec![
-            keep_right(string("until"), umpl2expr()),
-            keep_right(
-                keep_right(ws_or_comment(), string("then")),
-                scope(umpl2expr()),
-            ),
+            keep_right(string("while"), umpl2expr()),
+            keep_right(ws_or_comment(), keep_right(string("do"), scope(umpl2expr()))),
         ]),
         |mut r| {
+            let while_ident = UMPL2Expr::Ident("while".into());
             let cond = r.next().unwrap_or_default();
-            let loop_scope = get_scope(r.next());
-            UMPL2Expr::Until(Box::new(Until::new(cond, loop_scope)))
+            let loop_scope = r.next().unwrap();
+            UMPL2Expr::Application(Application::new(vec![while_ident, cond, loop_scope]))
         },
     )
 }
@@ -363,33 +328,29 @@ fn until_stmt() -> Box<Parser<UMPL2Expr>> {
 fn go_through_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         seq(vec![
-            keep_right(
-                string("go-through"),
-                keep_right(ws_or_comment(), ident_umpl()),
-            ), // TODO: use identifier parserl, not the full blown expression parser
-            keep_right(keep_right(ws_or_comment(), string("of")), umpl2expr()),
+            keep_right(string("for"), keep_right(ws_or_comment(), ident_umpl())), // TODO: use identifier parserl, not the full blown expression parser
+            keep_right(keep_right(ws_or_comment(), string("in")), umpl2expr()),
             scope(umpl2expr()),
         ]),
         |mut r| {
-            let UMPL2Expr::Ident(for_ident) = r.next().unwrap_or_default() else {
-                panic!()
-            };
+            let for_ident = UMPL2Expr::Ident("for".into());
+            let iter_name = r.next().unwrap();
             let iterable = r.next().unwrap_or_default();
-            let loop_scope = get_scope(r.next());
-            UMPL2Expr::GoThrough(Box::new(GoThrough::new(for_ident, iterable, loop_scope)))
+            let loop_scope = r.next().unwrap();
+            UMPL2Expr::Application(Application::new(vec![
+                for_ident, iter_name, iterable, loop_scope,
+            ]))
         },
     )
 }
 
 fn continue_doing_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
-        seq(vec![keep_right(
-            string("continue-doing"),
-            scope(umpl2expr()),
-        )]),
+        seq(vec![keep_right(string("loop"), scope(umpl2expr()))]),
         |mut r| {
-            let loop_scope = get_scope(r.next());
-            UMPL2Expr::ContiueDoing(loop_scope)
+            let loop_ident = UMPL2Expr::Ident("loop".into());
+            let loop_scope = r.next().unwrap();
+            UMPL2Expr::Application(Application::new(vec![loop_ident, loop_scope]))
         },
     )
 }
@@ -397,21 +358,19 @@ fn continue_doing_stmt() -> Box<Parser<UMPL2Expr>> {
 fn link_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         chain(
-            keep_right(string("link"), keep_right(ws_or_comment(), label_umpl())),
+            keep_right(
+                string("ln"),
+                // makeing sure that there is atleast two labels
+                keep_right(ws_or_comment(), label_umpl()),
+            ),
             many1(keep_right(ws_or_comment(), label_umpl())),
         ),
         |res| {
-            let UMPL2Expr::Label(to_link) = res.0 else {
-                panic!()
-            };
-            let linked_list = res
-                .1
-                .map(|e| match e {
-                    UMPL2Expr::Label(l) => l,
-                    _ => panic!(),
-                })
-                .collect();
-            UMPL2Expr::Link(to_link, linked_list)
+            let link_ident = UMPL2Expr::Ident("link".into());
+            let goto = res.0;
+            let mut link = vec![link_ident, goto];
+            link.extend(res.1);
+            UMPL2Expr::Application(Application::new(link))
         },
     )
 }
@@ -426,32 +385,50 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         chain(
             keep_right(
-                string("fanction"),
+                string("fn"),
                 opt(keep_right(
                     ws_or_comment(),
                     satify(unic_emoji_char::is_emoji_presentation),
                 )),
             ),
             chain(
-                opt(keep_right(ws_or_comment(), integer())),
+                opt(keep_right(ws_or_comment(),hexnumber() )),
                 chain(
-                    opt(keep_right(
-                        ws_or_comment(),
-                        map(any_of(['*', '+']), |char|
-                            // its ok to unwrap b/c we already know that it is a correct form
-                             Varidiac::from_char(char).unwrap()),
-                    )),
+                    opt(keep_right(ws_or_comment(), any_of(['*', '+']))),
                     scope(umpl2expr()),
                 ),
             ),
         ),
         |r| {
-            let name = r.0;
+            let map_to_umpl = |c: Option<char>, mapper: fn(RC<str>) -> UMPL2Expr| {
+                c.as_ref()
+                    .map(ToString::to_string)
+                    .map(Into::into)
+                    .map(mapper)
+            };
+            // let fn_ident = UMPL2Expr::Ident("loop".into());
+            let name = map_to_umpl(r.0, UMPL2Expr::Ident);
             // TODO: maybe if no count given then randomly choose a count
-            let param_count = r.1 .0.unwrap_or_default();
-            let variadic = r.1 .1 .0;
-            let scope = r.1 .1 .1.get_scope_owned().unwrap_or_default();
-            UMPL2Expr::Fanction(Fanction::new(name, param_count, variadic, scope))
+            let param_count = r.1 .0.unwrap();
+            let variadic = map_to_umpl(r.1 .1 .0, UMPL2Expr::String);
+            let scope = r.1 .1 .1;
+            let fn_ident = UMPL2Expr::Ident("lambda".into());
+            let lambda = if let Some(variadic) = variadic {
+                UMPL2Expr::Application(Application::new(vec![
+                    fn_ident,
+                    param_count,
+                    variadic,
+                    scope,
+                ]))
+            } else {
+                UMPL2Expr::Application(Application::new(vec![fn_ident, param_count, scope]))
+            };
+            if let Some(name) = name {
+                let fn_ident = UMPL2Expr::Ident("define".into());
+                UMPL2Expr::Application(Application::new(vec![fn_ident, name, lambda]))
+            } else {
+                lambda
+            }
         },
     )
 }
@@ -539,8 +516,8 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
 mod tests {
     // TODO: remake some of thests now that >> > < are valid in any expression
     use crate::{
-        ast::{Application, Fanction, GoThrough, If, Unless, Until},
-        lexer::{parse_umpl, Boolean, UMPL2Expr, Varidiac},
+        ast::{Application, Fanction, GoThrough, If, Unless, Until, Varidiac},
+        lexer::{parse_umpl, Boolean, UMPL2Expr},
     };
 
     #[test]
@@ -553,94 +530,94 @@ mod tests {
         println!("{:?}", parse_umpl("if 1 do ᚜1 unless 1 than ᚜1 2 else ᚜1 2 otherwise ᚜if 1 do ᚜1 2 otherwise ᚜until 1 then ᚜1 2"));
     }
 
-    #[test]
-    pub fn umpl_if() {
-        let test_result = parse_umpl("if ? do ᚜2 6 6᚛  otherwise ᚜4᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::If(Box::new(If::new(
-                UMPL2Expr::Bool(Boolean::Maybee),
-                vec![
-                    UMPL2Expr::Number(2.0),
-                    UMPL2Expr::Number(6.0),
-                    UMPL2Expr::Number(6.0)
-                ],
-                vec![UMPL2Expr::Number(4.0)]
-            )))
-        );
-    }
+    // #[test]
+    // pub fn umpl_if() {
+    //     let test_result = parse_umpl("if ? do ᚜2 6 6᚛  otherwise ᚜4᚛");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::If(Box::new(If::new(
+    //             UMPL2Expr::Bool(Boolean::Maybee),
+    //             vec![
+    //                 UMPL2Expr::Number(2.0),
+    //                 UMPL2Expr::Number(6.0),
+    //                 UMPL2Expr::Number(6.0)
+    //             ],
+    //             vec![UMPL2Expr::Number(4.0)]
+    //         )))
+    //     );
+    // }
 
-    #[test]
-    fn umpl_unless() {
-        let test_result = parse_umpl("unless & than ᚜4᚛ else ᚜.t.᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::Unless(Box::new(Unless::new(
-                UMPL2Expr::Bool(Boolean::True),
-                vec![UMPL2Expr::Number(4.0)],
-                vec![UMPL2Expr::String("t".into())]
-            )))
-        );
-    }
+    // #[test]
+    // fn umpl_unless() {
+    //     let test_result = parse_umpl("unless & than ᚜4᚛ else ᚜.t.᚛");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::Unless(Box::new(Unless::new(
+    //             UMPL2Expr::Bool(Boolean::True),
+    //             vec![UMPL2Expr::Number(4.0)],
+    //             vec![UMPL2Expr::String("t".into())]
+    //         )))
+    //     );
+    // }
 
-    #[test]
-    fn umpl_until() {
-        let test_result = parse_umpl("until | then ᚜ ab/᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::Until(Box::new(Until::new(
-                UMPL2Expr::Bool(Boolean::False),
-                vec![UMPL2Expr::Ident("ab/".into())]
-            )))
-        );
-    }
+    // #[test]
+    // fn umpl_until() {
+    //     let test_result = parse_umpl("until | then ᚜ ab/᚛");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::Until(Box::new(Until::new(
+    //             UMPL2Expr::Bool(Boolean::False),
+    //             vec![UMPL2Expr::Ident("ab/".into())]
+    //         )))
+    //     );
+    // }
 
-    #[test]
-    fn umpl_go_through() {
-        let test_result = parse_umpl("go-through a of (tree 5 6 7)< ᚜ .ab/.᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::GoThrough(Box::new(GoThrough::new(
-                "a".into(),
-                UMPL2Expr::Application(Application::new(vec![
-                    UMPL2Expr::Ident("tree".into()),
-                    UMPL2Expr::Number(5.0),
-                    UMPL2Expr::Number(6.0),
-                    UMPL2Expr::Number(7.0)
-                ],)),
-                vec![UMPL2Expr::String("ab/".into())]
-            )))
-        );
-    }
+    // #[test]
+    // fn umpl_go_through() {
+    //     let test_result = parse_umpl("go-through a of (tree 5 6 7)< ᚜ .ab/.᚛");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::GoThrough(Box::new(GoThrough::new(
+    //             "a".into(),
+    //             UMPL2Expr::Application(Application::new(vec![
+    //                 UMPL2Expr::Ident("tree".into()),
+    //                 UMPL2Expr::Number(5.0),
+    //                 UMPL2Expr::Number(6.0),
+    //                 UMPL2Expr::Number(7.0)
+    //             ],)),
+    //             vec![UMPL2Expr::String("ab/".into())]
+    //         )))
+    //     );
+    // }
 
-    #[test]
-    fn umpl_continue_doing() {
-        let test_result = parse_umpl("continue-doing ᚜ lg` ᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::ContiueDoing(vec![UMPL2Expr::Ident("lg`".into())])
-        );
-    }
+    // #[test]
+    // fn umpl_continue_doing() {
+    //     let test_result = parse_umpl("continue-doing ᚜ lg` ᚛");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::ContiueDoing(vec![UMPL2Expr::Ident("lg`".into())])
+    //     );
+    // }
 
-    #[test]
-    fn umpl_fn() {
-        let test_result = parse_umpl("fanction 🚗  1 * ᚜ l ᚛");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::Fanction(Fanction::new(
-                Some('🚗'),
-                1,
-                Some(Varidiac::AtLeast0),
-                vec![UMPL2Expr::Ident("l".into())]
-            ))
-        );
-    }
+    // #[test]
+    // fn umpl_fn() {
+    //     let test_result = parse_umpl("fanction 🚗  1 * ᚜ l ᚛");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::Fanction(Fanction::new(
+    //             Some('🚗'),
+    //             1,
+    //             Some(Varidiac::AtLeast0),
+    //             vec![UMPL2Expr::Ident("l".into())]
+    //         ))
+    //     );
+    // }
 
     #[test]
     fn umpl_ident() {
