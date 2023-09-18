@@ -35,3 +35,43 @@ casing shneigans on keywords
 if a condtional hits a maybe it will randomly choose to go or not
 
 should try to `help` in most interesting way (using randomnsess....)
+
+class/struct turn into "lisp object" like cons
+class cons ᚜
+    car
+    cons
+
+    public object (carGet) throws Exception ᚜
+    car᚛ 
+    public object (carMap 1) throws Exception ᚜
+        let mapper '0'
+        (set! car (mapper car))
+    ᚛ 
+᚛ 
+
+simplfies mostly too: (inconsisteny betweeen how args are defined ie number vs symbols)
+```
+(define (cons 2)
+    (define car '0')
+    (define cdr '1')
+    (define (carGet) car)
+    (define (carMap 1)
+        (define mapper '0')
+        (set! car (mapper car))
+    )
+    (lambda (z)
+        (cond ((= z 0) car)
+              ((= z 1) cdr)
+              ((= z 2) carGet))
+              ((= z 3) carMap))
+    )
+
+)
+(define (car z) (z 0))
+(define (cdr 1) (z 1))
+(define (carGet z) (z 2))
+(define (carMap z mapper) ((z 3)) mapper)
+! should methods take the parames the need or should they just return the procedure like accesing 
+! fields
+(define (carMap z) (z 3))
+```
