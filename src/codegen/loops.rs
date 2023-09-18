@@ -13,7 +13,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return Err("Expected a single expression for a loop".to_string());
         }
         let UMPL2Expr::Scope(scope) = &exprs[0] else {
-            return  Err("Expected a scope for a loop".to_string());
+            return Err("Expected a scope for a loop".to_string());
         };
         let loop_bb = self
             .context
@@ -42,19 +42,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(crate) fn special_form_for_loop(
         &mut self,
-        exprs: &[UMPL2Expr]
+        exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         if exprs.len() != 3 {
             return Err("Expected 3 expression for for loop".to_string());
         }
         // iterates with `in order`
         let UMPL2Expr::Ident(name) = &exprs[0] else {
-            return  Err("no identifier to usef for iteration".to_string());
+            return Err("no identifier to usef for iteration".to_string());
         };
         let iter = &exprs[1];
         let iter = return_none!(self.compile_expr(&iter)?).into_struct_value();
-        let UMPL2Expr::Scope(iter_scope) = &exprs[2]  else {
-            return  Err("Expected a scope for a loop".to_string());
+        let UMPL2Expr::Scope(iter_scope) = &exprs[2] else {
+            return Err("Expected a scope for a loop".to_string());
         };
         let phi = self.make_iter(iter, name.clone(), iter_scope)?;
         Ok(Some(phi.as_basic_value()))
@@ -320,10 +320,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(crate) fn special_form_while_loop(
         &mut self,
-        exprs: &[UMPL2Expr]
+        exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         if exprs.len() != 2 {
-            return  Err("expected 2 expression for while loop".to_string());
+            return Err("expected 2 expression for while loop".to_string());
         }
         let loop_bb = self
             .context
@@ -344,7 +344,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         });
 
         self.builder.position_at_end(loop_start_bb);
-        
+
         let expr = return_none!(self.compile_expr(&exprs[0])?);
         let expr = self.actual_value(expr.into_struct_value());
         let cond = self.is_false(expr.into());
@@ -354,7 +354,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         phi_return.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.builder.position_at_end(loop_bb);
         let UMPL2Expr::Scope(scope) = &exprs[1] else {
-            return  Err("while loop with scope".to_string());
+            return Err("while loop with scope".to_string());
         };
         for expr in scope {
             self.compile_expr(expr)?;

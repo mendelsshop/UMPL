@@ -22,7 +22,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub fn special_form_define(&mut self, exprs: &[UMPL2Expr]) ->  Result<Option<BasicValueEnum<'ctx>>, String> {
+    pub fn special_form_define(
+        &mut self,
+        exprs: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         if exprs.len() != 2 {
             return Err("define must have 2 expressions".to_string());
         }
@@ -31,9 +34,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let v = return_none!(self.compile_expr(&exprs[1])?);
                 self.insert_variable_new_ptr(i.clone(), v);
                 Ok(Some(self.hempty().into()))
-            },
+            }
             UMPL2Expr::Application(app) => todo!("define for functions"),
-            _ => Err("first expression must be either an identifier or a function head".to_string())
+            _ => {
+                Err("first expression must be either an identifier or a function head".to_string())
+            }
         }
     }
 

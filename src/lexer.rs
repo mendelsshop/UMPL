@@ -6,11 +6,12 @@ use parse_int::parse;
 
 use crate::{
     ast::{Application, Boolean, UMPL2Expr},
+    interior_mut::RC,
     pc::{
-        alt, any_of, chain, char, choice, inbetween, keep_left, keep_right, many, many1,
-        map, not_any_of, not_char, opt, satify, seq, string, try_map, ParseError, ParseErrorType,
+        alt, any_of, chain, char, choice, inbetween, keep_left, keep_right, many, many1, map,
+        not_any_of, not_char, opt, satify, seq, string, try_map, ParseError, ParseErrorType,
         Parser,
-    }, interior_mut::RC,
+    },
 };
 
 fn ws_or_comment() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
@@ -283,6 +284,77 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
     )
 }
 
+enum ClassStuff {
+    Method(RC<str>, f64, Option<char>, UMPL2Expr),
+    Field(RC<str>),
+}
+
+fn method_stmt() -> Box<Parser<ClassStuff>> {
+    map(
+        chain(
+            keep_right(
+                keep_right(ws_or_comment(), string("public object")),
+                keep_right(
+                    ws_or_comment(),
+                    inbetween(
+                        char('('),
+                        chain(
+                            keep_right(ws_or_comment(), ident_umpl()),
+                            chain(
+                                keep_right(ws_or_comment(), hexnumber()),
+                                keep_right(ws_or_comment(), opt(alt(char('+'), char('*')))),
+                            ),
+                        ),
+                        char(')'),
+                    ),
+                ),
+            ),
+            scope(umpl2expr()),
+        ),
+        |r| {
+            let UMPL2Expr::Ident(name) = r.0 .0 else {
+                panic!()
+            };
+            let UMPL2Expr::Number(arg_num) = r.0 .1 .0 else {
+                panic!()
+            };
+            let varidiac = r.0 .1 .1;
+            let scope = r.1;
+            ClassStuff::Method(name, arg_num, varidiac, scope)
+        },
+    )
+}
+
+fn class_stmt() -> Box<Parser<UMPL2Expr>> {
+    map(chain(
+    keep_right(
+        keep_right(ws_or_comment(), string("class")),
+        keep_right(ws_or_comment(), ident_umpl()),
+    ),
+    inbetween(
+        keep_right(ws_or_comment(), char('᚜')),
+    many(    many(keep_right(
+        ws_or_comment(),
+        alt(
+            map(ident_umpl(), |r| {
+                let UMPL2Expr::Ident(name) = r else { panic!() };
+                ClassStuff::Field(name)
+            }),
+            method_stmt(),
+        ),
+    ))),
+        
+        opt(keep_right(ws_or_comment(), char('᚛'))),
+    )), |r| {
+        let UMPL2Expr::Ident(name) = r.0 else {
+            panic!()
+        };
+        r.1;
+        UMPL2Expr::Hempty
+    })
+
+}
+
 fn if_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         seq(vec![
@@ -314,7 +386,10 @@ fn until_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         seq(vec![
             keep_right(string("while"), umpl2expr()),
-            keep_right(ws_or_comment(), keep_right(string("do"), scope(umpl2expr()))),
+            keep_right(
+                ws_or_comment(),
+                keep_right(string("do"), scope(umpl2expr())),
+            ),
         ]),
         |mut r| {
             let while_ident = UMPL2Expr::Ident("while".into());
@@ -392,7 +467,7 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
                 )),
             ),
             chain(
-                opt(keep_right(ws_or_comment(),hexnumber() )),
+                opt(keep_right(ws_or_comment(), hexnumber())),
                 chain(
                     opt(keep_right(ws_or_comment(), any_of(['*', '+']))),
                     scope(umpl2expr()),

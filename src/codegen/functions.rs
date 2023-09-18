@@ -5,7 +5,7 @@ use crate::ast::UMPL2Expr;
 use super::{Compiler, EvalType, TyprIndex};
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    fn extract_arguements(&mut self, root: PointerValue<'ctx>,  exprs: &[UMPL2Expr]) {
+    fn extract_arguements(&mut self, root: PointerValue<'ctx>, exprs: &[UMPL2Expr]) {
         let current_node = self
             .builder
             .build_alloca(self.types.generic_pointer, "arg pointer");
@@ -14,7 +14,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let UMPL2Expr::Number(n) = &exprs[0] else {
             todo!("this function should return result so this can error")
         };
-        
+
         for i in 0..(n.floor() as u32) {
             let arg_load =
                 self.builder
@@ -47,7 +47,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(crate) fn special_form_lambda(
         &mut self,
-        exprs: &[UMPL2Expr]
+        exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         let body = if exprs.len() == 2 {
             &exprs[1]
@@ -61,11 +61,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let old_fn = self.fn_value;
         let old_block = self.builder.get_insert_block();
         let UMPL2Expr::Scope(body) = body else {
-            return  Err("while loop without scope".to_string());
+            return Err("while loop without scope".to_string());
         };
 
         // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
-        let fn_value = self.module.add_function("lambda", self.types.lambda_ty, None);
+        let fn_value = self
+            .module
+            .add_function("lambda", self.types.lambda_ty, None);
         for (name, arg) in fn_value.get_param_iter().skip(2).enumerate() {
             arg.set_name(&name.to_string());
         }
@@ -138,8 +140,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.pop_env();
         // return the whole thing after verification and optimization
         if let Ok(lambda) = self.const_lambda(fn_value, env.1) {
-
-
             Ok(Some(lambda.as_basic_value_enum()))
         } else {
             println!();

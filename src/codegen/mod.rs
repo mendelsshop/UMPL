@@ -417,7 +417,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
-            // UMPL2Expr::Link(_, _) | 
+            // UMPL2Expr::Link(_, _) |
             UMPL2Expr::Scope(_) => unreachable!(),
             // UMPL2Expr::Let(i, v) => {
             //     let v = return_none!(self.compile_expr(v)?);
@@ -438,18 +438,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.build_unconditional_branch(block);
                 self.builder.position_at_end(block);
                 Ok(Some(self.hempty().into()))
-            }
-            // UMPL2Expr::Module(m) => {
-            //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
-            //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
-            //     self.module_list.push(m.name().to_string());
-            //     for expr in m.inner() {
-            //         // self.print_ir();
-            //         self.compile_expr(expr)?;
-            //     }
-            //     self.module_list.pop();
-            //     Ok(Some(self.hempty().into()))
-            // }
+            } // UMPL2Expr::Module(m) => {
+              //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
+              //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
+              //     self.module_list.push(m.name().to_string());
+              //     for expr in m.inner() {
+              //         // self.print_ir();
+              //         self.compile_expr(expr)?;
+              //     }
+              //     self.module_list.pop();
+              //     Ok(Some(self.hempty().into()))
+              // }
         }
     }
 
