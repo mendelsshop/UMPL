@@ -35,7 +35,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.insert_variable_new_ptr(i.clone(), v);
                 Ok(Some(self.hempty().into()))
             }
-            UMPL2Expr::Application(app) => todo!("define for functions"),
+            UMPL2Expr::Application(app) => {
+                if app.args().len() < 2 || app.args().len() > 3 {
+                    return Err("defining procedures with define must specify name, arg count and possibly varidicity".to_string());
+                }
+                let UMPL2Expr::Ident(name) = &app.args()[0] else {
+                    return Err("first expression in define procedure not a symbol".to_string());
+                };
+                let argc = &app.args()[1];
+                let varidicity = app.args().get(2).cloned();
+                let scope = &exprs[1];
+                let lambda = return_none!(if let Some(vard) = varidicity {
+                    self.special_form_lambda(&[argc.clone(), vard, scope.clone()])
+                } else {
+                    self.special_form_lambda(&[argc.clone(), scope.clone()])
+                }?);
+                self.insert_variable_new_ptr(name.clone(), lambda);
+                Ok(Some(self.hempty().into()))
+            }
             _ => {
                 Err("first expression must be either an identifier or a function head".to_string())
             }
