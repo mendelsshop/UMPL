@@ -1,6 +1,9 @@
-use inkwell::values::BasicValueEnum;
+use inkwell::{
+    basic_block::BasicBlock,
+    values::{BasicValueEnum, IntValue},
+};
 
-use crate::ast::UMPL2Expr;
+use crate::ast::{Application, UMPL2Expr};
 
 use super::Compiler;
 
@@ -26,11 +29,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // else block
         self.builder.position_at_end(else_bb);
         let else_val = if let Some(alt) = exprs.get(2) {
-            if let UMPL2Expr::Scope(s) = alt {
-                self.compile_scope(s)?
-            } else {
-                return Err("if alt is not a scope".to_string());
-            }
+            self.compile_expr(alt)?
         } else {
             Some(self.const_boolean(crate::ast::Boolean::False).into())
         };
@@ -41,11 +40,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         // build else block
         self.builder.position_at_end(then_bb);
-        let then_val = if let UMPL2Expr::Scope(s) = &exprs[1] {
-            self.compile_scope(s)?
-        } else {
-            return Err("if alt is not a scope".to_string());
-        };
+        let then_val = self.compile_expr(&exprs[1])?;
         if then_val.is_some() {
             self.builder.build_unconditional_branch(cont_bb);
         }
@@ -65,4 +60,87 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
         Ok(Some(phi.as_basic_value()))
     }
+
+    // TODO: need to work on macros so we can do cond->if
+    // fn special_form_cond(
+    //     &mut self,
+    //     exprs: &[UMPL2Expr],
+    // ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+    //     // 1. get condition
+    //     // 2. see if condition is else -> make sure no more cases
+    //     // 3. eval -> actual value condtion
+    //     let exprs: Vec<Application> = exprs
+    //         .into_iter()
+    //         .map(|case| {
+    //             if let UMPL2Expr::Application(app) = case {
+    //                 Ok(app.clone())
+    //             } else {
+    //                 Err("cond case is not list")
+    //             }
+    //         })
+    //         .collect::<Result<Vec<Application>, &str>>()?;
+    //     let has_else = exprs
+    //         .last()
+    //         .and_then(|last| {
+    //             if last.args()[0] == UMPL2Expr::Ident("else".into()) {
+    //                 Some(())
+    //             } else {
+    //                 None
+    //             }
+    //         })
+    //         .is_some();
+    //     let (cases, elses): (Vec<Application>, Vec<Application>) = exprs
+    //         .into_iter()
+    //         .partition(|case| case.args()[0] == UMPL2Expr::Ident("else".into()));
+    //     if elses.len() > 1 {
+    //         Err("cond statement with multiple elses".to_string())
+    //     } else if !has_else && elses.len() == 1 {
+    //         Err("cond statement has else in middle".to_string())
+    //     } else {
+    //         let current_fn = self.current_fn_value()?;
+    //         let start_bb = self.builder.get_insert_block().unwrap();
+    //         let else_bb = self.context.append_basic_block(current_fn, "cond:else");
+    //         let done_bb = self.context.append_basic_block(current_fn, "cond:done");
+    //         self.builder.position_at_end(else_bb);
+    //         let else_part = if let Some(r#else) = elses.get(0) {
+    //             return_none!(self.compile_expr(&r#else.args()[1])?)
+    //         } else {
+    //             self.hempty().into()
+    //         };
+    //         self.builder.build_unconditional_branch(done_bb);
+    //         let else_bblock = self.builder.get_insert_block().unwrap();
+            
+    //         let conds = return_none!(cases
+    //             .iter()
+    //             .enumerate()
+    //             .map(|(i, case)| {
+    //                 let bb = self
+    //                     .context
+    //                     .append_basic_block(current_fn, &format!("cond:case{i}"));
+    //                 self.builder.position_at_end(start_bb);
+    //                 let cond = self.compile_expr(&case.args()[0])?;
+    //                 let cond = self.builder.build_not(
+    //                     self.is_false(
+    //                         self.actual_value(return_none!(cond).into_struct_value())
+    //                             .into(),
+    //                     ),
+    //                     "cond:invert-cond",
+    //                 );
+    //                 self.builder.position_at_end(bb);
+    //                 let expr = return_none!(self.compile_expr(&case.args()[1])?);
+    //                 self.builder.build_unconditional_branch(done_bb);
+    //                 let bb = self.builder.get_insert_block().unwrap();
+
+    //                 Ok(Some((bb, cond, expr)))
+    //             })
+    //             .collect::<Result<
+    //                 Option<Vec<(BasicBlock<'ctx>, IntValue<'ctx>, BasicValueEnum<'ctx>)>>,
+    //                 String,
+    //             >>()?);
+    //             self.builder.position_at_end(start_bb);
+    //             // self.builder.build_switch(, else_block, cases)
+            
+    //         Err("cond statement has else in middle".to_string())
+    //     }
+    // }
 }
