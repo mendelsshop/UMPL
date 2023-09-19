@@ -220,6 +220,7 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
             fn_stmt(),
             link_stmt(),
             let_stmt(),
+            class_stmt(),
         ]
         .to_vec(),
     )
@@ -293,7 +294,13 @@ fn method_stmt() -> Box<Parser<ClassStuff>> {
     map(
         chain(
             keep_right(
-                keep_right(ws_or_comment(), string("public object")),
+                keep_right(
+                    ws_or_comment(),
+                    keep_right(
+                        string("public"),
+                        keep_right(ws_or_comment(), string("object")),
+                    ),
+                ),
                 keep_right(
                     ws_or_comment(),
                     inbetween(
@@ -302,14 +309,23 @@ fn method_stmt() -> Box<Parser<ClassStuff>> {
                             keep_right(ws_or_comment(), ident_umpl()),
                             chain(
                                 keep_right(ws_or_comment(), hexnumber()),
-                                keep_right(ws_or_comment(), opt(alt(char('+'), char('*')))),
+                                opt(keep_right(ws_or_comment(), alt(char('+'), char('*')))),
                             ),
                         ),
                         char(')'),
                     ),
                 ),
             ),
-            scope(umpl2expr()),
+            keep_right(
+                keep_right(
+                    ws_or_comment(),
+                    keep_right(
+                        string("throws"),
+                        keep_right(ws_or_comment(), string("Exception")),
+                    ),
+                ),
+                scope(umpl2expr()),
+            ),
         ),
         |r| {
             let UMPL2Expr::Ident(name) = r.0 .0 else {
@@ -326,33 +342,127 @@ fn method_stmt() -> Box<Parser<ClassStuff>> {
 }
 
 fn class_stmt() -> Box<Parser<UMPL2Expr>> {
-    map(chain(
-    keep_right(
-        keep_right(ws_or_comment(), string("class")),
-        keep_right(ws_or_comment(), ident_umpl()),
-    ),
-    inbetween(
-        keep_right(ws_or_comment(), char('᚜')),
-    many(    many(keep_right(
-        ws_or_comment(),
-        alt(
-            map(ident_umpl(), |r| {
-                let UMPL2Expr::Ident(name) = r else { panic!() };
-                ClassStuff::Field(name)
-            }),
-            method_stmt(),
+    map(
+        chain(
+            keep_right(
+                keep_right(ws_or_comment(), string("class")),
+                keep_right(ws_or_comment(), ident_umpl()),
+            ),
+            inbetween(
+                keep_right(ws_or_comment(), char('᚜')),
+                many(keep_right(
+                    ws_or_comment(),
+                    alt(
+                        method_stmt(),
+                        map(ident_umpl(), |r| {
+                            let UMPL2Expr::Ident(name) = r else { panic!() };
+                            ClassStuff::Field(name)
+                        }),
+                    ),
+                )),
+                opt(keep_right(ws_or_comment(), char('᚛'))),
+            ),
         ),
-    ))),
-        
-        opt(keep_right(ws_or_comment(), char('᚛'))),
-    )), |r| {
-        let UMPL2Expr::Ident(name) = r.0 else {
-            panic!()
-        };
-        r.1;
-        UMPL2Expr::Hempty
-    })
+        |r| {
+            let UMPL2Expr::Ident(name) = r.0 else {
+                panic!()
+            };
+            // let class
+            let mut fields = vec![];
+            let mut methods = vec![];
+            r.1.unwrap_or(Box::new(iter::empty()))
+                .for_each(|class| match class {
+                    ClassStuff::Method(name, argc, varidic, scope) => {
+                        let lambda = if let Some(variadic) = varidic {
+                            UMPL2Expr::Application(Application::new(vec![
+                                UMPL2Expr::Ident("lambda".into()),
+                                UMPL2Expr::Number(argc),
+                                UMPL2Expr::String(variadic.to_string().into()),
+                                scope,
+                            ]))
+                        } else {
+                            UMPL2Expr::Application(Application::new(vec![
+                                UMPL2Expr::Ident("lambda".into()),
+                                UMPL2Expr::Number(argc),
+                                scope,
+                            ]))
+                        };
+                        let method = UMPL2Expr::Application(Application::new(vec![
+                            UMPL2Expr::Ident("define".into()),
+                            UMPL2Expr::Ident(name.clone()),
+                            lambda,
+                        ]));
+                        methods.push((name, argc, varidic, method));
+                    }
+                    ClassStuff::Field(field) => {
+                        fields.push(field);
+                    }
+                });
+            let mut class_method = vec![
+                UMPL2Expr::Ident("lambda".into()),
+                UMPL2Expr::Number(fields.len() as f64),
+            ];
 
+            let mut class_method_scope = vec![];
+            class_method_scope.extend(fields.iter().enumerate().map(|(i, field)| {
+                UMPL2Expr::Application(Application::new(vec![
+                    UMPL2Expr::Ident("define".into()),
+                    UMPL2Expr::Ident(field.clone()),
+                    UMPL2Expr::FnParam(i),
+                ]))
+            }));
+            class_method_scope.extend(methods.iter().map(|method| method.3.clone()));
+            let mut cond_stmt = vec![UMPL2Expr::Ident("cond".into())];
+            let mut count = 0;
+            cond_stmt.extend(fields.iter().map(|field| {
+                count += 1;
+                UMPL2Expr::Application(Application::new(vec![
+                    UMPL2Expr::Application(Application::new(vec![
+                        UMPL2Expr::Ident("=".into()),
+                        UMPL2Expr::FnParam(0),
+                        UMPL2Expr::Number(count as f64 - 1.0),
+                    ])),
+                    UMPL2Expr::Ident(field.clone()),
+                ]))
+            }));
+
+            cond_stmt.extend(methods.iter().map(|field| {
+                count += 1;
+                UMPL2Expr::Application(Application::new(vec![
+                    UMPL2Expr::Application(Application::new(vec![
+                        UMPL2Expr::Ident("=".into()),
+                        UMPL2Expr::FnParam(0),
+                        UMPL2Expr::Number(count as f64 - 1.0),
+                    ])),
+                    UMPL2Expr::Ident(field.0.clone()),
+                ]))
+            }));
+            cond_stmt.push(UMPL2Expr::Application(Application::new(vec![
+                UMPL2Expr::Ident("else".into()),
+                UMPL2Expr::Application(Application::new(vec![
+                    UMPL2Expr::Ident("error".into()),
+                    UMPL2Expr::String(
+                        format!("error not valid index for dispatch on `{name}`").into(),
+                    ),
+                ])),
+            ])));
+            let dispatch = UMPL2Expr::Application(Application::new(vec![
+                UMPL2Expr::Ident("lambda".into()),
+                UMPL2Expr::Number(1.0),
+                UMPL2Expr::Scope(vec![UMPL2Expr::Application(Application::new(cond_stmt))]),
+            ]));
+
+            class_method_scope.push(dispatch);
+            class_method.push(UMPL2Expr::Scope(class_method_scope));
+            let class = vec![
+                UMPL2Expr::Ident("define".into()),
+                UMPL2Expr::Ident(name),
+                UMPL2Expr::Application(Application::new(class_method)),
+            ];
+            // TODO: find a way to return multiple things ie: besides for the class method also have function not part of the class that index into the class
+            UMPL2Expr::Application(Application::new(class))
+        },
+    )
 }
 
 fn if_stmt() -> Box<Parser<UMPL2Expr>> {
