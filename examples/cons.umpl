@@ -2,13 +2,14 @@ let cons  fn  2 ᚜ !using let to get around emoji name requirements
     ! we have save the the parameter passed into cons because the inner function "overwrites" the first parameter temporaraly
     let x '0"
     let y '1'
+
     !implicitly returning inner function we could also write stop fanction 1 ...
     fn  1 ᚜
-        if '0'
-            do ᚜x᚛
-            otherwise ᚜y᚛
+        x>
+        y>
+        (if '0' x y)
     ᚛
 ᚛
-let k (cons 6 7 )
-let z ;(a f g)
-(print z^car)
+let k (lambda 1 ᚜1> (if '0' 2 1)᚛)
+!let z ;(a f g)
+(k &)>

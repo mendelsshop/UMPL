@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -16,10 +16,7 @@ use inkwell::{
     AddressSpace,
 };
 
-use crate::{
-    ast::{FlattenAst, UMPL2Expr},
-    interior_mut::RC,
-};
+use crate::{ast::UMPL2Expr, interior_mut::RC};
 
 use self::env::VarType;
 macro_rules! return_none {
@@ -332,56 +329,56 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // UMPL2Expr::If(if_stmt) => self.compile_if(if_stmt),
             // UMPL2Expr::Unless(_) => todo!(),
             // TODO: keep in mind the fact that the loop might be in outer function
-            UMPL2Expr::Stop(s) => {
-                let res = return_none!(self.compile_expr(s)?);
-                match self
-                    .state
-                    .last()
-                    .ok_or("a stop is found outside a funcion or loop")?
-                {
-                    EvalType::Function => {
-                        self.builder.build_return(Some(&res));
-                    }
-                    EvalType::Loop {
-                        loop_bb: _,
-                        done_loop_bb,
-                        connection,
-                    } => {
-                        let cont_bb = self
-                            .context
-                            .append_basic_block(self.fn_value.unwrap(), "loop-continue");
-                        self.builder.build_conditional_branch(
-                            self.context.bool_type().const_zero(),
-                            cont_bb,
-                            *done_loop_bb,
-                        );
-                        connection
-                            .add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
-                        self.builder.position_at_end(cont_bb);
-                    }
-                };
-                Ok(None)
-            }
-            UMPL2Expr::Skip => {
-                // find the newesr "state event" that is a loop
-                self.builder.build_unconditional_branch(
-                    *self
-                        .state
-                        .iter()
-                        .rev()
-                        .find_map(|state| match state {
-                            EvalType::Function => None,
-                            EvalType::Loop { loop_bb, .. } => Some(loop_bb),
-                        })
-                        .ok_or("skip found outside loop")?,
-                );
-                Ok(None)
-            }
+            // UMPL2Expr::Stop(s) => {
+            //     let res = return_none!(self.compile_expr(s)?);
+            //     match self
+            //         .state
+            //         .last()
+            //         .ok_or("a stop is found outside a funcion or loop")?
+            //     {
+            //         EvalType::Function => {
+            //             self.builder.build_return(Some(&res));
+            //         }
+            //         EvalType::Loop {
+            //             loop_bb: _,
+            //             done_loop_bb,
+            //             connection,
+            //         } => {
+            //             let cont_bb = self
+            //                 .context
+            //                 .append_basic_block(self.fn_value.unwrap(), "loop-continue");
+            //             self.builder.build_conditional_branch(
+            //                 self.context.bool_type().const_zero(),
+            //                 cont_bb,
+            //                 *done_loop_bb,
+            //             );
+            //             connection
+            //                 .add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
+            //             self.builder.position_at_end(cont_bb);
+            //         }
+            //     };
+            //     Ok(None)
+            // }
+            // UMPL2Expr::Skip => {
+            //     // find the newesr "state event" that is a loop
+            //     self.builder.build_unconditional_branch(
+            //         *self
+            //             .state
+            //             .iter()
+            //             .rev()
+            //             .find_map(|state| match state {
+            //                 EvalType::Function => None,
+            //                 EvalType::Loop { loop_bb, .. } => Some(loop_bb),
+            //             })
+            //             .ok_or("skip found outside loop")?,
+            //     );
+            //     Ok(None)
+            // }
             // UMPL2Expr::Until(until_stmt) => self.compile_while_loop(until_stmt),
             // UMPL2Expr::GoThrough(go) => self.compile_for_loop(go),
             // UMPL2Expr::ContiueDoing(scope) => self.compile_loop(scope),
             UMPL2Expr::Application(application) => self.compile_application(application),
-            UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
+            // UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
             // try to retrieve the function and block address from the goto hashmap
             // if not there save whatevers needed and once all codegen completed retry to get information function/address for label from goto hashmap
             // and information to build at the right positon and do it
@@ -426,39 +423,40 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // }
             // create new basic block use uncdoital br to new bb
             // store the block address and the current fn_value in some sort of hashmap with the name as the key
-            UMPL2Expr::ComeTo(n) => {
-                let block = self.context.append_basic_block(self.fn_value.unwrap(), n);
-                self.links.insert(
-                    n.clone(),
-                    (
-                        unsafe { block.get_address().unwrap() },
-                        self.fn_value.unwrap(),
-                    ),
-                );
-                self.builder.build_unconditional_branch(block);
-                self.builder.position_at_end(block);
-                Ok(Some(self.hempty().into()))
-            } // UMPL2Expr::Module(m) => {
-              //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
-              //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
-              //     self.module_list.push(m.name().to_string());
-              //     for expr in m.inner() {
-              //         // self.print_ir();
-              //         self.compile_expr(expr)?;
-              //     }
-              //     self.module_list.pop();
-              //     Ok(Some(self.hempty().into()))
-              // }
+            // UMPL2Expr::ComeTo(n) => {
+            //     let block = self.context.append_basic_block(self.fn_value.unwrap(), n);
+            //     self.links.insert(
+            //         n.clone(),
+            //         (
+            //             unsafe { block.get_address().unwrap() },
+            //             self.fn_value.unwrap(),
+            //         ),
+            //     );
+            //     self.builder.build_unconditional_branch(block);
+            //     self.builder.position_at_end(block);
+            //     Ok(Some(self.hempty().into()))
+            // }
+            // UMPL2Expr::Module(m) => {
+            //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
+            //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
+            //     self.module_list.push(m.name().to_string());
+            //     for expr in m.inner() {
+            //         // self.print_ir();
+            //         self.compile_expr(expr)?;
+            //     }
+            //     self.module_list.pop();
+            //     Ok(Some(self.hempty().into()))
+            // }
         }
     }
 
     fn insert_variable_new_ptr(
         &mut self,
-        i: RC<str>,
+        i: &RC<str>,
         v: BasicValueEnum<'ctx>,
     ) -> Option<BasicValueEnum<'ctx>> {
         let ty = self.types.object;
-        let ptr = self.create_entry_block_alloca(ty, &i).unwrap();
+        let ptr = self.create_entry_block_alloca(ty, i).unwrap();
         self.builder.build_store(ptr, v);
         self.insert_variable(i.clone(), ptr);
         Some(self.types.boolean.const_zero().as_basic_value_enum())
@@ -654,7 +652,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn compile_program(
         &mut self,
         program: &[UMPL2Expr],
-        _links: HashSet<RC<str>>,
+        // _links: HashSet<RC<str>>,
     ) -> Option<String> {
         let (main_fn, main_block) = self.get_main();
         self.fn_value = Some(main_fn);

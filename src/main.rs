@@ -17,7 +17,7 @@ use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 use clap::{Parser, Subcommand};
-pub mod analyzer;
+
 pub mod ast;
 mod codegen;
 
@@ -122,9 +122,8 @@ fn repl() {
             // really eneffecient to create a new compiler every time (and not whats expected either)
             // but currently there is no way to add onto main function after first compile
 
-            let parsed = umpl_parse(&input).unwrap();
-            let program = analyzer::Analyzer::analyze(&parsed);
-            complier.compile_program(&program.1, program.0).map_or_else(
+            let program = umpl_parse(&input).unwrap();
+            complier.compile_program(&program).map_or_else(
                 || {
                     complier.export_ir("bin/main");
                     complier.run().expect("no execution engine found");
@@ -147,8 +146,7 @@ fn repl() {
 
 fn compile(file: &str, out: &str) {
     let contents = fs::read_to_string(file).unwrap();
-    let parsed = umpl_parse(&contents).unwrap();
-    let program = analyzer::Analyzer::analyze(&parsed);
+    let program = umpl_parse(&contents).unwrap();
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
@@ -163,7 +161,7 @@ fn compile(file: &str, out: &str) {
             &codegen::EngineType::None,
         )
     };
-    complier.compile_program(&program.1, program.0).map_or_else(
+    complier.compile_program(&program).map_or_else(
         || {
             // TODO: actually compile the program not just generate llvm ir
             complier.export_ir(out);
@@ -177,17 +175,16 @@ fn compile(file: &str, out: &str) {
 
 fn run(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
-    let parsed = umpl_parse(&contents).unwrap();
-    let program = analyzer::Analyzer::analyze(&parsed);
+    let program = umpl_parse(&contents).unwrap();
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
     // Create FPM
-    println!("{:?}", program.1);
+    println!("{program:?}");
     let fpm = init_function_optimizer(&module);
     let mut complier =
         { Compiler::new(&context, &module, &builder, &fpm, &codegen::EngineType::Jit) };
-    complier.compile_program(&program.1, program.0).map_or_else(
+    complier.compile_program(&program).map_or_else(
         || {
             let ret = complier.run().expect("no execution engine found");
             exit(ret);

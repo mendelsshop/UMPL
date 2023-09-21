@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 use inkwell::values::{BasicValue, BasicValueEnum, PointerValue, StructValue};
 
 use crate::{
-    ast::{Application, FlattenAst, UMPL2Expr},
+    ast::{FlattenAst, UMPL2Expr},
     interior_mut::RC,
 };
 
@@ -504,7 +504,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let pi_value = self.const_number(PI);
         self.insert_constant("pi".into(), pi_value.into());
         // nil
-        let nil_value = UMPL2Expr::Application(Application::new(vec![])).flatten(self);
+        let nil_value = UMPL2Expr::Application(vec![]).flatten(self);
         self.insert_constant("nil".into(), nil_value.into());
     }
 

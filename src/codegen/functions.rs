@@ -61,7 +61,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let old_fn = self.fn_value;
         let old_block = self.builder.get_insert_block();
         let UMPL2Expr::Scope(body) = body else {
-            return Err("while loop without scope".to_string());
+            return Err("function without scope".to_string());
         };
 
         // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
@@ -139,31 +139,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.fn_value = old_fn;
         self.pop_env();
         // return the whole thing after verification and optimization
-        if let Ok(lambda) = self.const_lambda(fn_value, env.1) {
-            Ok(Some(lambda.as_basic_value_enum()))
-        } else {
-            println!();
-            self.print_ir();
-            unsafe {
-                fn_value.delete();
-            }
+        self.const_lambda(fn_value, env.1).map_or_else(
+            |_| {
+                println!();
+                self.print_ir();
+                unsafe {
+                    fn_value.delete();
+                }
 
-            Err("Invalid generated function.".to_string())
-        }
+                Err("Invalid generated function.".to_string())
+            },
+            |lambda| Ok(Some(lambda.as_basic_value_enum())),
+        )
     }
 
     pub(crate) fn compile_application(
         &mut self,
-        application: &crate::ast::Application,
+        application: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        let op = if let UMPL2Expr::Ident(ident) = &application.args()[0] {
+        let op = if let UMPL2Expr::Ident(ident) = &application[0] {
             if let Some(var) = self.get_variable(ident) {
                 match var {
                     super::env::VarType::Lisp(val) => {
                         self.builder.build_load(self.types.object, val, ident)
                     }
                     super::env::VarType::SpecialForm(sf) => {
-                        return sf(self, &application.args()[1..]);
+                        return sf(self, &application[1..]);
                     }
                     super::env::VarType::Macro => todo!(),
                 }
@@ -171,9 +172,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 return Err(format!("variable '{ident}' not found",));
             }
         } else {
-            return_none!(self.compile_expr(&application.args()[0])?)
+            return_none!(self.compile_expr(&application[0])?)
         };
-        let arg_len = application.args().len();
+        let arg_len = application.len();
         let call_info = self.types.call_info.const_named_struct(&[
             self.context
                 .i64_type()
@@ -192,21 +193,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(self.fn_value.unwrap(), "cont-application");
         let null = self.types.generic_pointer.const_null();
-        let args =
-            return_none!(application
-                .args()
-                .iter()
-                .skip(1)
-                .try_fold(null, |init, current| {
-                    let ptr = self.builder.build_alloca(self.types.args, "add arg");
-                    self.builder.build_store(ptr, self.const_thunk(current)?);
-                    let next = self
-                        .builder
-                        .build_struct_gep(self.types.args, ptr, 1, "next arg")
-                        .unwrap();
-                    self.builder.build_store(next, init);
-                    Some(ptr)
-                }));
+        let args = return_none!(application.iter().skip(1).try_fold(null, |init, current| {
+            let ptr = self.builder.build_alloca(self.types.args, "add arg");
+            self.builder.build_store(ptr, self.const_thunk(current)?);
+            let next = self
+                .builder
+                .build_struct_gep(self.types.args, ptr, 1, "next arg")
+                .unwrap();
+            self.builder.build_store(next, init);
+            Some(ptr)
+        }));
         let fn_ty = self.extract_type(val).unwrap();
         let is_primitive = self.builder.build_int_compare(
             inkwell::IntPredicate::EQ,

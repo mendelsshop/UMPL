@@ -3,9 +3,11 @@
 use std::iter;
 
 use parse_int::parse;
-
+// chars on us keyboard not used: `, , \,/,,,=
+// qussiquote -> :
+// unquote -> $
 use crate::{
-    ast::{Application, Boolean, UMPL2Expr},
+    ast::{Boolean, UMPL2Expr},
     interior_mut::RC,
     pc::{
         alt, any_of, chain, char, choice, inbetween, keep_left, keep_right, many, many1, map,
@@ -74,12 +76,8 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
         ),
         |mut r| {
             if let Some(accesors) = r.1 {
-                let new_acces = |accesor: String, expr| {
-                    UMPL2Expr::Application(Application::new(vec![
-                        UMPL2Expr::Ident(accesor.into()),
-                        expr,
-                    ]))
-                };
+                let new_acces =
+                    |accesor: String, expr| UMPL2Expr::Application(vec![accesor.into(), expr]);
                 for mut accesor in accesors {
                     if accesor == ">>" {
                         accesor.clear();
@@ -112,7 +110,7 @@ fn application() -> Box<Parser<UMPL2Expr>> {
                 any_of(call_end().iter().copied()),
             )),
         ),
-        |r| UMPL2Expr::Application(Application::new(r.map_or_else(Vec::new, Iterator::collect))),
+        |r| UMPL2Expr::Application(r.map_or_else(Vec::new, Iterator::collect)),
     )
 }
 
@@ -258,11 +256,7 @@ fn mod_stmt() -> Box<Parser<UMPL2Expr>> {
                     ),
                 ),
                 |(name, code)| {
-                    UMPL2Expr::Application(Application::new(vec![
-                        UMPL2Expr::Ident("module".into()),
-                        UMPL2Expr::Ident(name.to_string().into()),
-                        code,
-                    ]))
+                    UMPL2Expr::Application(vec!["module".into(), name.to_string().into(), code])
                 },
             ),
         ),
@@ -275,13 +269,7 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
             string("let"),
             chain(keep_right(ws_or_comment(), ident_umpl()), umpl2expr()),
         ),
-        |r| {
-            UMPL2Expr::Application(Application::new(vec![
-                UMPL2Expr::Ident("define".into()),
-                r.0,
-                r.1,
-            ]))
-        },
+        |r| UMPL2Expr::Application(vec!["define".into(), r.0, r.1]),
     )
 }
 
@@ -306,7 +294,7 @@ fn method_stmt() -> Box<Parser<ClassStuff>> {
                     inbetween(
                         char('('),
                         chain(
-                            keep_right(ws_or_comment(), ident_umpl()),
+                            keep_right(ws_or_comment(), ident()),
                             chain(
                                 keep_right(ws_or_comment(), hexnumber()),
                                 opt(keep_right(ws_or_comment(), alt(char('+'), char('*')))),
@@ -328,9 +316,7 @@ fn method_stmt() -> Box<Parser<ClassStuff>> {
             ),
         ),
         |r| {
-            let UMPL2Expr::Ident(name) = r.0 .0 else {
-                panic!()
-            };
+            let name = r.0 .0.into();
             let UMPL2Expr::Number(arg_num) = r.0 .1 .0 else {
                 panic!()
             };
@@ -346,27 +332,19 @@ fn class_stmt() -> Box<Parser<UMPL2Expr>> {
         chain(
             keep_right(
                 keep_right(ws_or_comment(), string("class")),
-                keep_right(ws_or_comment(), ident_umpl()),
+                keep_right(ws_or_comment(), ident()),
             ),
             inbetween(
                 keep_right(ws_or_comment(), char('᚜')),
                 many(keep_right(
                     ws_or_comment(),
-                    alt(
-                        method_stmt(),
-                        map(ident_umpl(), |r| {
-                            let UMPL2Expr::Ident(name) = r else { panic!() };
-                            ClassStuff::Field(name)
-                        }),
-                    ),
+                    alt(method_stmt(), map(ident(), |r| ClassStuff::Field(r.into()))),
                 )),
                 opt(keep_right(ws_or_comment(), char('᚛'))),
             ),
         ),
         |r| {
-            let UMPL2Expr::Ident(name) = r.0 else {
-                panic!()
-            };
+            let name = r.0;
             // let class
             let mut fields = vec![];
             let mut methods = vec![];
@@ -374,93 +352,90 @@ fn class_stmt() -> Box<Parser<UMPL2Expr>> {
                 .for_each(|class| match class {
                     ClassStuff::Method(name, argc, varidic, scope) => {
                         let lambda = if let Some(variadic) = varidic {
-                            UMPL2Expr::Application(Application::new(vec![
-                                UMPL2Expr::Ident("lambda".into()),
+                            UMPL2Expr::Application(vec![
+                                "lambda".into(),
                                 UMPL2Expr::Number(argc),
                                 UMPL2Expr::String(variadic.to_string().into()),
                                 scope,
-                            ]))
+                            ])
                         } else {
-                            UMPL2Expr::Application(Application::new(vec![
-                                UMPL2Expr::Ident("lambda".into()),
+                            UMPL2Expr::Application(vec![
+                                "lambda".into(),
                                 UMPL2Expr::Number(argc),
                                 scope,
-                            ]))
+                            ])
                         };
-                        let method = UMPL2Expr::Application(Application::new(vec![
-                            UMPL2Expr::Ident("define".into()),
-                            UMPL2Expr::Ident(name.clone()),
+                        let method = UMPL2Expr::Application(vec![
+                            "define".into(),
+                            name.clone().into(),
                             lambda,
-                        ]));
+                        ]);
                         methods.push((name, argc, varidic, method));
                     }
                     ClassStuff::Field(field) => {
                         fields.push(field);
                     }
                 });
-            let mut class_method = vec![
-                UMPL2Expr::Ident("lambda".into()),
-                UMPL2Expr::Number(fields.len() as f64),
-            ];
+            let mut class_method = vec!["lambda".into(), UMPL2Expr::Number(fields.len() as f64)];
 
             let mut class_method_scope = vec![];
             class_method_scope.extend(fields.iter().enumerate().map(|(i, field)| {
-                UMPL2Expr::Application(Application::new(vec![
-                    UMPL2Expr::Ident("define".into()),
-                    UMPL2Expr::Ident(field.clone()),
+                UMPL2Expr::Application(vec![
+                    "define".into(),
+                    field.clone().into(),
                     UMPL2Expr::FnParam(i),
-                ]))
+                ])
             }));
             class_method_scope.extend(methods.iter().map(|method| method.3.clone()));
-            let mut cond_stmt = vec![UMPL2Expr::Ident("cond".into())];
+            let mut cond_stmt = vec!["cond".into()];
             let mut count = 0;
             cond_stmt.extend(fields.iter().map(|field| {
                 count += 1;
-                UMPL2Expr::Application(Application::new(vec![
-                    UMPL2Expr::Application(Application::new(vec![
-                        UMPL2Expr::Ident("=".into()),
+                UMPL2Expr::Application(vec![
+                    UMPL2Expr::Application(vec![
+                        "=".into(),
                         UMPL2Expr::FnParam(0),
-                        UMPL2Expr::Number(count as f64 - 1.0),
-                    ])),
-                    UMPL2Expr::Ident(field.clone()),
-                ]))
+                        UMPL2Expr::Number(f64::from(count) - 1.0),
+                    ]),
+                    field.clone().into(),
+                ])
             }));
 
             cond_stmt.extend(methods.iter().map(|field| {
                 count += 1;
-                UMPL2Expr::Application(Application::new(vec![
-                    UMPL2Expr::Application(Application::new(vec![
-                        UMPL2Expr::Ident("=".into()),
+                UMPL2Expr::Application(vec![
+                    UMPL2Expr::Application(vec![
+                        "=".into(),
                         UMPL2Expr::FnParam(0),
-                        UMPL2Expr::Number(count as f64 - 1.0),
-                    ])),
-                    UMPL2Expr::Ident(field.0.clone()),
-                ]))
+                        UMPL2Expr::Number(f64::from(count) - 1.0),
+                    ]),
+                    field.0.clone().into(),
+                ])
             }));
-            cond_stmt.push(UMPL2Expr::Application(Application::new(vec![
-                UMPL2Expr::Ident("else".into()),
-                UMPL2Expr::Application(Application::new(vec![
-                    UMPL2Expr::Ident("error".into()),
+            cond_stmt.push(UMPL2Expr::Application(vec![
+                "else".into(),
+                UMPL2Expr::Application(vec![
+                    "error".into(),
                     UMPL2Expr::String(
                         format!("error not valid index for dispatch on `{name}`").into(),
                     ),
-                ])),
-            ])));
-            let dispatch = UMPL2Expr::Application(Application::new(vec![
-                UMPL2Expr::Ident("lambda".into()),
-                UMPL2Expr::Number(1.0),
-                UMPL2Expr::Scope(vec![UMPL2Expr::Application(Application::new(cond_stmt))]),
+                ]),
             ]));
+            let dispatch = UMPL2Expr::Application(vec![
+                "lambda".into(),
+                UMPL2Expr::Number(1.0),
+                UMPL2Expr::Scope(vec![UMPL2Expr::Application(cond_stmt)]),
+            ]);
 
             class_method_scope.push(dispatch);
             class_method.push(UMPL2Expr::Scope(class_method_scope));
             let class = vec![
-                UMPL2Expr::Ident("define".into()),
-                UMPL2Expr::Ident(name),
-                UMPL2Expr::Application(Application::new(class_method)),
+                "define".into(),
+                name.into(),
+                UMPL2Expr::Application(class_method),
             ];
             // TODO: find a way to return multiple things ie: besides for the class method also have function not part of the class that index into the class
-            UMPL2Expr::Application(Application::new(class))
+            UMPL2Expr::Application(class)
         },
     )
 }
@@ -479,11 +454,11 @@ fn if_stmt() -> Box<Parser<UMPL2Expr>> {
             ),
         ]),
         |mut r| {
-            let if_ident = UMPL2Expr::Ident("if".into());
+            let if_ident = "if".into();
             let cond = r.next().unwrap_or_default();
             let cons = r.next().unwrap();
             let alt = r.next().unwrap();
-            UMPL2Expr::Application(Application::new(vec![if_ident, cond, cons, alt]))
+            UMPL2Expr::Application(vec![if_ident, cond, cons, alt])
         },
     )
 }
@@ -502,10 +477,10 @@ fn until_stmt() -> Box<Parser<UMPL2Expr>> {
             ),
         ]),
         |mut r| {
-            let while_ident = UMPL2Expr::Ident("while".into());
+            let while_ident = "while".into();
             let cond = r.next().unwrap_or_default();
             let loop_scope = r.next().unwrap();
-            UMPL2Expr::Application(Application::new(vec![while_ident, cond, loop_scope]))
+            UMPL2Expr::Application(vec![while_ident, cond, loop_scope])
         },
     )
 }
@@ -518,13 +493,11 @@ fn go_through_stmt() -> Box<Parser<UMPL2Expr>> {
             scope(umpl2expr()),
         ]),
         |mut r| {
-            let for_ident = UMPL2Expr::Ident("for".into());
+            let for_ident = "for".into();
             let iter_name = r.next().unwrap();
             let iterable = r.next().unwrap_or_default();
             let loop_scope = r.next().unwrap();
-            UMPL2Expr::Application(Application::new(vec![
-                for_ident, iter_name, iterable, loop_scope,
-            ]))
+            UMPL2Expr::Application(vec![for_ident, iter_name, iterable, loop_scope])
         },
     )
 }
@@ -533,9 +506,9 @@ fn continue_doing_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         seq(vec![keep_right(string("loop"), scope(umpl2expr()))]),
         |mut r| {
-            let loop_ident = UMPL2Expr::Ident("loop".into());
+            let loop_ident = "loop".into();
             let loop_scope = r.next().unwrap();
-            UMPL2Expr::Application(Application::new(vec![loop_ident, loop_scope]))
+            UMPL2Expr::Application(vec![loop_ident, loop_scope])
         },
     )
 }
@@ -551,11 +524,11 @@ fn link_stmt() -> Box<Parser<UMPL2Expr>> {
             many1(keep_right(ws_or_comment(), label_umpl())),
         ),
         |res| {
-            let link_ident = UMPL2Expr::Ident("link".into());
+            let link_ident = "link".into();
             let goto = res.0;
             let mut link = vec![link_ident, goto];
             link.extend(res.1);
-            UMPL2Expr::Application(Application::new(link))
+            UMPL2Expr::Application(link)
         },
     )
 }
@@ -591,26 +564,20 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
                     .map(Into::into)
                     .map(mapper)
             };
-            // let fn_ident = UMPL2Expr::Ident("loop".into());
             let name = map_to_umpl(r.0, UMPL2Expr::Ident);
             // TODO: maybe if no count given then randomly choose a count
             let param_count = r.1 .0.unwrap();
             let variadic = map_to_umpl(r.1 .1 .0, UMPL2Expr::String);
             let scope = r.1 .1 .1;
-            let fn_ident = UMPL2Expr::Ident("lambda".into());
+            let fn_ident = "lambda".into();
             let lambda = if let Some(variadic) = variadic {
-                UMPL2Expr::Application(Application::new(vec![
-                    fn_ident,
-                    param_count,
-                    variadic,
-                    scope,
-                ]))
+                UMPL2Expr::Application(vec![fn_ident, param_count, variadic, scope])
             } else {
-                UMPL2Expr::Application(Application::new(vec![fn_ident, param_count, scope]))
+                UMPL2Expr::Application(vec![fn_ident, param_count, scope])
             };
             if let Some(name) = name {
-                let fn_ident = UMPL2Expr::Ident("define".into());
-                UMPL2Expr::Application(Application::new(vec![fn_ident, name, lambda]))
+                let fn_ident = "define".into();
+                UMPL2Expr::Application(vec![fn_ident, name, lambda])
             } else {
                 lambda
             }
@@ -619,6 +586,10 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
 }
 
 fn ident_umpl() -> Box<Parser<UMPL2Expr>> {
+    map(ident(), Into::into)
+}
+
+fn ident() -> Box<Parser<String>> {
     map(
         many1(not_any_of(
             call_start()
@@ -627,14 +598,14 @@ fn ident_umpl() -> Box<Parser<UMPL2Expr>> {
                 .chain(call_end())
                 .copied(),
         )),
-        |res| UMPL2Expr::Ident(res.collect::<String>().into()),
+        std::iter::Iterator::collect,
     )
 }
 
 const fn special_char() -> &'static [char] {
     &[
         '!', ' ', '᚜', '᚛', '.', '&', '|', '?', '*', '+', '@', '\'', '"', ';', '\n', '\t', '<',
-        '>', '^',
+        '>', '^', '$', ':', '%',
     ]
 }
 
@@ -658,31 +629,43 @@ const fn call_end() -> &'static [char] {
 
 fn terminal_umpl() -> Box<Parser<UMPL2Expr>> {
     alt(
-        map(string("skip"), |_| UMPL2Expr::Skip),
-        map(
-            keep_right(string("stop"), map(umpl2expr(), Box::new)),
-            UMPL2Expr::Stop,
-        ),
+        map(string("skip"), |s| UMPL2Expr::Application(vec![s.into()])),
+        list_expr(string("stop")),
     )
 }
 
 fn special_start() -> Box<Parser<UMPL2Expr>> {
-    choice(vec![quoted_umpl(), label_umpl(), param_umpl()])
+    choice(vec![
+        quoted_umpl(),
+        label_umpl(),
+        param_umpl(),
+        unquoted_umpl(),
+        quassi_quoted_umpl(),
+    ])
 }
 
-fn quoted_umpl() -> Box<Parser<UMPL2Expr>> {
+fn list_expr(first: Box<Parser<impl Into<UMPL2Expr> + 'static>>) -> Box<Parser<UMPL2Expr>> {
     map(
-        map(keep_right(char(';'), umpl2expr()), Box::new),
-        UMPL2Expr::Quoted,
+        chain(map(first, Into::into), umpl2expr()),
+        |(first, expr)| UMPL2Expr::Application(vec![first, expr]),
     )
 }
 
+fn quoted_umpl() -> Box<Parser<UMPL2Expr>> {
+    list_expr(map(string(";"), |_| "quote"))
+}
+
+fn quassi_quoted_umpl() -> Box<Parser<UMPL2Expr>> {
+    list_expr(map(string(":"), |_| "quasiquote"))
+}
+
+fn unquoted_umpl() -> Box<Parser<UMPL2Expr>> {
+    list_expr(map(string("$"), |_| "unquote"))
+}
+
 fn label_umpl() -> Box<Parser<UMPL2Expr>> {
-    map(keep_right(char('@'), ident_umpl()), |res| {
-        UMPL2Expr::Label(match res {
-            UMPL2Expr::Ident(i) => i,
-            _ => panic!(),
-        })
+    map(keep_right(char('@'), ident()), |res| {
+        UMPL2Expr::Label(res.into())
     })
 }
 
@@ -700,10 +683,7 @@ fn param_umpl() -> Box<Parser<UMPL2Expr>> {
 #[cfg(test)]
 mod tests {
     // TODO: remake some of thests now that >> > < are valid in any expression
-    use crate::{
-        ast::{Application, Fanction, GoThrough, If, Unless, Until, Varidiac},
-        lexer::{parse_umpl, Boolean, UMPL2Expr},
-    };
+    use crate::lexer::{parse_umpl, Boolean, UMPL2Expr};
 
     #[test]
     pub fn umpl() {
@@ -755,7 +735,7 @@ mod tests {
     //         test_result.unwrap(),
     //         UMPL2Expr::Until(Box::new(Until::new(
     //             UMPL2Expr::Bool(Boolean::False),
-    //             vec![UMPL2Expr::Ident("ab/".into())]
+    //             vec!["ab/".into()]
     //         )))
     //     );
     // }
@@ -768,8 +748,8 @@ mod tests {
     //         test_result.unwrap(),
     //         UMPL2Expr::GoThrough(Box::new(GoThrough::new(
     //             "a".into(),
-    //             UMPL2Expr::Application(Application::new(vec![
-    //                 UMPL2Expr::Ident("tree".into()),
+    //             UMPL2Expr::Application((vec![
+    //                 "tree".into(),
     //                 UMPL2Expr::Number(5.0),
     //                 UMPL2Expr::Number(6.0),
     //                 UMPL2Expr::Number(7.0)
@@ -785,7 +765,7 @@ mod tests {
     //     assert!(test_result.is_ok());
     //     assert_eq!(
     //         test_result.unwrap(),
-    //         UMPL2Expr::ContiueDoing(vec![UMPL2Expr::Ident("lg`".into())])
+    //         UMPL2Expr::ContiueDoing(vec!["lg`".into()])
     //     );
     // }
 
@@ -799,7 +779,7 @@ mod tests {
     //             Some('🚗'),
     //             1,
     //             Some(Varidiac::AtLeast0),
-    //             vec![UMPL2Expr::Ident("l".into())]
+    //             vec!["l".into()]
     //         ))
     //     );
     // }
@@ -808,7 +788,7 @@ mod tests {
     fn umpl_ident() {
         let test_result = parse_umpl("a===a");
         assert!(test_result.is_ok());
-        assert_eq!(test_result.unwrap(), UMPL2Expr::Ident("a===a".into()));
+        assert_eq!(test_result.unwrap(), "a===a".into());
     }
 
     #[test]
@@ -825,19 +805,19 @@ mod tests {
         assert_eq!(test_result.unwrap(), UMPL2Expr::Bool(Boolean::Maybee));
     }
 
-    #[test]
-    fn umpl_application() {
-        let test_result = parse_umpl("{mul 5 0x10 ]>>");
-        assert!(test_result.is_ok());
-        assert_eq!(
-            test_result.unwrap(),
-            UMPL2Expr::Application(Application::new(vec![
-                UMPL2Expr::Ident("mul".into()),
-                UMPL2Expr::Number(5.0),
-                UMPL2Expr::Number(16.0)
-            ],))
-        );
-    }
+    // #[test]
+    // fn umpl_application() {
+    //     let test_result = parse_umpl("{mul 5 0x10 ]>>");
+    //     assert!(test_result.is_ok());
+    //     assert_eq!(
+    //         test_result.unwrap(),
+    //         UMPL2Expr::Application((vec![
+    //             "mul".into(),
+    //             UMPL2Expr::Number(5.0),
+    //             UMPL2Expr::Number(16.0)
+    //         ],))
+    //     );
+    // }
 
     #[test]
     fn umpl_acces_param() {

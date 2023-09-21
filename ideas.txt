@@ -75,3 +75,6 @@ simplfies mostly too: (inconsisteny betweeen how args are defined ie number vs s
 ! fields
 (define (carMap z) (z 3))
 ```
+
+qussiquote -> :
+unquote -> $

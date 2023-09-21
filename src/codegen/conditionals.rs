@@ -1,9 +1,6 @@
-use inkwell::{
-    basic_block::BasicBlock,
-    values::{BasicValueEnum, IntValue},
-};
+use inkwell::values::BasicValueEnum;
 
-use crate::ast::{Application, UMPL2Expr};
+use crate::ast::UMPL2Expr;
 
 use super::Compiler;
 
@@ -109,7 +106,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     //         };
     //         self.builder.build_unconditional_branch(done_bb);
     //         let else_bblock = self.builder.get_insert_block().unwrap();
-            
+
     //         let conds = return_none!(cases
     //             .iter()
     //             .enumerate()
@@ -139,7 +136,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     //             >>()?);
     //             self.builder.position_at_end(start_bb);
     //             // self.builder.build_switch(, else_block, cases)
-            
+
     //         Err("cond statement has else in middle".to_string())
     //     }
     // }

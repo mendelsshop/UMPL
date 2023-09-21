@@ -52,7 +52,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return Err("no identifier to usef for iteration".to_string());
         };
         let iter = &exprs[1];
-        let iter = return_none!(self.compile_expr(&iter)?).into_struct_value();
+        let iter = return_none!(self.compile_expr(iter)?).into_struct_value();
         let UMPL2Expr::Scope(iter_scope) = &exprs[2] else {
             return Err("Expected a scope for a loop".to_string());
         };
