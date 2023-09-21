@@ -11,5 +11,6 @@ let cons  fn  2 ᚜ !using let to get around emoji name requirements
     ᚛
 ᚛
 let k (lambda 1 ᚜1> (if '0' 2 1)᚛)
-!let z ;(a f g)
+let z ;(a f g)
 (k &)>
+z^cdr>

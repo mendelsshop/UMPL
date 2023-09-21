@@ -34,6 +34,7 @@ mod extract_object;
 mod functions;
 mod loops;
 mod object;
+mod quotation;
 mod stdlib;
 
 /// needed for when we reach stoppers like stop or skip
@@ -378,7 +379,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // UMPL2Expr::GoThrough(go) => self.compile_for_loop(go),
             // UMPL2Expr::ContiueDoing(scope) => self.compile_loop(scope),
             UMPL2Expr::Application(application) => self.compile_application(application),
-            // UMPL2Expr::Quoted(q) => Ok(Some(q.clone().flatten(self).as_basic_value_enum())),
             // try to retrieve the function and block address from the goto hashmap
             // if not there save whatevers needed and once all codegen completed retry to get information function/address for label from goto hashmap
             // and information to build at the right positon and do it
@@ -416,11 +416,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
             // UMPL2Expr::Link(_, _) |
             UMPL2Expr::Scope(_) => unreachable!(),
-            // UMPL2Expr::Let(i, v) => {
-            //     let v = return_none!(self.compile_expr(v)?);
-
-            //     Ok(self.insert_variable_new_ptr(i.clone(), v))
-            // }
             // create new basic block use uncdoital br to new bb
             // store the block address and the current fn_value in some sort of hashmap with the name as the key
             // UMPL2Expr::ComeTo(n) => {
@@ -541,6 +536,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_special_form("while".into(), Self::special_form_while_loop);
         self.insert_special_form("lambda".into(), Self::special_form_lambda);
         self.insert_special_form("define".into(), Self::special_form_define);
+        self.insert_special_form("quote".into(), Self::special_form_quote);
+        self.insert_special_form("unquote".into(), Self::special_form_unquote);
+        self.insert_special_form("quasiquote".into(), Self::special_form_quasiquote);
     }
 
     pub fn get_main(&mut self) -> (FunctionValue<'ctx>, BasicBlock<'ctx>) {

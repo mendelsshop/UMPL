@@ -77,7 +77,7 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
 
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
-        fn fun_name<'ctx>(
+        fn list_to_tree<'ctx>(
             list: Vec<UMPL2Expr>,
             compiler: &mut Compiler<'_, 'ctx>,
             n: usize,
@@ -86,17 +86,17 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
                 (compiler.hempty(), list)
             } else {
                 let left_size = (n - 1) / 2;
-                let (left_tree, mut non_left_tree) = fun_name(list, compiler, left_size);
+                let (left_tree, mut non_left_tree) = list_to_tree(list, compiler, left_size);
 
                 let this = non_left_tree.remove(0).flatten(compiler);
 
                 let right_size = n - (left_size + 1);
-                let (right_tree, remaining) = fun_name(non_left_tree, compiler, right_size);
+                let (right_tree, remaining) = list_to_tree(non_left_tree, compiler, right_size);
                 (compiler.const_cons(left_tree, this, right_tree), remaining)
             }
         }
         let n = self.len();
-        let partial_tree = fun_name(self, compiler, n);
+        let partial_tree = list_to_tree(self, compiler, n);
 
         partial_tree.0
     }
