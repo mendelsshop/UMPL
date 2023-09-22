@@ -36,6 +36,7 @@ mod loops;
 mod object;
 mod quotation;
 mod stdlib;
+mod labels;
 
 /// needed for when we reach stoppers like stop or skip
 /// to tell us what type of code to generate ie, br or return
@@ -324,11 +325,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Number(value) => Ok(Some(self.const_number(*value).as_basic_value_enum())),
             UMPL2Expr::Bool(value) => Ok(Some(self.const_boolean(*value).as_basic_value_enum())),
             UMPL2Expr::String(value) => Ok(Some(self.const_string(value).as_basic_value_enum())),
-            // UMPL2Expr::Fanction(r#fn) => self.compile_function(r#fn),
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
-
-            // UMPL2Expr::If(if_stmt) => self.compile_if(if_stmt),
-            // UMPL2Expr::Unless(_) => todo!(),
             // TODO: keep in mind the fact that the loop might be in outer function
             // UMPL2Expr::Stop(s) => {
             //     let res = return_none!(self.compile_expr(s)?);
@@ -375,9 +372,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             //     );
             //     Ok(None)
             // }
-            // UMPL2Expr::Until(until_stmt) => self.compile_while_loop(until_stmt),
-            // UMPL2Expr::GoThrough(go) => self.compile_for_loop(go),
-            // UMPL2Expr::ContiueDoing(scope) => self.compile_loop(scope),
             UMPL2Expr::Application(application) => self.compile_application(application),
             // try to retrieve the function and block address from the goto hashmap
             // if not there save whatevers needed and once all codegen completed retry to get information function/address for label from goto hashmap
@@ -386,30 +380,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // should add unreachable after this?
             // what should this return?
             UMPL2Expr::Label(s) => {
-                if let Some(link) = self.links.get(s) {
-                    let call_info = self.types.call_info.const_named_struct(&[
-                        self.context.i64_type().const_zero().into(),
-                        link.0.into(),
-                    ]);
+                // if let Some(link) = self.links.get(s) {
+                //     let call_info = self.types.call_info.const_named_struct(&[
+                //         self.context.i64_type().const_zero().into(),
+                //         link.0.into(),
+                //     ]);
 
-                    self.builder.build_call(
-                        link.1,
-                        &[
-                            self.types.generic_pointer.const_null().into(),
-                            call_info.into(),
-                            self.types.generic_pointer.const_null().into(),
-                        ],
-                        "jump",
-                    );
-                // maybe should be signal that we jumped somewhere
-                } else {
-                    let basic_block = self.builder.get_insert_block().unwrap();
-                    // will be overriden later if we have a link for the basic block
-                    self.builder.build_alloca(self.types.ty, "placeholder");
-                    let last_inst = basic_block.get_last_instruction();
-                    self.non_found_links
-                        .push((s.clone(), basic_block, last_inst));
-                }
+                //     self.builder.build_call(
+                //         link.1,
+                //         &[
+                //             self.types.generic_pointer.const_null().into(),
+                //             call_info.into(),
+                //             self.types.generic_pointer.const_null().into(),
+                //         ],
+                //         "jump",
+                //     );
+                // // maybe should be signal that we jumped somewhere
+                // } else {
+                //     let basic_block = self.builder.get_insert_block().unwrap();
+                //     // will be overriden later if we have a link for the basic block
+                //     self.builder.build_alloca(self.types.ty, "placeholder");
+                //     let last_inst = basic_block.get_last_instruction();
+                //     self.non_found_links
+                //         .push((s.clone(), basic_block, last_inst));
+                // }
+                todo!();
                 Ok(Some(self.hempty().into()))
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
@@ -456,6 +451,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_variable(i.clone(), ptr);
         Some(self.types.boolean.const_zero().as_basic_value_enum())
     }
+
+    
 
     fn actual_value(&self, thunked: StructValue<'ctx>) -> StructValue<'ctx> {
         // needs entry /condin
