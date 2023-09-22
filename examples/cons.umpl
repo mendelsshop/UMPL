@@ -1,7 +1,7 @@
 let cons  fn  2 ᚜ !using let to get around emoji name requirements
     ! we have save the the parameter passed into cons because the inner function "overwrites" the first parameter temporaraly
-    let x '0"
-    let y '1'
+    let x =  '0"
+    let y = '1'
 
     !implicitly returning inner function we could also write stop fanction 1 ...
     fn  1 ᚜
@@ -10,7 +10,7 @@ let cons  fn  2 ᚜ !using let to get around emoji name requirements
         (if '0' x y)
     ᚛
 ᚛
-let k (lambda 1 ᚜1> (if '0' 2 1)᚛)
-let z ;(a f g)
+let k =  (lambda 1 ᚜1> (if '0' 2 1)᚛)
+let z = ;(a f g)
 (k &)>
 z^cdr>

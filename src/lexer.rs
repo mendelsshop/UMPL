@@ -267,7 +267,10 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         keep_right(
             string("let"),
-            chain(keep_right(ws_or_comment(), ident_umpl()), umpl2expr()),
+            chain(
+                keep_right(ws_or_comment(), ident_umpl()),
+                keep_right(keep_right(ws_or_comment(), char('=')), umpl2expr()),
+            ),
         ),
         |r| UMPL2Expr::Application(vec!["define".into(), r.0, r.1]),
     )
