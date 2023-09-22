@@ -114,7 +114,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.variables.last().unwrap().1.iter()
     }
 
-    // returns a procedure macro or special form, while get var returns only a lisp expression (so could be a proc)
+    // returns a procedure or special form, while get var returns only a lisp expression (so could be a proc)
     pub fn get_variable(&self, name: &RC<str>) -> Option<VarType<'a, 'ctx>> {
         self.variables
             .iter()
@@ -154,5 +154,4 @@ pub enum VarType<'a, 'ctx> {
     SpecialForm(
         fn(&mut Compiler<'a, 'ctx>, &[UMPL2Expr]) -> Result<Option<BasicValueEnum<'ctx>>, String>,
     ),
-    Macro,
 }

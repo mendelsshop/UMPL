@@ -166,7 +166,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     super::env::VarType::SpecialForm(sf) => {
                         return sf(self, &application[1..]);
                     }
-                    super::env::VarType::Macro => todo!(),
                 }
             } else {
                 return Err(format!("variable '{ident}' not found",));
