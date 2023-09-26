@@ -32,11 +32,11 @@ mod env;
 mod export_code;
 mod extract_object;
 mod functions;
+mod labels;
 mod loops;
 mod object;
 mod quotation;
 mod stdlib;
-mod labels;
 
 /// needed for when we reach stoppers like stop or skip
 /// to tell us what type of code to generate ie, br or return
@@ -451,8 +451,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_variable(i.clone(), ptr);
         Some(self.types.boolean.const_zero().as_basic_value_enum())
     }
-
-    
 
     fn actual_value(&self, thunked: StructValue<'ctx>) -> StructValue<'ctx> {
         // needs entry /condin

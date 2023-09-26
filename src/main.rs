@@ -22,8 +22,8 @@ pub mod ast;
 mod codegen;
 
 pub mod lexer;
-pub mod pc;
 mod macros;
+pub mod pc;
 #[cfg(feature = "multi-threaded")]
 pub mod interior_mut {
     use std::sync::{Arc, Mutex};
