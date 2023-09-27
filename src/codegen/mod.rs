@@ -410,33 +410,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
             // UMPL2Expr::Link(_, _) |
-            UMPL2Expr::Scope(_) => unreachable!(),
-            // create new basic block use uncdoital br to new bb
-            // store the block address and the current fn_value in some sort of hashmap with the name as the key
-            // UMPL2Expr::ComeTo(n) => {
-            //     let block = self.context.append_basic_block(self.fn_value.unwrap(), n);
-            //     self.links.insert(
-            //         n.clone(),
-            //         (
-            //             unsafe { block.get_address().unwrap() },
-            //             self.fn_value.unwrap(),
-            //         ),
-            //     );
-            //     self.builder.build_unconditional_branch(block);
-            //     self.builder.position_at_end(block);
-            //     Ok(Some(self.hempty().into()))
-            // }
-            // UMPL2Expr::Module(m) => {
-            //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
-            //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
-            //     self.module_list.push(m.name().to_string());
-            //     for expr in m.inner() {
-            //         // self.print_ir();
-            //         self.compile_expr(expr)?;
-            //     }
-            //     self.module_list.pop();
-            //     Ok(Some(self.hempty().into()))
-            // }
+            UMPL2Expr::Scope(exprs) => self.compile_scope(exprs), // create new basic block use uncdoital br to new bb
+                                                                  // store the block address and the current fn_value in some sort of hashmap with the name as the key
+                                                                  // UMPL2Expr::ComeTo(n) => {
+                                                                  //     let block = self.context.append_basic_block(self.fn_value.unwrap(), n);
+                                                                  //     self.links.insert(
+                                                                  //         n.clone(),
+                                                                  //         (
+                                                                  //             unsafe { block.get_address().unwrap() },
+                                                                  //             self.fn_value.unwrap(),
+                                                                  //         ),
+                                                                  //     );
+                                                                  //     self.builder.build_unconditional_branch(block);
+                                                                  //     self.builder.position_at_end(block);
+                                                                  //     Ok(Some(self.hempty().into()))
+                                                                  // }
+                                                                  // UMPL2Expr::Module(m) => {
+                                                                  //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
+                                                                  //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
+                                                                  //     self.module_list.push(m.name().to_string());
+                                                                  //     for expr in m.inner() {
+                                                                  //         // self.print_ir();
+                                                                  //         self.compile_expr(expr)?;
+                                                                  //     }
+                                                                  //     self.module_list.pop();
+                                                                  //     Ok(Some(self.hempty().into()))
+                                                                  // }
         }
     }
 

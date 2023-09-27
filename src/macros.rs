@@ -52,6 +52,8 @@ impl MacroExpander {
                     res.push(UMPL2Expr::Scope(self.expand(s)?));
                 }
                 UMPL2Expr::Application(a) => {
+                    // we expand all the sub expressions of the application before expanding the application itself
+                    let a = self.expand(a)?;
                     if let Some(UMPL2Expr::Ident(op)) = a.first() {
                         if let Some(r#macro) = self.macro_env.get(op) {
                             match r#macro {
@@ -108,6 +110,11 @@ impl MacroExpander {
     }
 
     fn special_form_macro(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
+        let Some(UMPL2Expr::Ident(macro_name)) = exprs.get(0) else {
+            return Err(MacroError {
+                kind: MacroErrorKind::InvalidForm("defmacro expects a name for the macro".into()),
+            });
+        };
         todo!()
     }
 }
