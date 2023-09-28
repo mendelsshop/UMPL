@@ -21,6 +21,8 @@ pub struct MacroError {
 
 pub enum MacroErrorKind {
     InvalidForm(RC<str>),
+    InvalidMacroCase,
+    InvalidMacroCondition,
 }
 
 #[derive(Default)]
@@ -115,6 +117,40 @@ impl MacroExpander {
                 kind: MacroErrorKind::InvalidForm("defmacro expects a name for the macro".into()),
             });
         };
+        if let Some(cases) = exprs.get(1..) {
+            let cases = cases
+                .into_iter()
+                .map(|case| {
+                    let UMPL2Expr::Application(case) = case else {
+                        return Err(MacroError {
+                            kind: MacroErrorKind::InvalidMacroCase,
+                        });
+                    };
+                    Ok(match case.get(0) {
+                        Some(UMPL2Expr::Application(cond)) => cond
+                            .into_iter()
+                            .map(|ident| match ident {
+                                UMPL2Expr::Ident(cond) => Ok(cond.clone()),
+                                _ => {
+                                    return Err(MacroError {
+                                        kind: MacroErrorKind::InvalidMacroCondition,
+                                    })
+                                }
+                            })
+                            .collect::<Result<_, _>>()?,
+                        Some(UMPL2Expr::Ident(cond)) => {
+                            vec![cond.clone()]
+                        }
+                        _ => {
+                            return Err(MacroError {
+                                kind: MacroErrorKind::InvalidMacroCondition,
+                            })
+                        }
+                    })
+                    // TODO: parse the expansion part
+                })
+                .collect::<Result<Vec<Vec<RC<str>>>, _>>()?;
+        }
         todo!()
     }
 }
