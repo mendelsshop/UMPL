@@ -22,7 +22,9 @@ pub struct MacroError {
 pub enum MacroErrorKind {
     InvalidForm(RC<str>),
     InvalidMacroCase,
+    NoMacroCases,
     InvalidMacroCondition,
+    NoMacroForms
 }
 
 #[derive(Default)]
@@ -62,6 +64,12 @@ impl MacroExpander {
                                 MacroType::SpecialForm(sf) => {
                                     res.extend(sf(self, &a[1..])?);
                                 }
+                                MacroType::UserDefined(cases) => {
+                                    let expander = cases.iter().find(|case|case.0.len() + 1 == a.len()).ok_or(MacroError {
+                                        kind: MacroErrorKind::InvalidForm(format!("arrity mismatch for macro {op}").into()),
+                                    })?.clone();
+                                    res.extend(Self::expand_macro(expander.0, a[1..].to_vec(), expander.1))
+                                }
                             }
                         } else {
                             res.push(expr.clone());
@@ -77,7 +85,22 @@ impl MacroExpander {
         }
         Ok(res)
     }
+
+    fn expand_macro(params: Vec<RC<str>>, args: Vec<UMPL2Expr>, expansion: Vec<UMPL2Expr>) -> Vec<UMPL2Expr> {
+        let env = params.into_iter().zip(args.into_iter()).collect::<HashMap<_,_>>();
+        fn expand(exprs: Vec<UMPL2Expr>, env: &HashMap<std::rc::Rc<str>, UMPL2Expr>) -> Vec<UMPL2Expr> {
+            exprs.into_iter().map(|expr| match &expr {
+                UMPL2Expr::Ident(i) => env.get(i).cloned().unwrap_or(expr),
+                UMPL2Expr::Application(a) =>UMPL2Expr::Application(expand(a.to_vec(), env)),
+                UMPL2Expr::Scope(a) =>UMPL2Expr::Scope(expand(a.to_vec(), env)),
+                _ => expr,
+            }).collect()
+        }
+        
+        expand(expansion, &env)
+    }
 }
+
 
 // special forms
 impl MacroExpander {
@@ -118,7 +141,7 @@ impl MacroExpander {
             });
         };
         if let Some(cases) = exprs.get(1..) {
-            let cases = cases
+            let cases = MacroType::UserDefined(cases
                 .into_iter()
                 .map(|case| {
                     let UMPL2Expr::Application(case) = case else {
@@ -126,7 +149,7 @@ impl MacroExpander {
                             kind: MacroErrorKind::InvalidMacroCase,
                         });
                     };
-                    Ok(match case.get(0) {
+                    let vars = match case.get(0) {
                         Some(UMPL2Expr::Application(cond)) => cond
                             .into_iter()
                             .map(|ident| match ident {
@@ -146,15 +169,26 @@ impl MacroExpander {
                                 kind: MacroErrorKind::InvalidMacroCondition,
                             })
                         }
-                    })
+                    };
+                    let expand = case.get(1..).ok_or(MacroError {
+                        kind: MacroErrorKind::NoMacroForms,
+                    })?.to_vec();
+                    Ok((vars, expand))
                     // TODO: parse the expansion part
                 })
-                .collect::<Result<Vec<Vec<RC<str>>>, _>>()?;
+                .collect::<Result<Vec<_>,_>>()?);
+            self.macro_env.insert(macro_name.clone(), cases);
+            Ok(vec![])
+        } else {
+            Err(MacroError {
+                kind: MacroErrorKind::NoMacroCases
+            })
         }
-        todo!()
+        
     }
 }
 
 pub enum MacroType {
     SpecialForm(fn(&mut MacroExpander, &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError>),
+    UserDefined(Vec<(Vec<RC<str>>, Vec<UMPL2Expr>)>, )
 }
