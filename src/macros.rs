@@ -158,6 +158,8 @@ impl MacroExpander {
                             .into_iter()
                             .map(|ident| match ident {
                                 UMPL2Expr::Ident(cond) => Ok(cond.clone()),
+                                // TODO: nested lists for macro definitions like (defmacro foo (a  .->. (b *) )))
+                                // note the .->. means that the literal -> is required when calling this macro
                                 _ => {
                                     return Err(MacroError {
                                         kind: MacroErrorKind::InvalidMacroCondition,
@@ -194,5 +196,6 @@ impl MacroExpander {
 
 pub enum MacroType {
     SpecialForm(fn(&mut MacroExpander, &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError>),
+    // the parameters of a macro can nested lists and can have constraints such taht certain symbols are required 
     UserDefined(Vec<(Vec<RC<str>>, Vec<UMPL2Expr>)>, )
 }
