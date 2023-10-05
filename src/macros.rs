@@ -15,10 +15,12 @@ use std::collections::HashMap;
 
 use crate::{ast::UMPL2Expr, interior_mut::RC};
 
+#[derive(Debug)]
 pub struct MacroError {
     kind: MacroErrorKind,
 }
 
+#[derive(Debug)]
 pub enum MacroErrorKind {
     InvalidForm(RC<str>),
     InvalidMacroCase,
@@ -65,9 +67,11 @@ impl MacroExpander {
                                     res.extend(sf(self, &a[1..])?);
                                 }
                                 MacroType::UserDefined(cases) => {
+                                   
                                     let expander = cases.iter().find(|case|case.0.len() + 1 == a.len()).ok_or(MacroError {
                                         kind: MacroErrorKind::InvalidForm(format!("arrity mismatch for macro {op}").into()),
                                     })?.clone();
+
                                     res.extend(Self::expand_macro(expander.0, a[1..].to_vec(), expander.1))
                                 }
                             }

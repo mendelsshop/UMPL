@@ -1,0 +1,3 @@
+(defmacro class ((name ) (define (name) (lambda () (cond (else (error name)))))))
+
+(class pizza)

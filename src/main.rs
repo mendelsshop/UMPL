@@ -14,6 +14,7 @@ use std::{
 };
 
 use inkwell::{context::Context, passes::PassManager};
+use macros::MacroExpander;
 
 use crate::{codegen::Compiler, lexer::umpl_parse};
 use clap::{Parser, Subcommand};
@@ -58,6 +59,7 @@ pub enum ArgType {
     },
     /// Run some code
     Run { filename: String },
+    Expand { filename: String },
 }
 
 fn main() {
@@ -66,6 +68,7 @@ fn main() {
         ArgType::Repl => repl(),
         ArgType::Compile { filename, output } => compile(&filename, &output),
         ArgType::Run { filename } => run(&filename),
+        ArgType::Expand { filename } => expand(&filename),
     }
 }
 
@@ -195,4 +198,13 @@ fn run(file: &str) {
             exit(1);
         },
     );
+}
+
+fn expand(file: &str) {
+    let contents = fs::read_to_string(file).unwrap();
+    let program = umpl_parse(&contents).unwrap();
+    let mut expander = MacroExpander::new();
+    println!("{program:?}");
+    let expanded = expander.expand(&program).unwrap();
+    println!("{expanded:?}")
 }
