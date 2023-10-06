@@ -153,33 +153,12 @@ impl MacroExpander {
                             kind: MacroErrorKind::InvalidMacroCase,
                         });
                     };
-                    let vars = match case.get(0) {
-                        Some(UMPL2Expr::Application(cond)) => cond
-                            .into_iter()
-                            .map(|ident| match ident {
-                                UMPL2Expr::Ident(cond) => Ok(cond.clone()),
-                                // TODO: nested lists for macro definitions like (defmacro foo (a  .->. (b *) )))
-                                // note the .->. means that the literal -> is required when calling this macro
-                                _ => {
-                                    return Err(MacroError {
-                                        kind: MacroErrorKind::InvalidMacroCondition,
-                                    })
-                                }
-                            })
-                            .collect::<Result<_, _>>()?,
-                        Some(UMPL2Expr::Ident(cond)) => {
-                            vec![cond.clone()]
-                        }
-                        _ => {
-                            return Err(MacroError {
-                                kind: MacroErrorKind::InvalidMacroCondition,
-                            })
-                        }
-                    };
+                    let cond: MacroArg = case.as_slice().try_into()?;
+
                     let expand = case.get(1..).ok_or(MacroError {
                         kind: MacroErrorKind::NoMacroForms,
                     })?.to_vec();
-                    Ok((vars, expand))
+                    Ok((cond, expand))
                     // TODO: parse the expansion part
                 })
                 .collect::<Result<Vec<_>,_>>()?);
@@ -197,5 +176,56 @@ impl MacroExpander {
 pub enum MacroType {
     SpecialForm(fn(&mut MacroExpander, &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError>),
     // the parameters of a macro can nested lists and can have constraints such taht certain symbols are required 
-    UserDefined(Vec<(Vec<RC<str>>, Vec<UMPL2Expr>)>, )
+    UserDefined(Vec<(MacroArg, Vec<UMPL2Expr>)>, )
+}
+
+enum MacroArg {
+    // a list of macro arguments
+    List(Vec<MacroArg>),
+    Ident(RC<str>),
+    // when encountred during macro expansion must match specifically this symbol
+    Constant(RC<str>),
+    // will be some if there is a arg before it
+    KleeneClosure(Option<Box<MacroArg>>),
+}
+
+impl TryFrom<&[UMPL2Expr]> for MacroArg {
+    type Error = MacroError;
+
+    fn try_from(value: &[UMPL2Expr]) -> Result<Self, Self::Error> {
+        // TOOD: check for empty kleene closures if they have something before them 
+        // and if more than one kleene closure error
+        value.into_iter().map(TryFrom::try_from).collect::<Result<_, _>>().map(MacroArg::List)
+    }
+}
+
+impl TryFrom<&UMPL2Expr> for MacroArg {
+    type Error = MacroError;
+
+    fn try_from(value: &UMPL2Expr) -> Result<Self, Self::Error> {
+        match value {
+            UMPL2Expr::Application(a) => a.as_slice().try_into(),
+            UMPL2Expr::Ident(i) => {
+                Ok(if i == &("*".into()){
+                    MacroArg::KleeneClosure(None)
+                } else  {
+                    MacroArg::Ident(i.clone())
+                })
+            },
+            UMPL2Expr::String(s) => Ok(MacroArg::Constant(s.clone())),
+            _ => todo!("error")
+        }
+    }
+}
+
+impl MacroArg {
+    fn matches(&self, pattern: &[UMPL2Expr]) -> Option<()> {
+todo!()
+
+    }
+
+//     fn matches(&self, pattern: &UMPL2Expr) -> Option<()> {
+
+        
+    // }
 }
