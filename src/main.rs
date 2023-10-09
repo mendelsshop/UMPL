@@ -58,8 +58,12 @@ pub enum ArgType {
         output: String,
     },
     /// Run some code
-    Run { filename: String },
-    Expand { filename: String },
+    Run {
+        filename: String,
+    },
+    Expand {
+        filename: String,
+    },
 }
 
 fn main() {
