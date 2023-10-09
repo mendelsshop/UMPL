@@ -287,6 +287,11 @@ impl TryFrom<&UMPL2Expr> for MacroArg {
 
 impl MacroArg {
     fn matches(&self, pattern: &[UMPL2Expr]) -> Option<()> {
+        // pattern ((a b *) *)
+        // thing   ((1 4 6) (1 5 7))
+        // matched (a: (1 1) b: ((4 6) (5 7)))
+        // we need to keep some info about pattern to help with matching
+        // ((a b *) *) -> (a b) ((a b *) *)
         todo!()
     }
 
