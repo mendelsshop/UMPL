@@ -284,9 +284,15 @@ impl TryFrom<&UMPL2Expr> for MacroArg {
         }
     }
 }
+//https://github.com/rust-lang/rust-analyzer/pull/719/files#diff-ebf19883d233fae7be3aec83af917278e2ed7b79d3847c69941dfdf0728b0583 (could be helpfull)
+pub enum MacroBinding {
+    // generated from matching *
+    List(Vec<MacroBinding>),
+    Expr(UMPL2Expr)
+}
 
 impl MacroArg {
-    fn matches(&self, pattern: &[UMPL2Expr]) -> Option<()> {
+    fn matches(&self, pattern: &[UMPL2Expr]) -> Option<HashMap<RC<str>, MacroBinding>> {
         // pattern ((a b *) *)
         // thing   ((1 4 6) (1 5 7))
         // matched (a: (1 1) b: ((4 6) (5 7)))
