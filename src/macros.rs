@@ -293,15 +293,85 @@ pub enum MacroBinding {
 
 impl MacroArg {
     fn matches(&self, pattern: &[UMPL2Expr]) -> Option<HashMap<RC<str>, MacroBinding>> {
+        // let mut bindings = HashMap::new();
         // pattern ((a b *) *)
         // thing   ((1 4 6) (1 5 7))
         // matched (a: (1 1) b: ((4 6) (5 7)))
         // we need to keep some info about pattern to help with matching
         // ((a b *) *) -> (a b) ((a b *) *)
+
+        ;
         todo!()
     }
 
-    //     fn matches(&self, pattern: &UMPL2Expr) -> Option<()> {
+        fn matches_expr(&self, pattern: &UMPL2Expr) -> Option<HashMap<RC<str>, MacroBinding>>  {
+            let mut bindings = HashMap::new();
+            match (self, pattern) {
+                
+                
+                (MacroArg::List(pattern), UMPL2Expr::Application(expr)) => {
+                    fun_name(expr, pattern);
+                },
+                // error
+                (MacroArg::List(_),_) => todo!(),
+                (MacroArg::Ident(i), expr) => {
+                    bindings.insert(i, MacroBinding::Expr(expr.clone()));
+                },
+                
+         
+                (MacroArg::Constant(a), UMPL2Expr::Ident(b)) if a == b => todo!(),
+                // error
+                (MacroArg::Constant(_), _) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Bool(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Number(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::String(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Scope(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Ident(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Application(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Label(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::FnParam(_)) => todo!(),
+                (MacroArg::KleeneClosure(_), UMPL2Expr::Hempty) => todo!(),
+            }
+todo!()
+    }
+}
 
-    // }
+fn fun_name(expr: &Vec<UMPL2Expr>, pattern: &Vec<MacroArg>) {
+    let mut expr_count = expr.len() - 1;
+    let mut pat_count = pattern.len() - 1;
+    let mut bindings = HashMap::new();
+    let mut expr = expr.into_iter();
+    for pat in pattern {
+        match pat {
+            MacroArg::List(pat) => {
+                let Some((UMPL2Expr::Application(expr))) = expr.next() else {panic!()};
+                fun_name(expr, pat);
+                expr_count -= 1;
+            },
+            MacroArg::Ident(i) => {
+                let expr = expr.next().unwrap();
+                bindings.insert(i.clone(), expr.clone());
+                expr_count -= 1;
+            },
+            MacroArg::Constant(c) => {
+                let Some((UMPL2Expr::Ident(expr))) = expr.next() else {panic!()};
+                if c!= expr {
+                    panic!()
+                }
+                expr_count -= 1;
+            }
+            MacroArg::KleeneClosure(c) => {
+                let matched = (&mut expr).take(expr_count.checked_sub(pat_count-1).unwrap_or(0));
+                if let Some(c) = c {
+                 for expr in matched {
+                    c.matches_expr(expr);
+                 }  
+                }
+
+                
+                
+            },
+        }
+        pat_count -= 1;
+    }
 }
