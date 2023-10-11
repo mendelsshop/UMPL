@@ -314,11 +314,12 @@ pub enum MacroBinding {
 #[derive(Debug)]
 pub enum MacroMatchError {}
 
-trait PushNested {
+trait HashMapExtend {
     fn push_nested(&mut self, nested: Self);
+    fn merge(&mut self, other: Self);
 }
 
-impl PushNested for HashMap<RC<str>, MacroBinding> {
+impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
     fn push_nested(&mut self, nested: Self) {
         for (k, v) in nested {
             if !self.contains_key(&k) {
@@ -330,6 +331,11 @@ impl PushNested for HashMap<RC<str>, MacroBinding> {
             }
         }
     }
+
+    fn merge(&mut self, other: Self) {
+        // rn just just extend but might not be that simple
+        self.extend(other);
+    }
 }
 
 impl MacroArg {
@@ -337,7 +343,7 @@ impl MacroArg {
         let mut bindings = HashMap::new();
         match (self, pattern) {
             (MacroArg::List(pattern), UMPL2Expr::Application(expr)) => {
-                bindings.push_nested(matches(expr, pattern)?);
+                bindings.merge(matches(expr, pattern)?);
             }
             // error
             (MacroArg::List(_), _) => todo!(),
@@ -380,7 +386,7 @@ fn matches(
                 let Some(UMPL2Expr::Application(expr)) = expr.next() else {
                     panic!()
                 };
-                bindings.push_nested(matches(expr, pat)?);
+                bindings.merge(matches(expr, pat)?);
                 expr_count -= 1;
             }
             MacroArg::Ident(i) => {
@@ -518,6 +524,23 @@ mod tests {
         let parsed = umpl_parse(
             "(defmacro test [(* a) (display a)])
         (test (1 4 5) (4 7 8 ) (4 7 8 ) 6)",
+        )
+        .unwrap();
+        let expanded = MacroExpander::new().expand(&parsed).unwrap();
+        assert_eq!(
+            expanded,
+            vec![UMPL2Expr::Application(vec![
+                UMPL2Expr::Ident("display".into()),
+                UMPL2Expr::Number(6.0)
+            ]),]
+        )
+    }
+
+    #[test]
+    fn complexish_macro_kleene_test() {
+        let parsed = umpl_parse(
+            "(defmacro test [((c .ret. b * a ) * q) (display a)])
+        (test (1 ret 4 y v 5) (4 ret 7 u  8 ) (4 ret 7 8 )  1)",
         )
         .unwrap();
         let expanded = MacroExpander::new().expand(&parsed).unwrap();
