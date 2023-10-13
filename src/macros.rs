@@ -102,6 +102,10 @@ impl MacroExpander {
             "defmacro".into(),
             MacroType::SpecialForm(Self::special_form_macro),
         );
+        this.macro_env.insert(
+            "cond".into(),
+            MacroType::SpecialForm(Self::special_form_cond),
+        );
         this
     }
 
@@ -291,11 +295,47 @@ impl MacroExpander {
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             );
-            self.macro_env.insert(macro_name.clone(), cases);
+            if self.macro_env.insert(macro_name.clone(), cases).is_some() {
+                // Error redefiniton of macro
+            }
             Ok(vec![])
         } else {
             Err(MacroError::NoMacroCases)
         }
+    }
+
+    fn special_form_cond(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
+        fn cond_expand(exprs: &[UMPL2Expr]) -> Result<UMPL2Expr, MacroError> {
+            if let Some(case) = exprs.first() {
+                if let UMPL2Expr::Application(case) = case {
+                    match case.first() {
+                        Some(UMPL2Expr::Ident(e)) if (e.clone()) == "else".into() => {
+                            if exprs.get(1).is_some() {
+                                Err(MacroError::InvalidForm("else with cases after it".into()))
+                            } else {
+                                Ok(UMPL2Expr::Scope(case[1..].to_vec()))
+                            }
+                        }
+                        Some(expr) => Ok(UMPL2Expr::Application(vec![
+                            "if".into(),
+                            expr.clone(),
+                            UMPL2Expr::Scope(case[1..].to_vec()),
+                            cond_expand(&exprs[1..])?,
+                        ])),
+                        None => {
+                            // Error empty case
+                            Err(MacroError::InvalidForm("macro cond is empty".into()))
+                        }
+                    }
+                } else {
+                    // Error case not list
+                    Err(MacroError::InvalidForm("macro case is not a list".into()))
+                }
+            } else {
+                Ok(UMPL2Expr::Bool(crate::ast::Boolean::False))
+            }
+        }
+        Ok(vec![cond_expand(exprs)?])
     }
 }
 

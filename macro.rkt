@@ -7,6 +7,11 @@
   (syntax-rules ()
     [(rotate a c ...)
      (shift-to (c ... a) (a c ...))]))
+
+(define-syntax rotates
+  (syntax-rules ()
+    [(rotate (a ...) (c ...) ...)
+     ((c ... a ...) ...)]))
  
 (define-syntax shift-to
   (syntax-rules ()
@@ -49,8 +54,11 @@
   [(a '^ b ...) `(^ ,(infix-e a) ,(infix-e b ...))]
   ; base case
   [(a) a]
-) 
+)
 
+(defmacro conds [((expr  res ...)   ('else other)) (if expr (begin res ...) other)] [((expr  res ...)   ('else other) garbage ...)  (raise-syntax-error	'conds "extra cases after else")] [((expr  res ...) (expr-rest ... res-rest)...) (if expr  (begin res ...) (conds (expr-rest ... res-rest)...))] [() 'false])
+(define x 4)
+(conds ((= x 1) (display 'qaaaa)) ((= x 6) (display 6))  ('else (display '(x is not i))) ((= x 6) 9))
 (defmacro -> [((name `-> x) ...) (define name x) ...])
 (name  '('- 2) '('+ 3))
 
