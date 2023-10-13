@@ -11,15 +11,16 @@
 // some implementations will recursively expand macros, like when a user-defined macro calls a primitive macro
 // for now this will be a non-hygenic macro expander
 
-
 // TODO more builtins an cleanup better error handling removing explicit panics
 use std::collections::HashMap;
+
+use itertools::Itertools;
 
 use crate::{ast::UMPL2Expr, interior_mut::RC};
 trait HashMapExtend {
     fn push_nested(&mut self, nested: Self);
     fn merge(&mut self, other: Self);
-    fn get(&self, key: &RC<str>, nesting: &[usize]) -> Result<&UMPL2Expr, MacroExpansionError>;
+    fn get(&self, key: &RC<str>) -> Result<&UMPL2Expr, MacroExpansionError>;
 }
 
 impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
@@ -40,17 +41,18 @@ impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
         self.extend(other);
     }
 
-    fn get(&self, key: &RC<str>, nesting: &[usize]) -> Result<&UMPL2Expr, MacroExpansionError> {
-        let mut b = self.get(key).ok_or(MacroExpansionError::MetaVariableNotFound(key.clone()))?;
-        for &idx in nesting.iter() {
-            b = match b {
-                MacroBinding::Expr(_) => break,
-                MacroBinding::List(bs) => bs.get(idx).ok_or(MacroExpansionError::Other)?,
-            };
-        }
+    // fn flatten(&self, index: usize) -> Self {
+
+    // }
+
+    fn get(&self, key: &RC<str>) -> Result<&UMPL2Expr, MacroExpansionError> {
+        let b = self
+            .get(key)
+            .ok_or(MacroExpansionError::MetaVariableNotFound(key.clone()))?;
+
         match b {
             MacroBinding::Expr(it) => Ok(it),
-            MacroBinding::List(_) => Err(MacroExpansionError::Other)
+            MacroBinding::List(_) => Err(MacroExpansionError::DepthAndVariableDepthNoMatch),
         }
     }
 }
@@ -66,13 +68,14 @@ pub enum MacroErrorKind {
     NoMacroCases,
     InvalidMacroCondition,
     NoMacroForms,
-    MacroExpansion(MacroExpansionError)
+    MacroExpansion(MacroExpansionError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MacroExpansionError {
     MetaVariableNotFound(RC<str>),
-    Other
+    KleeneClosureWithoutNestedBindings,
+    DepthAndVariableDepthNoMatch,
 }
 
 #[derive(Default)]
@@ -113,24 +116,25 @@ impl MacroExpander {
                                     res.extend(sf(self, &a[1..])?);
                                 }
                                 MacroType::UserDefined(cases) => {
-                                    let expander = cases.into_iter().find_map(|(case, res)| {
-                                        // case.
-                                        let MacroArg::List(case) = case else {
-                                            unreachable!()
-                                        };
-                                        println!("case: {:?}", case);
-                                        println!("expression: {:?}", &a[1..]);
-                                        println!("result: {:?}", res);
-                                        matches(&a[1..], case).map(|bindings| (bindings, res)).ok()
-                                    }).unwrap();
-                                    println!("expander {:?}", expander);
-                                    
-                                    res.extend(expand_macro(
-                                        &expander.0,
-                                        
-                                        expander.1.to_vec(),
-                                        &mut vec![]
-                                    ).map_err(|e| MacroError { kind: MacroErrorKind::MacroExpansion(e) })?);
+                                    let expander = cases
+                                        .into_iter()
+                                        .find_map(|(case, res)| {
+                                            // case.
+                                            let MacroArg::List(case) = case else {
+                                                unreachable!()
+                                            };
+                                            matches(&a[1..], case)
+                                                .map(|bindings| (bindings, res))
+                                                .ok()
+                                        })
+                                        .unwrap();
+                                    res.extend(
+                                        expand_macro(&expander.0, expander.1.to_vec()).map_err(
+                                            |e| MacroError {
+                                                kind: MacroErrorKind::MacroExpansion(e),
+                                            },
+                                        )?,
+                                    );
                                 }
                             }
                         } else {
@@ -147,63 +151,87 @@ impl MacroExpander {
         }
         Ok(res)
     }
-
 }
 fn expand_macro(
     bindings: &HashMap<RC<str>, MacroBinding>,
     expansion: Vec<UMPL2Expr>,
-    nesting: &mut Vec<usize>,
 ) -> Result<Vec<UMPL2Expr>, MacroExpansionError> {
     fn expand_macro_inner(
         bindings: &HashMap<RC<str>, MacroBinding>,
         expansion: UMPL2Expr,
-        nesting: &mut Vec<usize>,
     ) -> Result<UMPL2Expr, MacroExpansionError> {
         match expansion {
-            UMPL2Expr::Application(a) => {
-                expand_macro(bindings, a, nesting).map(UMPL2Expr::Application)
-            }
-            UMPL2Expr::Scope(s) => {
-                expand_macro(bindings, s, nesting).map(UMPL2Expr::Scope)
-            }
-            UMPL2Expr::Ident(i) => {
-                match   
-                    
-                HashMapExtend::get(bindings, &i, nesting) {
-                    Ok(res) => Ok(res.clone()),
-                    Err(MacroExpansionError::MetaVariableNotFound(_)) => Ok(UMPL2Expr::Ident(i)),
-                    Err(e) => Err(e)
-                }
-            }
-            other =>    Ok(other)
+            UMPL2Expr::Application(a) => expand_macro(bindings, a).map(UMPL2Expr::Application),
+            UMPL2Expr::Scope(s) => expand_macro(bindings, s).map(UMPL2Expr::Scope),
+            UMPL2Expr::Ident(i) => match HashMapExtend::get(bindings, &i) {
+                Ok(res) => Ok(res.clone()),
+                Err(MacroExpansionError::MetaVariableNotFound(_)) => Ok(UMPL2Expr::Ident(i)),
+                Err(e) => Err(e),
+            },
+            other => Ok(other),
         }
     }
     let mut res = Vec::new();
     let mut expansion = expansion.into_iter().peekable();
-    while let Some(expander) = expansion.next() { 
-        // TODO: handle more than one kleene expansion ie (a * *) 
+    while let Some(expander) = expansion.next() {
+        // TODO: handle more than one kleene expansion ie (a * *)
         if expansion.peek() == Some(&UMPL2Expr::Ident("*".into())) {
             expansion.next(); // swallow kleene closure
-            nesting.push(0);
-            while let Ok(t) = expand_macro_inner(bindings, expander.clone(), nesting) {
-                let idx = nesting.pop().unwrap();
-                nesting.push(idx + 1);
-                res.push(t)
+
+            let mut expander = vec![expander];
+            while expansion.peek() == Some(&UMPL2Expr::Ident("*".into())) {
+                expander.push(expansion.next().unwrap())
             }
+            let expander = expander;
+
+            // instead we need to know how many expressions connected to the idents in expansion and loop that many times
+            // after each kleene closure is found remove a level for each binding which is a list
+            // to make this work in reality after we hit kleene closure we check if there are any bindings that are lists otherwise error
+            // we then iterate n times where n is the length of the list of a binding such that the list is the longest of all the binding lists
+            // during each iteration we create new bindings by going through the binding and
+            // if binding is expression in new bindings binding will same expression
+            // if list if nth element of binding is present then insert nth element of binding as binding in new bindings binding otherwise do not bind in new bindings binding
+
+            // still has problems when were at a depth in expansion where there is kleene closure but the binding for kleene closure is not one being used
+            // like             "(defmacro test [((c * b ) * a) (display b ) * *  ])"
+            let largest = bindings
+                .into_iter()
+                .filter_map(|binding| {
+                    if let MacroBinding::List(l) = binding.1 {
+                        Some(l.len())
+                    } else {
+                        None
+                    }
+                })
+                .max()
+                .ok_or(MacroExpansionError::KleeneClosureWithoutNestedBindings)?;
+
+            let (errs, oks): (Vec<_>, Vec<_>) = (0..largest)
+                .map(move |n| {
+                    let bindings: HashMap<_, _> = bindings
+                        .clone()
+                        .into_iter()
+                        .filter_map(|binding| {
+                            if let MacroBinding::List(l) = binding.1 {
+                                Some((binding.0, l.get(n)?.clone()))
+                            } else {
+                                Some(binding)
+                            }
+                        })
+                        .collect();
+                    expand_macro(&bindings, expander.clone())
+                })
+                .partition_map(From::from);
+            if oks.is_empty() {
+                return Err(errs[0].clone());
+            }
+            res.extend(oks.into_iter().flatten());
         } else {
-            res.push(expand_macro_inner(bindings, expander, nesting)?)
+            res.push(expand_macro_inner(bindings, expander)?)
         }
     }
 
     Ok(res)
-
-
-    // expand(expansion, &env)
-}
-
-pub enum MacroExpansion {
-    Expr(UMPL2Expr),
-    KleeneClosure(UMPL2Expr),
 }
 
 // special forms
@@ -311,7 +339,6 @@ impl TryFrom<&[UMPL2Expr]> for MacroArg {
             .map(TryFrom::try_from)
             .collect::<Result<_, _>>()?;
         let mut temp = MacroArg::KleeneClosure(None);
-        // println!("{:?}", ret);
         if let Some(MacroArg::KleeneClosure(_)) = ret.first() {
             if ret
                 .iter()
@@ -370,7 +397,7 @@ impl TryFrom<&UMPL2Expr> for MacroArg {
     }
 }
 //https://github.com/rust-lang/rust-analyzer/pull/719/files#diff-ebf19883d233fae7be3aec83af917278e2ed7b79d3847c69941dfdf0728b0583 (could be helpfull)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MacroBinding {
     // generated from matching *
     List(Vec<MacroBinding>),
@@ -379,8 +406,6 @@ pub enum MacroBinding {
 
 #[derive(Debug)]
 pub enum MacroMatchError {}
-
-
 
 impl MacroArg {
     fn matches(&self, pattern: &UMPL2Expr) -> Result<HashMap<RC<str>, MacroBinding>, MacroError> {
@@ -421,10 +446,6 @@ fn matches(
     let mut bindings = HashMap::new();
     let mut expr = expr.into_iter().peekable();
     for pat in pattern {
-        println!("{:?}", expr);
-        println!("patten {:?}", pat);
-        println!("pat count: {}", pat_count);
-        println!("expr count {}\n", expr_count);
         match pat {
             MacroArg::List(pat) => {
                 let Some(UMPL2Expr::Application(expr)) = expr.next() else {
@@ -539,8 +560,8 @@ mod tests {
     #[test]
     fn basic_macro_kleene_list_test() {
         let parsed = umpl_parse(
-            "(defmacro test [(( * b ) * a) (display b) *])
-        (test (1 4 5) (4 7 8 ) (4 7 7 ) 6)",
+            "(defmacro test [((c * b ) * a) (display c ) * *  ])
+        (test (1 4 5) (4 7 8 ) (4 7 7 ) 6) ",
         )
         .unwrap();
         let expanded = MacroExpander::new().expand(&parsed).unwrap();
