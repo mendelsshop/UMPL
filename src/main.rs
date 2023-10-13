@@ -14,9 +14,8 @@ use std::{
 };
 
 use inkwell::{context::Context, passes::PassManager};
-use macros::MacroExpander;
 
-use crate::{codegen::Compiler, lexer::umpl_parse};
+use crate::{codegen::Compiler, macros::parse_and_expand};
 use clap::{Parser, Subcommand};
 
 pub mod ast;
@@ -130,7 +129,7 @@ fn repl() {
             // really eneffecient to create a new compiler every time (and not whats expected either)
             // but currently there is no way to add onto main function after first compile
 
-            let program = umpl_parse(&input).unwrap();
+            let program = parse_and_expand(&input).unwrap();
             complier.compile_program(&program).map_or_else(
                 || {
                     complier.export_ir("bin/main");
@@ -154,7 +153,7 @@ fn repl() {
 
 fn compile(file: &str, out: &str) {
     let contents = fs::read_to_string(file).unwrap();
-    let program = umpl_parse(&contents).unwrap();
+    let program = parse_and_expand(&contents).unwrap();
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
@@ -183,12 +182,12 @@ fn compile(file: &str, out: &str) {
 
 fn run(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
-    let program = umpl_parse(&contents).unwrap();
+    let program = parse_and_expand(&contents).unwrap();
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
     // Create FPM
-    println!("{program:?}");
+    // println!("{program:?}");
     let fpm = init_function_optimizer(&module);
     let mut complier =
         { Compiler::new(&context, &module, &builder, &fpm, &codegen::EngineType::Jit) };
@@ -206,9 +205,6 @@ fn run(file: &str) {
 
 fn expand(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
-    let program = umpl_parse(&contents).unwrap();
-    let mut expander = MacroExpander::new();
+    let program = parse_and_expand(&contents).unwrap();
     println!("{program:?}");
-    let expanded = expander.expand(&program).unwrap();
-    println!("{expanded:?}")
 }

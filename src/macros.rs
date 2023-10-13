@@ -16,7 +16,21 @@ use std::collections::HashMap;
 
 use itertools::Itertools;
 
-use crate::{ast::UMPL2Expr, interior_mut::RC};
+use crate::{ast::UMPL2Expr, interior_mut::RC, lexer::umpl_parse};
+
+#[derive(Debug)]
+pub enum ParseError<'a> {
+    Macro(MacroError),
+    Parse(super::pc::ParseError<'a>),
+}
+
+pub fn parse_and_expand(input: &str) -> Result<Vec<UMPL2Expr>, ParseError<'_>> {
+    let ast = umpl_parse(input).map_err(ParseError::Parse)?;
+    let mut expander = MacroExpander::new();
+    let expanded = expander.expand(&ast).map_err(ParseError::Macro)?;
+    Ok(expanded)
+}
+
 trait HashMapExtend {
     fn push_nested(&mut self, nested: Self);
     fn merge(&mut self, other: Self);
@@ -41,10 +55,6 @@ impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
         self.extend(other);
     }
 
-    // fn flatten(&self, index: usize) -> Self {
-
-    // }
-
     fn get(&self, key: &RC<str>) -> Result<&UMPL2Expr, MacroExpansionError> {
         let b = self
             .get(key)
@@ -56,13 +66,9 @@ impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
         }
     }
 }
-#[derive(Debug)]
-pub struct MacroError {
-    kind: MacroErrorKind,
-}
 
 #[derive(Debug)]
-pub enum MacroErrorKind {
+pub enum MacroError {
     InvalidForm(RC<str>),
     InvalidMacroCase,
     NoMacroCases,
@@ -129,11 +135,8 @@ impl MacroExpander {
                                         })
                                         .unwrap();
                                     res.extend(
-                                        expand_macro(&expander.0, expander.1.to_vec()).map_err(
-                                            |e| MacroError {
-                                                kind: MacroErrorKind::MacroExpansion(e),
-                                            },
-                                        )?,
+                                        expand_macro(&expander.0, expander.1.to_vec())
+                                            .map_err(|e| (MacroError::MacroExpansion(e)))?,
                                     );
                                 }
                             }
@@ -238,9 +241,9 @@ fn expand_macro(
 impl MacroExpander {
     fn special_form_link(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         let Some(UMPL2Expr::Label(linked)) = exprs.get(0) else {
-            return Err(MacroError {
-                kind: MacroErrorKind::InvalidForm("first expr of link must be a label".into()),
-            });
+            return Err(MacroError::InvalidForm(
+                "first expr of link must be a label".into(),
+            ));
         };
         let links = if let Some(links) = exprs.get(1..) {
             links
@@ -250,17 +253,13 @@ impl MacroExpander {
                     _ => None,
                 })
                 .collect::<Option<Vec<RC<str>>>>()
-                .ok_or(MacroError {
-                    kind: MacroErrorKind::InvalidForm(
-                        "the elements of the link are not all labels".into(),
-                    ),
-                })?
+                .ok_or(MacroError::InvalidForm(
+                    "the elements of the link are not all labels".into(),
+                ))?
         } else {
-            return Err(MacroError {
-                kind: MacroErrorKind::InvalidForm(
-                    "there must at least one other expr in a link".into(),
-                ),
-            });
+            return Err(MacroError::InvalidForm(
+                "there must at least one other expr in a link".into(),
+            ));
         };
         self.links.insert(linked.clone(), links);
         Ok(vec![])
@@ -268,9 +267,9 @@ impl MacroExpander {
 
     fn special_form_macro(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         let Some(UMPL2Expr::Ident(macro_name)) = exprs.get(0) else {
-            return Err(MacroError {
-                kind: MacroErrorKind::InvalidForm("defmacro expects a name for the macro".into()),
-            });
+            return Err(MacroError::InvalidForm(
+                "defmacro expects a name for the macro".into(),
+            ));
         };
         if let Some(cases) = exprs.get(1..) {
             let cases = MacroType::UserDefined(
@@ -278,24 +277,15 @@ impl MacroExpander {
                     .into_iter()
                     .map(|case| {
                         let UMPL2Expr::Application(rule) = case else {
-                            return Err(MacroError {
-                                kind: MacroErrorKind::InvalidMacroCase,
-                            });
+                            return Err(MacroError::InvalidMacroCase);
                         };
 
                         let Some(UMPL2Expr::Application(case)) = rule.first() else {
-                            return Err(MacroError {
-                                kind: MacroErrorKind::InvalidMacroCase,
-                            });
+                            return Err(MacroError::InvalidMacroCase);
                         };
                         let cond: MacroArg = case.as_slice().try_into()?;
 
-                        let expand = rule
-                            .get(1..)
-                            .ok_or(MacroError {
-                                kind: MacroErrorKind::NoMacroForms,
-                            })?
-                            .to_vec();
+                        let expand = rule.get(1..).ok_or(MacroError::NoMacroForms)?.to_vec();
                         Ok((cond, expand))
                         // TODO: parse the expansion part
                     })
@@ -304,9 +294,7 @@ impl MacroExpander {
             self.macro_env.insert(macro_name.clone(), cases);
             Ok(vec![])
         } else {
-            Err(MacroError {
-                kind: MacroErrorKind::NoMacroCases,
-            })
+            Err(MacroError::NoMacroCases)
         }
     }
 }
@@ -346,9 +334,7 @@ impl TryFrom<&[UMPL2Expr]> for MacroArg {
                 .find(|arg| matches!(arg, MacroArg::KleeneClosure(_)))
                 .is_some()
             {
-                Err(MacroError {
-                    kind: MacroErrorKind::InvalidMacroCondition,
-                })
+                Err(MacroError::InvalidMacroCondition)
             } else {
                 Ok(MacroArg::List(ret))
             }
@@ -364,9 +350,7 @@ impl TryFrom<&[UMPL2Expr]> for MacroArg {
                     .is_some()
                 {
                     // if we encounter 2 *
-                    Err(MacroError {
-                        kind: MacroErrorKind::InvalidMacroCondition,
-                    })
+                    Err(MacroError::InvalidMacroCondition)
                 } else {
                     std::mem::swap(&mut ret[pos - 1], &mut temp);
                     ret[pos - 1] = MacroArg::KleeneClosure(Some(Box::new(temp)));
