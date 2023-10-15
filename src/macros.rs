@@ -11,7 +11,7 @@
 // some implementations will recursively expand macros, like when a user-defined macro calls a primitive macro
 // for now this will be a non-hygenic macro expander
 
-// TODO more builtins an cleanup better error handling removing explicit panics
+// TODO more builtins an cleanup better error handlin,g types, andrmesages
 use std::collections::HashMap;
 
 use itertools::Itertools;
@@ -32,22 +32,23 @@ pub fn parse_and_expand(input: &str) -> Result<Vec<UMPL2Expr>, ParseError<'_>> {
 }
 
 trait HashMapExtend {
-    fn push_nested(&mut self, nested: Self);
+    fn push_nested(&mut self, nested: Self) -> Option<()>;
     fn merge(&mut self, other: Self);
     fn get(&self, key: &RC<str>) -> Result<&UMPL2Expr, MacroExpansionError>;
 }
 
 impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
-    fn push_nested(&mut self, nested: Self) {
+    fn push_nested(&mut self, nested: Self) -> Option<()> {
         for (k, v) in nested {
             if !self.contains_key(&k) {
                 self.insert(k.clone(), MacroBinding::List(vec![]));
             }
             match self.get_mut(&k) {
                 Some(MacroBinding::List(l)) => l.push(v),
-                _ => panic!(),
+                _ => return None,
             }
         }
+        Some(())
     }
 
     fn merge(&mut self, other: Self) {
@@ -75,6 +76,8 @@ pub enum MacroError {
     InvalidMacroCondition,
     NoMacroForms,
     MacroExpansion(MacroExpansionError),
+    CaseMismatch,
+    NoCaseMatches,
 }
 
 #[derive(Debug, Clone)]
@@ -127,7 +130,7 @@ impl MacroExpander {
                                 }
                                 MacroType::UserDefined(cases) => {
                                     let expander = cases
-                                        .into_iter()
+                                        .iter()
                                         .find_map(|(case, res)| {
                                             // case.
                                             let MacroArg::List(case) = case else {
@@ -137,10 +140,10 @@ impl MacroExpander {
                                                 .map(|bindings| (bindings, res))
                                                 .ok()
                                         })
-                                        .unwrap();
+                                        .ok_or(MacroError::NoCaseMatches)?;
                                     res.extend(
-                                        expand_macro(&expander.0, expander.1.to_vec())
-                                            .map_err(|e| (MacroError::MacroExpansion(e)))?,
+                                        expand_macro(&expander.0, expander.1.clone())
+                                            .map_err(MacroError::MacroExpansion)?,
                                     );
                                 }
                             }
@@ -187,7 +190,7 @@ fn expand_macro(
 
             let mut expander = vec![expander];
             while expansion.peek() == Some(&UMPL2Expr::Ident("*".into())) {
-                expander.push(expansion.next().unwrap())
+                expander.push(expansion.next().unwrap());
             }
             let expander = expander;
 
@@ -202,7 +205,7 @@ fn expand_macro(
             // still has problems when were at a depth in expansion where there is kleene closure but the binding for kleene closure is not one being used
             // like             "(defmacro test [((c * b ) * a) (display b ) * *  ])"
             let largest = bindings
-                .into_iter()
+                .iter()
                 .filter_map(|binding| {
                     if let MacroBinding::List(l) = binding.1 {
                         Some(l.len())
@@ -230,11 +233,14 @@ fn expand_macro(
                 })
                 .partition_map(From::from);
             if oks.is_empty() {
-                return Err(errs[0].clone());
+                // if there is no error means no expansionie nothing went wrong
+                if !errs.is_empty() {
+                    return Err(errs[0].clone());
+                }
             }
             res.extend(oks.into_iter().flatten());
         } else {
-            res.push(expand_macro_inner(bindings, expander)?)
+            res.push(expand_macro_inner(bindings, expander)?);
         }
     }
 
@@ -278,7 +284,7 @@ impl MacroExpander {
         if let Some(cases) = exprs.get(1..) {
             let cases = MacroType::UserDefined(
                 cases
-                    .into_iter()
+                    .iter()
                     .map(|case| {
                         let UMPL2Expr::Application(rule) = case else {
                             return Err(MacroError::InvalidMacroCase);
@@ -363,43 +369,40 @@ impl TryFrom<&[UMPL2Expr]> for MacroArg {
         // TOOD: check for empty kleene closures if they have something before them
         // and if more than one kleene closure error
         let mut ret: Vec<_> = value
-            .into_iter()
+            .iter()
             .map(TryFrom::try_from)
             .collect::<Result<_, _>>()?;
-        let mut temp = MacroArg::KleeneClosure(None);
-        if let Some(MacroArg::KleeneClosure(_)) = ret.first() {
+        let mut temp = Self::KleeneClosure(None);
+        if let Some(Self::KleeneClosure(_)) = ret.first() {
             if ret
                 .iter()
                 .skip(1)
-                .find(|arg| matches!(arg, MacroArg::KleeneClosure(_)))
-                .is_some()
+                .any(|arg| matches!(&arg, Self::KleeneClosure(_)))
             {
                 Err(MacroError::InvalidMacroCondition)
             } else {
-                Ok(MacroArg::List(ret))
+                Ok(Self::List(ret))
+            }
+        } else if let Some(pos) = ret
+            .iter()
+            .position(|arg| matches!(arg, Self::KleeneClosure(_)))
+        {
+            if ret
+                .iter()
+                .skip(pos + 1)
+                .any(|arg| matches!(&arg, Self::KleeneClosure(_)))
+            {
+                // if we encounter 2 *
+                Err(MacroError::InvalidMacroCondition)
+            } else {
+                // using indexing is ok here (no panic) b/c we alreadynkow the index is valid from postion
+                std::mem::swap(&mut ret[pos - 1], &mut temp);
+                ret[pos - 1] = Self::KleeneClosure(Some(Box::new(temp)));
+                ret.remove(pos);
+                Ok(Self::List(ret))
             }
         } else {
-            if let Some(pos) = ret
-                .iter()
-                .position(|arg| matches!(arg, MacroArg::KleeneClosure(_)))
-            {
-                if ret
-                    .iter()
-                    .skip(pos + 1)
-                    .find(|arg| matches!(arg, MacroArg::KleeneClosure(_)))
-                    .is_some()
-                {
-                    // if we encounter 2 *
-                    Err(MacroError::InvalidMacroCondition)
-                } else {
-                    std::mem::swap(&mut ret[pos - 1], &mut temp);
-                    ret[pos - 1] = MacroArg::KleeneClosure(Some(Box::new(temp)));
-                    ret.remove(pos);
-                    Ok(MacroArg::List(ret))
-                }
-            } else {
-                Ok(MacroArg::List(ret))
-            }
+            Ok(Self::List(ret))
         }
     }
 }
@@ -411,11 +414,11 @@ impl TryFrom<&UMPL2Expr> for MacroArg {
         match value {
             UMPL2Expr::Application(a) => a.as_slice().try_into(),
             UMPL2Expr::Ident(i) => Ok(if i == &("*".into()) {
-                MacroArg::KleeneClosure(None)
+                Self::KleeneClosure(None)
             } else {
-                MacroArg::Ident(i.clone())
+                Self::Ident(i.clone())
             }),
-            UMPL2Expr::String(s) => Ok(MacroArg::Constant(s.clone())),
+            UMPL2Expr::String(s) => Ok(Self::Constant(s.clone())),
             _ => todo!("error"),
         }
     }
@@ -435,27 +438,27 @@ impl MacroArg {
     fn matches(&self, pattern: &UMPL2Expr) -> Result<HashMap<RC<str>, MacroBinding>, MacroError> {
         let mut bindings = HashMap::new();
         match (self, pattern) {
-            (MacroArg::List(pattern), UMPL2Expr::Application(expr)) => {
+            (Self::List(pattern), UMPL2Expr::Application(expr)) => {
                 bindings.merge(matches(expr, pattern)?);
             }
             // error
-            (MacroArg::List(_), _) => todo!(),
-            (MacroArg::Ident(i), expr) => {
+            (Self::List(_), _) => todo!(),
+            (Self::Ident(i), expr) => {
                 bindings.insert(i.clone(), MacroBinding::Expr(expr.clone()));
             }
 
-            (MacroArg::Constant(a), UMPL2Expr::Ident(b)) if a == b => todo!(),
+            (Self::Constant(a), UMPL2Expr::Ident(b)) if a == b => todo!(),
             // error
-            (MacroArg::Constant(_), _) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Bool(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Number(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::String(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Scope(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Ident(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Application(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Label(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::FnParam(_)) => todo!(),
-            (MacroArg::KleeneClosure(_), UMPL2Expr::Hempty) => todo!(),
+            (Self::Constant(_), _) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Bool(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Number(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::String(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Scope(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Ident(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Application(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Label(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::FnParam(_)) => todo!(),
+            (Self::KleeneClosure(_), UMPL2Expr::Hempty) => todo!(),
         }
         Ok(bindings)
     }
@@ -468,27 +471,24 @@ fn matches(
     let mut expr_count = expr.len();
     let mut pat_count = pattern.len();
     let mut bindings = HashMap::new();
-    let mut expr = expr.into_iter().peekable();
+    let mut expr = expr.iter();
     for pat in pattern {
         match pat {
             MacroArg::List(pat) => {
                 let Some(UMPL2Expr::Application(expr)) = expr.next() else {
-                    panic!()
+                    return Err(MacroError::CaseMismatch);
                 };
                 bindings.merge(matches(expr, pat)?);
                 expr_count -= 1;
             }
             MacroArg::Ident(i) => {
-                let expr = expr.next().unwrap();
+                let expr = expr.next().ok_or(MacroError::CaseMismatch)?;
                 bindings.insert(i.clone(), MacroBinding::Expr(expr.clone()));
                 expr_count -= 1;
             }
             MacroArg::Constant(c) => {
-                let Some(UMPL2Expr::Ident(expr)) = expr.next() else {
-                    panic!()
-                };
-                if c != expr {
-                    panic!()
+                if Some(&UMPL2Expr::Ident(c.clone())) != expr.next() {
+                    return Err(MacroError::CaseMismatch);
                 }
                 expr_count -= 1;
             }
@@ -501,7 +501,9 @@ fn matches(
 
                 if let Some(c) = c {
                     for expr in matched {
-                        bindings.push_nested(c.matches(&expr)?);
+                        bindings
+                            .push_nested(c.matches(expr)?)
+                            .ok_or(MacroError::CaseMismatch)?;
                     }
                 }
             }
@@ -509,8 +511,8 @@ fn matches(
         pat_count -= 1;
     }
     if expr.len() != 0 {
-        panic!()
-    }
+            return Err(MacroError::CaseMismatch);
+        };
     Ok(bindings)
 }
 
@@ -534,7 +536,7 @@ mod tests {
                 UMPL2Expr::Number(1.0),
                 UMPL2Expr::Number(1.0)
             ])]
-        )
+        );
     }
 
     #[test]
@@ -551,7 +553,7 @@ mod tests {
                 UMPL2Expr::Number(1.0),
                 UMPL2Expr::Number(1.0)
             ])]
-        )
+        );
     }
 
     #[test]
@@ -578,7 +580,7 @@ mod tests {
                     UMPL2Expr::Number(3.0)
                 ]),
             ]
-        )
+        );
     }
 
     #[test]
@@ -605,7 +607,7 @@ mod tests {
                     UMPL2Expr::Number(7.0)
                 ]),
             ]
-        )
+        );
     }
 
     #[test]
@@ -622,7 +624,7 @@ mod tests {
                 UMPL2Expr::Ident("display".into()),
                 UMPL2Expr::Number(6.0)
             ]),]
-        )
+        );
     }
 
     #[test]
@@ -639,6 +641,6 @@ mod tests {
                 UMPL2Expr::Ident("display".into()),
                 UMPL2Expr::Number(6.0)
             ]),]
-        )
+        );
     }
 }

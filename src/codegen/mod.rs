@@ -379,7 +379,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             // should add unreachable after this?
             // what should this return?
-            UMPL2Expr::Label(s) => {
+            UMPL2Expr::Label(_s) => {
                 // if let Some(link) = self.links.get(s) {
                 //     let call_info = self.types.call_info.const_named_struct(&[
                 //         self.context.i64_type().const_zero().into(),
@@ -404,8 +404,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 //     self.non_found_links
                 //         .push((s.clone(), basic_block, last_inst));
                 // }
+                // Ok(Some(self.hempty().into()))
                 todo!();
-                Ok(Some(self.hempty().into()))
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
