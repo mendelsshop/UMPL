@@ -511,8 +511,8 @@ fn matches(
         pat_count -= 1;
     }
     if expr.len() != 0 {
-            return Err(MacroError::CaseMismatch);
-        };
+        return Err(MacroError::CaseMismatch);
+    };
     Ok(bindings)
 }
 

@@ -32,6 +32,55 @@ fn opaquify(f: impl Iterator<Item = char> + 'static) -> Box<dyn Iterator<Item = 
     Box::new(f)
 }
 
+// for parsing the the source file of a module if the module is defined as a path
+// TODO: maybe could happen during macro expansion (maybe module system should be macro stuff?)
+// so we have acces to the links in the source file
+fn mod_list() -> Box<Parser<UMPL2Expr>> {
+    inbetween(
+        keep_right(any_of(call_start().iter().copied()), ws_or_comment()),
+        keep_right(
+            string("module"),
+            keep_right(
+                ws_or_comment(),
+                map(
+                    chain(
+                        satify(|c| c.is_ascii_alphabetic()),
+                        keep_right(
+                            ws_or_comment(),
+                            alt(
+                                scope(umpl2expr()),
+                                try_map(stringdot(), |string| {
+                                    let UMPL2Expr::String(path) = string else {
+                                        panic!("error in parser combinator")
+                                    };
+                                    let fc =
+                                        std::fs::read_to_string(path.to_string()).map_err(|e| {
+                                            ParseError {
+                                                kind: ParseErrorType::Other(format!(
+                                                    "failed to read file {path}: {e}"
+                                                )),
+                                                input: "",
+                                            }
+                                        })?;
+                                    // ther has to be abtter way then leaking maybe if moved this to eval we wuld need to leak
+                                    umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
+                                }),
+                            ),
+                        ),
+                    ),
+                    |(name, code)| {
+                        UMPL2Expr::Application(vec!["module".into(), name.to_string().into(), code])
+                    },
+                ),
+            ),
+        ),
+        opt(keep_right(
+            ws_or_comment(),
+            any_of(call_end().iter().copied()),
+        )),
+    )
+}
+
 fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
     inbetween(
         keep_right(ws_or_comment(), char('᚜')),
@@ -55,6 +104,7 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                             stmt(),
                             terminal_umpl(),
                             ident_umpl(),
+                            mod_list(),
                             application(),
                             special_start(),
                             scope(umpl2expr()),

@@ -326,85 +326,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Bool(value) => Ok(Some(self.const_boolean(*value).as_basic_value_enum())),
             UMPL2Expr::String(value) => Ok(Some(self.const_string(value).as_basic_value_enum())),
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
-            // TODO: keep in mind the fact that the loop might be in outer function
-            // UMPL2Expr::Stop(s) => {
-            //     let res = return_none!(self.compile_expr(s)?);
-            //     match self
-            //         .state
-            //         .last()
-            //         .ok_or("a stop is found outside a funcion or loop")?
-            //     {
-            //         EvalType::Function => {
-            //             self.builder.build_return(Some(&res));
-            //         }
-            //         EvalType::Loop {
-            //             loop_bb: _,
-            //             done_loop_bb,
-            //             connection,
-            //         } => {
-            //             let cont_bb = self
-            //                 .context
-            //                 .append_basic_block(self.fn_value.unwrap(), "loop-continue");
-            //             self.builder.build_conditional_branch(
-            //                 self.context.bool_type().const_zero(),
-            //                 cont_bb,
-            //                 *done_loop_bb,
-            //             );
-            //             connection
-            //                 .add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
-            //             self.builder.position_at_end(cont_bb);
-            //         }
-            //     };
-            //     Ok(None)
-            // }
-            // UMPL2Expr::Skip => {
-            //     // find the newesr "state event" that is a loop
-            //     self.builder.build_unconditional_branch(
-            //         *self
-            //             .state
-            //             .iter()
-            //             .rev()
-            //             .find_map(|state| match state {
-            //                 EvalType::Function => None,
-            //                 EvalType::Loop { loop_bb, .. } => Some(loop_bb),
-            //             })
-            //             .ok_or("skip found outside loop")?,
-            //     );
-            //     Ok(None)
-            // }
+
             UMPL2Expr::Application(application) => self.compile_application(application),
-            // try to retrieve the function and block address from the goto hashmap
-            // if not there save whatevers needed and once all codegen completed retry to get information function/address for label from goto hashmap
-            // and information to build at the right positon and do it
 
-            // should add unreachable after this?
-            // what should this return?
             UMPL2Expr::Label(_s) => {
-                // if let Some(link) = self.links.get(s) {
-                //     let call_info = self.types.call_info.const_named_struct(&[
-                //         self.context.i64_type().const_zero().into(),
-                //         link.0.into(),
-                //     ]);
-
-                //     self.builder.build_call(
-                //         link.1,
-                //         &[
-                //             self.types.generic_pointer.const_null().into(),
-                //             call_info.into(),
-                //             self.types.generic_pointer.const_null().into(),
-                //         ],
-                //         "jump",
-                //     );
-                // // maybe should be signal that we jumped somewhere
-                // } else {
-                //     let basic_block = self.builder.get_insert_block().unwrap();
-                //     // will be overriden later if we have a link for the basic block
-                //     self.builder.build_alloca(self.types.ty, "placeholder");
-                //     let last_inst = basic_block.get_last_instruction();
-                //     self.non_found_links
-                //         .push((s.clone(), basic_block, last_inst));
-                // }
-                // Ok(Some(self.hempty().into()))
                 todo!();
             }
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
@@ -412,31 +337,71 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // UMPL2Expr::Link(_, _) |
             UMPL2Expr::Scope(exprs) => self.compile_scope(exprs), // create new basic block use uncdoital br to new bb
                                                                   // store the block address and the current fn_value in some sort of hashmap with the name as the key
-                                                                  // UMPL2Expr::ComeTo(n) => {
-                                                                  //     let block = self.context.append_basic_block(self.fn_value.unwrap(), n);
-                                                                  //     self.links.insert(
-                                                                  //         n.clone(),
-                                                                  //         (
-                                                                  //             unsafe { block.get_address().unwrap() },
-                                                                  //             self.fn_value.unwrap(),
-                                                                  //         ),
-                                                                  //     );
-                                                                  //     self.builder.build_unconditional_branch(block);
-                                                                  //     self.builder.position_at_end(block);
-                                                                  //     Ok(Some(self.hempty().into()))
-                                                                  // }
-                                                                  // UMPL2Expr::Module(m) => {
-                                                                  //     // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
-                                                                  //     // one way to do this is to keep a list of modules with thein envs including one for the root ...
-                                                                  //     self.module_list.push(m.name().to_string());
-                                                                  //     for expr in m.inner() {
-                                                                  //         // self.print_ir();
-                                                                  //         self.compile_expr(expr)?;
-                                                                  //     }
-                                                                  //     self.module_list.pop();
-                                                                  //     Ok(Some(self.hempty().into()))
-                                                                  // }
         }
+    }
+
+    // the reason this is not in loop.rs is because it could be in functions.rs too.
+    // maybe we should make control_flow.rs for stop, skip, and labels
+
+    // TODO: keep in mind the fact that the loop might be in outer function
+    fn special_form_stop(
+        &mut self,
+        exprs: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() != 1 {
+            Err("this is an expression oreinted language stopping a loop or function requires a value")?;
+        }
+        let res = return_none!(self.compile_expr(&exprs[0])?);
+        match self
+            .state
+            .last()
+            .ok_or("a stop is found outside a funcion or loop")?
+        {
+            EvalType::Function => {
+                self.builder.build_return(Some(&res));
+            }
+            EvalType::Loop {
+                loop_bb: _,
+                done_loop_bb,
+                connection,
+            } => {
+                let cont_bb = self
+                    .context
+                    .append_basic_block(self.fn_value.unwrap(), "loop-continue");
+                self.builder.build_conditional_branch(
+                    self.context.bool_type().const_zero(),
+                    cont_bb,
+                    *done_loop_bb,
+                );
+                connection.add_incoming(&[(&res, self.builder.get_insert_block().unwrap())]);
+                self.builder.position_at_end(cont_bb);
+            }
+        };
+        Ok(None)
+    }
+
+    fn special_form_mod(
+        &mut self,
+        exprs: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
+        // one way to do this is to keep a list of modules with thein envs including one for the root ...
+        if exprs.len() != 2 {
+            Err("Mod requires either a name and scope")?;
+        }
+        let UMPL2Expr::Ident(module_name) = &exprs[0] else {
+            return Err("Mod requires a module name as its first argument")?;
+        };
+        let UMPL2Expr::Scope(module) = &exprs[0] else {
+            return Err("Mod requires a scope as its second argument")?;
+        };
+        self.module_list.push(module_name.to_string());
+        for expr in module {
+            // self.print_ir();
+            self.compile_expr(expr)?;
+        }
+        self.module_list.pop();
+        Ok(Some(self.hempty().into()))
     }
 
     fn insert_variable_new_ptr(
@@ -533,6 +498,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_special_form("quote".into(), Self::special_form_quote);
         self.insert_special_form("unquote".into(), Self::special_form_unquote);
         self.insert_special_form("quasiquote".into(), Self::special_form_quasiquote);
+        self.insert_special_form("skip".into(), Self::special_form_stop);
+        self.insert_special_form("stop".into(), Self::special_form_skip);
+        self.insert_special_form("module".into(), Self::special_form_mod);
     }
 
     pub fn get_main(&mut self) -> (FunctionValue<'ctx>, BasicBlock<'ctx>) {

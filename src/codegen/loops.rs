@@ -364,4 +364,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.state.pop();
         Ok(Some(phi_return.as_basic_value()))
     }
+
+    pub(crate) fn special_form_skip(
+        &mut self,
+        exprs: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if !exprs.is_empty() {
+            return Err("skip just skips no need for a value".to_string());
+        }
+        self.builder.build_unconditional_branch(
+            *self
+                .state
+                .iter()
+                .rev()
+                .find_map(|state| match state {
+                    EvalType::Function => None,
+                    EvalType::Loop { loop_bb, .. } => Some(loop_bb),
+                })
+                .ok_or("skip found outside loop")?,
+        );
+        Ok(None)
+    }
 }
