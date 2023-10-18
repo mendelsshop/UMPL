@@ -24,10 +24,12 @@ pub enum ParseError<'a> {
     Parse(super::pc::ParseError<'a>),
 }
 
-pub fn parse_and_expand(input: &str) -> Result<Vec<UMPL2Expr>, ParseError<'_>> {
+pub fn parse_and_expand(
+    input: &str,
+) -> Result<(Vec<UMPL2Expr>, HashMap<RC<str>, Vec<RC<str>>>), ParseError<'_>> {
     let ast = umpl_parse(input).map_err(ParseError::Parse)?;
     let mut expander = MacroExpander::new();
-    let expanded = expander.expand(&ast).map_err(ParseError::Macro)?;
+    let expanded = expander.expand_get_link(&ast).map_err(ParseError::Macro)?;
     Ok(expanded)
 }
 
@@ -59,7 +61,7 @@ impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
     fn get(&self, key: &RC<str>) -> Result<&UMPL2Expr, MacroExpansionError> {
         let b = self
             .get(key)
-            .ok_or(MacroExpansionError::MetaVariableNotFound(key.clone()))?;
+            .ok_or_else(||MacroExpansionError::MetaVariableNotFound(key.clone()))?;
 
         match b {
             MacroBinding::Expr(it) => Ok(it),
@@ -112,7 +114,17 @@ impl MacroExpander {
         this
     }
 
-    pub fn expand(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
+    /// expands the expressions provided and returns the expanded expressions and the links for goto expressions
+    /// it clears the links from the expander
+    pub fn expand_get_link(
+        &mut self,
+        exprs: &[UMPL2Expr],
+    ) -> Result<(Vec<UMPL2Expr>, HashMap<RC<str>, Vec<RC<str>>>), MacroError> {
+        self.expand(exprs)
+            .map(|res| (res, std::mem::take(&mut self.links)))
+    }
+
+    fn expand(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         let mut res = vec![];
         for expr in exprs {
             match expr {
@@ -263,7 +275,7 @@ impl MacroExpander {
                     _ => None,
                 })
                 .collect::<Option<Vec<RC<str>>>>()
-                .ok_or(MacroError::InvalidForm(
+                .ok_or_else(||MacroError::InvalidForm(
                     "the elements of the link are not all labels".into(),
                 ))?
         } else {
@@ -310,7 +322,7 @@ impl MacroExpander {
         }
     }
 
-    fn special_form_cond(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
+    fn special_form_cond(_: &mut Self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         fn cond_expand(exprs: &[UMPL2Expr]) -> Result<UMPL2Expr, MacroError> {
             if let Some(case) = exprs.first() {
                 if let UMPL2Expr::Application(case) = case {

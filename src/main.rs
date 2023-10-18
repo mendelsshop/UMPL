@@ -130,7 +130,7 @@ fn repl() {
             // but currently there is no way to add onto main function after first compile
 
             let program = parse_and_expand(&input).unwrap();
-            complier.compile_program(&program).map_or_else(
+            complier.compile_program(&program.0, program.1).map_or_else(
                 || {
                     complier.export_ir("bin/main");
                     complier.run().expect("no execution engine found");
@@ -168,7 +168,7 @@ fn compile(file: &str, out: &str) {
             &codegen::EngineType::None,
         )
     };
-    complier.compile_program(&program).map_or_else(
+    complier.compile_program(&program.0, program.1).map_or_else(
         || {
             // TODO: actually compile the program not just generate llvm ir
             complier.export_ir(out);
@@ -191,7 +191,7 @@ fn run(file: &str) {
     let fpm = init_function_optimizer(&module);
     let mut complier =
         { Compiler::new(&context, &module, &builder, &fpm, &codegen::EngineType::Jit) };
-    complier.compile_program(&program).map_or_else(
+    complier.compile_program(&program.0, program.1).map_or_else(
         || {
             let ret = complier.run().expect("no execution engine found");
             exit(ret);

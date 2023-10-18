@@ -40,27 +40,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             })
             .collect::<Result<Option<Vec<BasicValueEnum<'_>>>, String>>()?);
-        fn list_to_tree<'ctx>(
-            list: Vec<BasicValueEnum<'ctx>>,
-            compiler: &mut Compiler<'_, 'ctx>,
-            n: usize,
-        ) -> (StructValue<'ctx>, Vec<BasicValueEnum<'ctx>>) {
-            if n == 0 {
-                (compiler.hempty(), list)
-            } else {
-                let left_size = (n - 1) / 2;
-                let (left_tree, mut non_left_tree) = list_to_tree(list, compiler, left_size);
 
-                let this = non_left_tree.remove(0).into_struct_value();
-
-                let right_size = n - (left_size + 1);
-                let (right_tree, remaining) = list_to_tree(non_left_tree, compiler, right_size);
-                (compiler.const_cons(left_tree, this, right_tree), remaining)
-            }
-        }
         let n = list.len();
         let partial_tree = list_to_tree(list, self, n);
 
         Ok(Some(partial_tree.0.into()))
+    }
+}
+fn list_to_tree<'ctx>(
+    list: Vec<BasicValueEnum<'ctx>>,
+    compiler: &mut Compiler<'_, 'ctx>,
+    n: usize,
+) -> (StructValue<'ctx>, Vec<BasicValueEnum<'ctx>>) {
+    if n == 0 {
+        (compiler.hempty(), list)
+    } else {
+        let left_size = (n - 1) / 2;
+        let (left_tree, mut non_left_tree) = list_to_tree(list, compiler, left_size);
+
+        let this = non_left_tree.remove(0).into_struct_value();
+
+        let right_size = n - (left_size + 1);
+        let (right_tree, remaining) = list_to_tree(non_left_tree, compiler, right_size);
+        (compiler.const_cons(left_tree, this, right_tree), remaining)
     }
 }

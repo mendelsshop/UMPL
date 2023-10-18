@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::UnsafeCell, collections::HashMap, hash::Hash};
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -55,6 +55,70 @@ pub enum EvalType<'ctx> {
     },
 }
 
+/// a `HashMap` like thing that has two types of indexes
+/// 1) list of indices that can get the value
+/// 2) a single index that can set the value
+pub struct MultiMap<K: Hash + Eq, V> {
+    keys: HashMap<K, *mut V>,
+    values: HashMap<K, UnsafeCell<V>>,
+}
+
+impl<K: Hash + Eq, V> MultiMap<K, V> {
+    pub fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+            values: HashMap::new(),
+        }
+    }
+    /// allows you te get from on of the multiple keys
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.keys.get(key).map(|v| unsafe { v.as_ref().unwrap() })
+    }
+
+    /// allows you to mutate a value based on its mutatable key
+    pub fn set(&mut self, key: &K, setter: impl FnOnce(&V) -> V) -> Option<()> {
+        self.values.get(key).map(|v| unsafe {
+            *v.get() = setter(&*v.get());
+        })
+    }
+
+    pub fn get_or_set(
+        &mut self,
+        key: &K,
+        getter: impl FnOnce(&V),
+        setter: impl FnOnce(&V) -> V,
+    ) -> Option<()> {
+        self.get(key)
+            .map(|v| {
+                getter(v);
+            })
+            .or_else(|| self.set(key, setter))
+    }
+}
+
+impl<T: IntoIterator<Item = (KS, K, V)>, K: Hash + Eq + Clone, V, KS: IntoIterator<Item = K>>
+    From<T> for MultiMap<K, V>
+{
+    fn from(value: T) -> Self {
+        let (values, keys): (HashMap<K, _>, Vec<_>) = value
+            .into_iter()
+            .map(|(keys, key, value): (KS, K, V)| {
+                let value = UnsafeCell::new(value);
+                let get = value.get();
+                (
+                    (key, value),
+                    keys.into_iter()
+                        .map(move |keys_outer: K| (keys_outer, get))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .unzip();
+
+        let keys: HashMap<_, _> = keys.into_iter().flatten().collect();
+        Self { keys, values }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Types<'ctx> {
     pub object: StructType<'ctx>,
@@ -89,7 +153,7 @@ pub struct Functions<'ctx> {
     rand: FunctionValue<'ctx>,
 }
 
-#[derive(Clone, Debug)]
+#[allow(missing_debug_implementations)]
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     pub(crate) module: &'a Module<'ctx>,
@@ -101,7 +165,7 @@ pub struct Compiler<'a, 'ctx> {
     // so we don't store multiple sof the same identifiers
     pub(crate) ident: HashMap<RC<str>, GlobalValue<'ctx>>,
     fn_value: Option<FunctionValue<'ctx>>,
-    links: HashMap<RC<str>, (PointerValue<'ctx>, FunctionValue<'ctx>)>,
+    links: MultiMap<RC<str>, Option<(PointerValue<'ctx>, FunctionValue<'ctx>)>>,
     pub(crate) types: Types<'ctx>,
     // not were umpl functions are stored
     functions: Functions<'ctx>,
@@ -257,7 +321,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ident: HashMap::new(),
             fn_value: None,
             types,
-            links: HashMap::new(),
+            links: MultiMap::new(),
             functions,
             state: vec![],
             main: None,
@@ -329,9 +393,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             UMPL2Expr::Application(application) => self.compile_application(application),
 
-            UMPL2Expr::Label(_s) => {
-                todo!();
-            }
+            UMPL2Expr::Label(s) => self.compile_label(s),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
             // UMPL2Expr::Link(_, _) |
@@ -578,7 +640,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.non_found_links = std::mem::take(&mut self.non_found_links)
             .into_iter()
             .filter(|link| {
-                if let Some(link_info) = self.links.get(&link.0) {
+                if let Some(Some(link_info)) = self.links.get(&link.0) {
                     // link.2 shouldnt be none b/c of place holder
                     if let Some(inst) = link.2 {
                         self.builder.position_at(link.1, &inst);
@@ -612,8 +674,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn compile_program(
         &mut self,
         program: &[UMPL2Expr],
-        // _links: HashSet<RC<str>>,
+        links: HashMap<RC<str>, Vec<RC<str>>>,
     ) -> Option<String> {
+        // TODO: dont reset links instead add to current (needed for repl to work)
+        self.links = MultiMap::from(links.into_iter().map(|(k, ks)| {
+            (
+                ks,
+                k,
+                <Option<(PointerValue<'ctx>, FunctionValue<'ctx>)>>::None,
+            )
+        }));
         let (main_fn, main_block) = self.get_main();
         self.fn_value = Some(main_fn);
 
