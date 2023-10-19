@@ -401,7 +401,7 @@ fn class_stmt() -> Box<Parser<UMPL2Expr>> {
             // let class
             let mut fields = vec![];
             let mut methods = vec![];
-            r.1.unwrap_or_else(||Box::new(iter::empty()))
+            r.1.unwrap_or_else(|| Box::new(iter::empty()))
                 .for_each(|class| match class {
                     ClassStuff::Method(name, argc, varidic, scope) => {
                         let lambda = if let Some(variadic) = varidic {

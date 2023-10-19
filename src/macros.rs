@@ -61,7 +61,7 @@ impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
     fn get(&self, key: &RC<str>) -> Result<&UMPL2Expr, MacroExpansionError> {
         let b = self
             .get(key)
-            .ok_or_else(||MacroExpansionError::MetaVariableNotFound(key.clone()))?;
+            .ok_or_else(|| MacroExpansionError::MetaVariableNotFound(key.clone()))?;
 
         match b {
             MacroBinding::Expr(it) => Ok(it),
@@ -275,9 +275,9 @@ impl MacroExpander {
                     _ => None,
                 })
                 .collect::<Option<Vec<RC<str>>>>()
-                .ok_or_else(||MacroError::InvalidForm(
-                    "the elements of the link are not all labels".into(),
-                ))?
+                .ok_or_else(|| {
+                    MacroError::InvalidForm("the elements of the link are not all labels".into())
+                })?
         } else {
             return Err(MacroError::InvalidForm(
                 "there must at least one other expr in a link".into(),
