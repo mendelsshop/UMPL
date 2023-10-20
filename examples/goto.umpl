@@ -8,3 +8,5 @@ ln @q @w
         ᚛  !goto @x
         else ᚜(print .hi.)<᚛ !print hi
 .not skipped.>
+@x
+.aa.>

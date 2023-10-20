@@ -361,7 +361,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             EngineType::Repl => Some(module.create_execution_engine().unwrap()),
             EngineType::Jit => Some(
                 module
-                    .create_jit_execution_engine(inkwell::OptimizationLevel::Aggressive)
+                // optimaztion break goto
+                    .create_jit_execution_engine(inkwell::OptimizationLevel::None)
                     .unwrap(),
             ),
             EngineType::None => None,
