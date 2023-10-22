@@ -1,3 +1,13 @@
-(defmacro class ((name ) (define (name) (lambda () (cond (else (error name)))))))
+!(defmacro class ((name ) (define (name) (lambda () (cond (else (error name)))))))
 
-(class pizza)
+!(class pizza)
+
+(defmacro conds [((case rule *) rest *) (if case {rule *} (conds (display rest) *))])
+
+(conds (1 5 6 . 78 7)  (2 6) (84 6))
+
+
+!(defmacro test [((c * b ) * a) (display b c) * *  ])
+
+
+!(test (1 5 6 5) 6)

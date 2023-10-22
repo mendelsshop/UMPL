@@ -66,6 +66,7 @@ impl HashMapExtend for HashMap<RC<str>, MacroBinding> {
         match b {
             MacroBinding::Expr(it) => Ok(it),
             MacroBinding::List(_) => Err(MacroExpansionError::DepthAndVariableDepthNoMatch),
+            MacroBinding::Unbound => Err(MacroExpansionError::ReptitionAndVarialbeNotMatch),
         }
     }
 }
@@ -87,6 +88,7 @@ pub enum MacroExpansionError {
     MetaVariableNotFound(RC<str>),
     KleeneClosureWithoutNestedBindings,
     DepthAndVariableDepthNoMatch,
+    ReptitionAndVarialbeNotMatch,
 }
 
 #[derive(Default)]
@@ -133,6 +135,8 @@ impl MacroExpander {
                 }
                 UMPL2Expr::Application(a) => {
                     // we expand all the sub expressions of the application before expanding the application itself
+                    // which most macro expandets dont do so we should probably expand outer than inner if possible
+                    // TODO: we aslo need recurasve macro epxansiion working ie try to expand list if not possbile try to expandsubexpression ....
                     let a = self.expand(a)?;
                     if let Some(UMPL2Expr::Ident(op)) = a.first() {
                         if let Some(r#macro) = self.macro_env.get(op) {
@@ -233,15 +237,25 @@ fn expand_macro(
                     let bindings: HashMap<_, _> = bindings
                         .clone()
                         .into_iter()
-                        .filter_map(|binding| {
+                        .map(|binding| {
                             if let MacroBinding::List(l) = binding.1 {
-                                Some((binding.0, l.get(n)?.clone()))
+                                (
+                                    binding.0,
+                                    l.get(n).unwrap_or(&MacroBinding::Unbound).clone(),
+                                )
                             } else {
-                                Some(binding)
+                                binding
                             }
                         })
                         .collect();
                     expand_macro(&bindings, expander.clone())
+                    // filter out error that are do to tring to larget amo=ount of time but the meta variable used was not the largest one
+                })
+                .filter(|expansion| {
+                    !matches!(
+                        expansion,
+                        Err(MacroExpansionError::ReptitionAndVarialbeNotMatch)
+                    )
                 })
                 .partition_map(From::from);
             if oks.is_empty() {
@@ -441,6 +455,7 @@ pub enum MacroBinding {
     // generated from matching *
     List(Vec<MacroBinding>),
     Expr(UMPL2Expr),
+    Unbound,
 }
 
 #[derive(Debug)]
@@ -449,6 +464,7 @@ pub enum MacroMatchError {}
 impl MacroArg {
     fn matches(&self, pattern: &UMPL2Expr) -> Result<HashMap<RC<str>, MacroBinding>, MacroError> {
         let mut bindings = HashMap::new();
+        // TODO: i think a lot/most of the todo cases are unreachable
         match (self, pattern) {
             (Self::List(pattern), UMPL2Expr::Application(expr)) => {
                 bindings.merge(matches(expr, pattern)?);
@@ -473,6 +489,20 @@ impl MacroArg {
             (Self::KleeneClosure(_), UMPL2Expr::Hempty) => todo!(),
         }
         Ok(bindings)
+    }
+
+    // used for kleen closure matching so that even if kleen clssore matches 0 times there will be actual bindings for each metavariable
+    fn init_bindings(&self) -> HashMap<RC<str>, MacroBinding> {
+        match self {
+            Self::List(l) => l.iter().flat_map(Self::init_bindings).collect(),
+            Self::Ident(i) => HashMap::from([(i.clone(), MacroBinding::List(vec![]))]),
+            Self::Constant(_) | Self::KleeneClosure(None) => HashMap::new(),
+            Self::KleeneClosure(Some(arg)) => {
+                let mut res = HashMap::new();
+                res.push_nested(arg.init_bindings());
+                res
+            }
+        }
     }
 }
 
@@ -512,6 +542,7 @@ fn matches(
                 expr.nth(taken_count - 1);
 
                 if let Some(c) = c {
+                    bindings.merge(c.init_bindings());
                     for expr in matched {
                         bindings
                             .push_nested(c.matches(expr)?)
