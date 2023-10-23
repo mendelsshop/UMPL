@@ -578,7 +578,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_special_form("quasiquote".into(), Self::special_form_quasiquote);
         self.insert_special_form("skip".into(), Self::special_form_skip);
         self.insert_special_form("stop".into(), Self::special_form_stop);
-        self.insert_special_form("module".into(), Self::special_form_mod);
+        self.insert_special_form("mod".into(), Self::special_form_mod);
         self.insert_special_form("begin".into(), Self::compile_scope);
     }
 

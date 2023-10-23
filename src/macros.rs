@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 
 use crate::{ast::UMPL2Expr, interior_mut::RC, lexer::umpl_parse};
-
+use std::fs;
 #[derive(Debug)]
 pub enum ParseError<'a> {
     Macro(MacroError),
@@ -112,6 +112,10 @@ impl MacroExpander {
         this.macro_env.insert(
             "cond".into(),
             MacroType::SpecialForm(Self::special_form_cond),
+        );
+        this.macro_env.insert(
+            "module".into(),
+            MacroType::SpecialForm(Self::special_form_module),
         );
         this
     }
@@ -271,6 +275,25 @@ fn expand_macro(
 
 // special forms
 impl MacroExpander {
+    fn special_form_module(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
+        let mut body = if exprs.len() == 1 && matches!(exprs[0], UMPL2Expr::String(_)) {
+            let UMPL2Expr::String(path) = &exprs[0] else {unreachable!()};
+            // it must be module as a path
+            // TODO: dont panic but error
+            let file = fs::File::open(path.to_string()).unwrap();
+            use std::io::BufReader;
+            use std::io::Read;
+            let mut buf = BufReader::new(file);
+            let mut contents = String::new();
+             buf.read_to_string(&mut contents);
+            umpl_parse(&contents).unwrap()
+        } else {
+            exprs.to_vec()
+        };
+        body =self.expand(&body)?;
+        body.insert(0, "mod".into());
+        Ok(body)
+    }
     // TODO: module import special form - class special form
     fn special_form_link(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         let Some(UMPL2Expr::Label(linked)) = exprs.get(0) else {
