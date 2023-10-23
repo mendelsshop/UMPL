@@ -22,8 +22,6 @@ pub enum UMPL2Expr {
     Bool(Boolean),
     Number(f64),
     String(RC<str>),
-    // could become (begin exprs)
-    Scope(Vec<UMPL2Expr>),
     Ident(RC<str>),
     Application(Vec<UMPL2Expr>),
     Label(RC<str>),
@@ -32,40 +30,13 @@ pub enum UMPL2Expr {
     #[default]
     Hempty,
 }
-#[derive(Clone, Default, PartialEq, Debug)]
-pub struct Module {
-    name: String,
-    inner: Vec<UMPL2Expr>,
-}
-
-impl Module {
-    #[must_use]
-    pub fn new(name: String, inner: Vec<UMPL2Expr>) -> Self {
-        Self { name, inner }
-    }
-
-    pub fn inner_mut(&mut self) -> &mut Vec<UMPL2Expr> {
-        &mut self.inner
-    }
-
-    #[must_use]
-    pub fn name(&self) -> &str {
-        self.name.as_ref()
-    }
-
-    #[must_use]
-    pub fn inner(&self) -> &[UMPL2Expr] {
-        self.inner.as_ref()
-    }
-}
-
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
         match self {
             Self::Bool(b) => compiler.const_boolean(b),
             Self::Number(n) => compiler.const_number(n),
             Self::String(c) => compiler.const_string(&c),
-            Self::Scope(_) => unreachable!(),
+            // Self::Scope(_) => unreachable!(),
             Self::Ident(i) => compiler.const_symbol(&i),
             Self::Application(a) => a.flatten(compiler),
             Self::Label(_) => todo!(),
@@ -108,7 +79,7 @@ impl core::fmt::Display for UMPL2Expr {
             Self::Bool(f0) => write!(f, "{f0}"),
             Self::Number(f0) => write!(f, "{f0}"),
             Self::String(f0) => write!(f, "{f0}"),
-            Self::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
+            // Self::Scope(f0) => f.debug_tuple("Scope").field(&f0).finish(),
             Self::Ident(f0) => write!(f, "{f0}"),
             Self::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
             Self::Label(f0) => write!(f, "@{f0}"),
@@ -123,12 +94,6 @@ impl<A: Into<RC<str>>> From<A> for UMPL2Expr {
         Self::Ident(value.into())
     }
 }
-
-// impl From<Vec<UMPL2Expr>> for UMPL2Expr {
-//     fn from(value: Vec<UMPL2Expr>) -> Self {
-//         todo!()
-//     }
-// }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Boolean {
@@ -158,36 +123,3 @@ pub enum Varidiac {
     /// in form of tree (requires at least 0 args)
     AtLeast0,
 }
-
-macro_rules! get_expr {
-    ($type:ident, $ret:ty, $method_name:ident) => {
-        impl UMPL2Expr {
-            #[must_use]
-            pub const fn $method_name(&self) -> Option<&$ret> {
-                match self {
-                    Self::$type(t) => Some(t),
-                    _ => None,
-                }
-            }
-        }
-    };
-}
-
-get_expr! {Scope, Vec<UMPL2Expr>, get_scope}
-
-macro_rules! get_expr_owned {
-    ($type:ident, $ret:ty, $method_name:ident) => {
-        impl UMPL2Expr {
-            #[allow(clippy::missing_const_for_fn)] // taking self doesnt work well with const fn (something about destructors)
-            #[must_use]
-            pub fn $method_name(self) -> Option<$ret> {
-                match self {
-                    Self::$type(t) => Some(t),
-                    _ => None,
-                }
-            }
-        }
-    };
-}
-
-get_expr_owned! {Scope, Vec<UMPL2Expr>, get_scope_owned}

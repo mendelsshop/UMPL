@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::iter;
-
+use itertools::chain as vec_splat;
 use parse_int::parse;
+use std::iter;
 // chars on us keyboard not used: `, , \,/,,,=
 // qussiquote -> :
 // unquote -> $
@@ -31,66 +31,19 @@ fn ws_or_comment() -> Box<Parser<Option<Box<dyn Iterator<Item = char>>>>> {
 fn opaquify(f: impl Iterator<Item = char> + 'static) -> Box<dyn Iterator<Item = char>> {
     Box::new(f)
 }
-
-// for parsing the the source file of a module if the module is defined as a path
-// TODO: maybe could happen during macro expansion (maybe module system should be macro stuff?)
-// so we have acces to the links in the source file
-fn mod_list() -> Box<Parser<UMPL2Expr>> {
-    inbetween(
-        keep_right(any_of(call_start().iter().copied()), ws_or_comment()),
-        keep_right(
-            string("module"),
-            keep_right(
-                ws_or_comment(),
-                map(
-                    chain(
-                        satify(|c| c.is_ascii_alphabetic()),
-                        keep_right(
-                            ws_or_comment(),
-                            alt(
-                                scope(umpl2expr()),
-                                try_map(stringdot(), |string| {
-                                    let UMPL2Expr::String(path) = string else {
-                                        panic!("error in parser combinator")
-                                    };
-                                    let fc =
-                                        std::fs::read_to_string(path.to_string()).map_err(|e| {
-                                            ParseError {
-                                                kind: ParseErrorType::Other(format!(
-                                                    "failed to read file {path}: {e}"
-                                                )),
-                                                input: "",
-                                            }
-                                        })?;
-                                    // ther has to be abtter way then leaking maybe if moved this to eval we wuld need to leak
-                                    umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
-                                }),
-                            ),
-                        ),
-                    ),
-                    |(name, code)| {
-                        UMPL2Expr::Application(vec!["module".into(), name.to_string().into(), code])
-                    },
-                ),
-            ),
-        ),
-        opt(keep_right(
-            ws_or_comment(),
-            any_of(call_end().iter().copied()),
-        )),
-    )
-}
-
-fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
+fn scope_list(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<Vec<UMPL2Expr>>> {
     inbetween(
         keep_right(ws_or_comment(), char('᚜')),
-        map(many(p), |r| {
-            UMPL2Expr::Scope(r.map_or_else(Vec::new, Iterator::collect))
-        }),
+        map(many(p), |r| r.map_or_else(Vec::new, Iterator::collect)),
         opt(keep_right(ws_or_comment(), char('᚛'))),
     )
 }
-
+fn scope(p: Box<Parser<UMPL2Expr>>) -> Box<Parser<UMPL2Expr>> {
+    map(scope_list(p), |mut scope| {
+        scope.insert(0, "begin".into());
+        UMPL2Expr::Application(scope)
+    })
+}
 fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
     // needs to be its own new closure so that we don't have infinite recursion while creating the parser (so we add a level of indirection)
     map(
@@ -104,7 +57,6 @@ fn umpl2expr() -> Box<Parser<UMPL2Expr>> {
                             stmt(),
                             terminal_umpl(),
                             ident_umpl(),
-                            mod_list(),
                             application(),
                             special_start(),
                             scope(umpl2expr()),
@@ -261,7 +213,6 @@ fn stmt() -> Box<Parser<UMPL2Expr>> {
         [
             mod_stmt(),
             if_stmt(),
-            // unless_stmt(),
             until_stmt(),
             go_through_stmt(),
             continue_doing_stmt(),
@@ -284,29 +235,13 @@ fn mod_stmt() -> Box<Parser<UMPL2Expr>> {
                     satify(|c| c.is_ascii_alphabetic()),
                     keep_right(
                         ws_or_comment(),
-                        alt(
-                            scope(umpl2expr()),
-                            try_map(stringdot(), |string| {
-                                let UMPL2Expr::String(path) = string else {
-                                    panic!("error in parser combinator")
-                                };
-                                let fc =
-                                    std::fs::read_to_string(path.to_string()).map_err(|e| {
-                                        ParseError {
-                                            kind: ParseErrorType::Other(format!(
-                                                "failed to read file {path}: {e}"
-                                            )),
-                                            input: "",
-                                        }
-                                    })?;
-                                // ther has to be abtter way then leaking maybe if moved this to eval we wuld need to leak
-                                umpl_parse(Box::leak(Box::new(fc))).map(UMPL2Expr::Scope)
-                            }),
-                        ),
+                        alt(scope_list(umpl2expr()), map(stringdot(), |s| vec![s])),
                     ),
                 ),
                 |(name, code)| {
-                    UMPL2Expr::Application(vec!["module".into(), name.to_string().into(), code])
+                    let mut module = vec!["module".into(), name.to_string().into()];
+                    module.extend(code);
+                    UMPL2Expr::Application(module)
                 },
             ),
         ),
@@ -326,12 +261,7 @@ fn let_stmt() -> Box<Parser<UMPL2Expr>> {
     )
 }
 
-enum ClassStuff {
-    Method(RC<str>, f64, Option<char>, UMPL2Expr),
-    Field(RC<str>),
-}
-
-fn method_stmt() -> Box<Parser<ClassStuff>> {
+fn method_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
         chain(
             keep_right(
@@ -365,22 +295,28 @@ fn method_stmt() -> Box<Parser<ClassStuff>> {
                         keep_right(ws_or_comment(), string("Exception")),
                     ),
                 ),
-                scope(umpl2expr()),
+                scope_list(umpl2expr()),
             ),
         ),
         |r| {
             let name = r.0 .0.into();
-            let UMPL2Expr::Number(arg_num) = r.0 .1 .0 else {
-                panic!()
-            };
+            let number = r.0 .1 .0;
             let varidiac = r.0 .1 .1;
+            let fn_info = varidiac.map_or(number.clone(), |varidiac| {
+                UMPL2Expr::Application(vec![number, varidiac.to_string().into()])
+            });
             let scope = r.1;
-            ClassStuff::Method(name, arg_num, varidiac, scope)
+            UMPL2Expr::Application(vec![
+                name,
+                UMPL2Expr::Application(vec_splat!(vec!["lambda".into(), fn_info], scope).collect()),
+            ])
         },
     )
 }
 
 fn class_stmt() -> Box<Parser<UMPL2Expr>> {
+    // lisp version of class will be
+    // (class name (method1 (lambda ...)) (filed1 value) (filed2) ...)
     map(
         chain(
             keep_right(
@@ -391,109 +327,24 @@ fn class_stmt() -> Box<Parser<UMPL2Expr>> {
                 keep_right(ws_or_comment(), char('᚜')),
                 many(keep_right(
                     ws_or_comment(),
-                    alt(method_stmt(), map(ident(), |r| ClassStuff::Field(r.into()))),
+                    alt(
+                        method_stmt(),
+                        map(ident_umpl(), |r| UMPL2Expr::Application(vec![r])),
+                    ),
                 )),
                 opt(keep_right(ws_or_comment(), char('᚛'))),
             ),
         ),
         |r| {
             let name = r.0;
-            // let class
-            let mut fields = vec![];
-            let mut methods = vec![];
-            r.1.unwrap_or_else(|| Box::new(iter::empty()))
-                .for_each(|class| match class {
-                    ClassStuff::Method(name, argc, varidic, scope) => {
-                        let lambda = if let Some(variadic) = varidic {
-                            UMPL2Expr::Application(vec![
-                                "lambda".into(),
-                                UMPL2Expr::Number(argc),
-                                UMPL2Expr::String(variadic.to_string().into()),
-                                scope,
-                            ])
-                        } else {
-                            UMPL2Expr::Application(vec![
-                                "lambda".into(),
-                                UMPL2Expr::Number(argc),
-                                scope,
-                            ])
-                        };
-                        let method = UMPL2Expr::Application(vec![
-                            "define".into(),
-                            name.clone().into(),
-                            lambda,
-                        ]);
-                        methods.push((name, argc, varidic, method));
-                    }
-                    ClassStuff::Field(field) => {
-                        fields.push(field);
-                    }
-                });
-            let mut class_method = vec!["lambda".into(), UMPL2Expr::Number(fields.len() as f64)];
-
-            let mut class_method_scope = vec![];
-            class_method_scope.extend(fields.iter().enumerate().map(|(i, field)| {
-                UMPL2Expr::Application(vec![
-                    "define".into(),
-                    field.clone().into(),
-                    UMPL2Expr::FnParam(i),
-                ])
-            }));
-            class_method_scope.extend(methods.iter().map(|method| method.3.clone()));
-            let mut cond_stmt = vec!["cond".into()];
-            let mut count = 0;
-            cond_stmt.extend(fields.iter().map(|field| {
-                count += 1;
-                UMPL2Expr::Application(vec![
-                    UMPL2Expr::Application(vec![
-                        "=".into(),
-                        UMPL2Expr::FnParam(0),
-                        UMPL2Expr::Number(f64::from(count) - 1.0),
-                    ]),
-                    field.clone().into(),
-                ])
-            }));
-
-            cond_stmt.extend(methods.iter().map(|field| {
-                count += 1;
-                UMPL2Expr::Application(vec![
-                    UMPL2Expr::Application(vec![
-                        "=".into(),
-                        UMPL2Expr::FnParam(0),
-                        UMPL2Expr::Number(f64::from(count) - 1.0),
-                    ]),
-                    field.0.clone().into(),
-                ])
-            }));
-            cond_stmt.push(UMPL2Expr::Application(vec![
-                "else".into(),
-                UMPL2Expr::Application(vec![
-                    "error".into(),
-                    UMPL2Expr::String(
-                        format!("error not valid index for dispatch on `{name}`").into(),
-                    ),
-                ]),
-            ]));
-            let dispatch = UMPL2Expr::Application(vec![
-                "lambda".into(),
-                UMPL2Expr::Number(1.0),
-                UMPL2Expr::Scope(vec![UMPL2Expr::Application(cond_stmt)]),
-            ]);
-
-            class_method_scope.push(dispatch);
-            class_method.push(UMPL2Expr::Scope(class_method_scope));
-            let class = vec![
-                "define".into(),
-                name.into(),
-                UMPL2Expr::Application(class_method),
-            ];
-            // TODO: find a way to return multiple things ie: besides for the class method also have function not part of the class that index into the class
-            UMPL2Expr::Application(class)
+            let fields = r.1.map_or_else(Vec::new, Iterator::collect);
+            UMPL2Expr::Application(vec_splat!(vec!["class".into(), name.into()], fields).collect())
         },
     )
 }
 
 fn if_stmt() -> Box<Parser<UMPL2Expr>> {
+    // TODO: allow if else if
     map(
         seq(vec![
             keep_right(string("if"), umpl2expr()),
@@ -516,53 +367,42 @@ fn if_stmt() -> Box<Parser<UMPL2Expr>> {
     )
 }
 
-fn get_scope(i: Option<UMPL2Expr>) -> Vec<UMPL2Expr> {
-    i.and_then(UMPL2Expr::get_scope_owned).unwrap_or_default()
-}
-
 fn until_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
-        seq(vec![
+        chain(
             keep_right(string("while"), umpl2expr()),
             keep_right(
                 ws_or_comment(),
-                keep_right(string("do"), scope(umpl2expr())),
+                keep_right(string("do"), scope_list(umpl2expr())),
             ),
-        ]),
-        |mut r| {
+        ),
+        |(cond, scope)| {
             let while_ident = "while".into();
-            let cond = r.next().unwrap_or_default();
-            let loop_scope = r.next().unwrap();
-            UMPL2Expr::Application(vec![while_ident, cond, loop_scope])
+            UMPL2Expr::Application(vec_splat(vec![while_ident, cond], scope).collect())
         },
     )
 }
 
 fn go_through_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
-        seq(vec![
+        chain(
             keep_right(string("for"), keep_right(ws_or_comment(), ident_umpl())), // TODO: use identifier parserl, not the full blown expression parser
-            keep_right(keep_right(ws_or_comment(), string("in")), umpl2expr()),
-            scope(umpl2expr()),
-        ]),
-        |mut r| {
+            chain(
+                keep_right(keep_right(ws_or_comment(), string("in")), umpl2expr()),
+                scope_list(umpl2expr()),
+            ),
+        ),
+        |(name, (iter, scope))| {
             let for_ident = "for".into();
-            let iter_name = r.next().unwrap();
-            let iterable = r.next().unwrap_or_default();
-            let loop_scope = r.next().unwrap();
-            UMPL2Expr::Application(vec![for_ident, iter_name, iterable, loop_scope])
+            UMPL2Expr::Application(vec_splat(vec![for_ident, name, iter], scope).collect())
         },
     )
 }
 
 fn continue_doing_stmt() -> Box<Parser<UMPL2Expr>> {
     map(
-        seq(vec![keep_right(string("loop"), scope(umpl2expr()))]),
-        |mut r| {
-            let loop_ident = "loop".into();
-            let loop_scope = r.next().unwrap();
-            UMPL2Expr::Application(vec![loop_ident, loop_scope])
-        },
+        chain(string("loop"), scope_list(umpl2expr())),
+        |(ident, scope)| UMPL2Expr::Application(vec_splat(vec![ident.into()], scope).collect()),
     )
 }
 
@@ -606,7 +446,7 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
                 opt(keep_right(ws_or_comment(), hexnumber())),
                 chain(
                     opt(keep_right(ws_or_comment(), any_of(['*', '+']))),
-                    scope(umpl2expr()),
+                    scope_list(umpl2expr()),
                 ),
             ),
         ),
@@ -623,10 +463,20 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
             let variadic = map_to_umpl(r.1 .1 .0, UMPL2Expr::String);
             let scope = r.1 .1 .1;
             let fn_ident = "lambda".into();
+            // function can either be (lambda (n *) exprs) or (lambda (n +) exprs) or (lambda n exprs) n = arg count
             let lambda = if let Some(variadic) = variadic {
-                UMPL2Expr::Application(vec![fn_ident, param_count, variadic, scope])
+                UMPL2Expr::Application(
+                    vec_splat!(
+                        vec![
+                            fn_ident,
+                            UMPL2Expr::Application(vec![param_count, variadic])
+                        ],
+                        scope
+                    )
+                    .collect(),
+                )
             } else {
-                UMPL2Expr::Application(vec![fn_ident, param_count, scope])
+                UMPL2Expr::Application(vec_splat(vec![fn_ident, param_count], scope).collect())
             };
             if let Some(name) = name {
                 let fn_ident = "define".into();

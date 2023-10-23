@@ -130,9 +130,6 @@ impl MacroExpander {
         let mut res = vec![];
         for expr in exprs {
             match expr {
-                UMPL2Expr::Scope(s) => {
-                    res.push(UMPL2Expr::Scope(self.expand(s)?));
-                }
                 UMPL2Expr::Application(a) => {
                     // we expand all the sub expressions of the application before expanding the application itself
                     // which most macro expandets dont do so we should probably expand outer than inner if possible
@@ -188,7 +185,6 @@ fn expand_macro(
     ) -> Result<UMPL2Expr, MacroExpansionError> {
         match expansion {
             UMPL2Expr::Application(a) => expand_macro(bindings, a).map(UMPL2Expr::Application),
-            UMPL2Expr::Scope(s) => expand_macro(bindings, s).map(UMPL2Expr::Scope),
             UMPL2Expr::Ident(i) => match HashMapExtend::get(bindings, &i) {
                 Ok(res) => Ok(res.clone()),
                 Err(MacroExpansionError::MetaVariableNotFound(_)) => Ok(UMPL2Expr::Ident(i)),
@@ -275,6 +271,7 @@ fn expand_macro(
 
 // special forms
 impl MacroExpander {
+    // TODO: module import special form - class special form
     fn special_form_link(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         let Some(UMPL2Expr::Label(linked)) = exprs.get(0) else {
             return Err(MacroError::InvalidForm(
@@ -340,18 +337,25 @@ impl MacroExpander {
         fn cond_expand(exprs: &[UMPL2Expr]) -> Result<UMPL2Expr, MacroError> {
             if let Some(case) = exprs.first() {
                 if let UMPL2Expr::Application(case) = case {
+                    let mut case = case.clone();
                     match case.first() {
                         Some(UMPL2Expr::Ident(e)) if (e.clone()) == "else".into() => {
                             if exprs.get(1).is_some() {
                                 Err(MacroError::InvalidForm("else with cases after it".into()))
                             } else {
-                                Ok(UMPL2Expr::Scope(case[1..].to_vec()))
+                                Ok(UMPL2Expr::Application({
+                                    case[0] = "begin".into();
+                                    case
+                                }))
                             }
                         }
                         Some(expr) => Ok(UMPL2Expr::Application(vec![
                             "if".into(),
                             expr.clone(),
-                            UMPL2Expr::Scope(case[1..].to_vec()),
+                            UMPL2Expr::Application({
+                                case[0] = "begin".into();
+                                case
+                            }),
                             cond_expand(&exprs[1..])?,
                         ])),
                         None => {
@@ -481,7 +485,6 @@ impl MacroArg {
             (Self::KleeneClosure(_), UMPL2Expr::Bool(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::Number(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::String(_)) => todo!(),
-            (Self::KleeneClosure(_), UMPL2Expr::Scope(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::Ident(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::Application(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::Label(_)) => todo!(),

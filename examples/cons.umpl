@@ -1,4 +1,4 @@
-let cons  fn  2 ᚜ !using let to get around emoji name requirements
+let cons = fn  2 ᚜ !using let to get around emoji name requirements
     ! we have save the the parameter passed into cons because the inner function "overwrites" the first parameter temporaraly
     let x =  '0"
     let y = '1'

@@ -11,8 +11,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_alloca(self.types.generic_pointer, "arg pointer");
         self.builder.build_store(current_node, root);
         // let arg_cound = self.context.i64_type().const_zero();
-        let UMPL2Expr::Number(n) = &exprs[0] else {
-            todo!("this function should return result so this can error")
+
+        let n = match &exprs[0] {
+            UMPL2Expr::Number(n) => n,
+            UMPL2Expr::Application(a) if matches!(a.get(0), Some(UMPL2Expr::Number(_))) => {
+                // TODO: handel variadic functions
+                let UMPL2Expr::Number(n) = &exprs[0] else {
+                    unreachable!()
+                };
+                n
+            }
+            _ => todo!("this function should return result so this can error"),
         };
 
         for i in 0..(n.floor() as u32) {
@@ -45,25 +54,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    // lambda defined as ("lambda" (argc "+"|"*"|"") exprs)
     pub(crate) fn special_form_lambda(
         &mut self,
         exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        let body = if exprs.len() == 2 {
-            &exprs[1]
-        } else if exprs.len() == 3 {
-            &exprs[2]
-        } else {
+        if exprs.is_empty() {
             return Err("lambda expression needs at least 2 subexpressions".to_string());
         };
         // if its var arg dont make it var arg, just make it arg_count+1  number of parameters
         let env = self.get_scope();
         let old_fn = self.fn_value;
         let old_block = self.builder.get_insert_block();
-        let UMPL2Expr::Scope(body) = body else {
-            return Err("function without scope".to_string());
-        };
-
         // call info should be inserted before the env pointer, b/c when function called first comes env pointer and then call_info
         let fn_value = self
             .module
@@ -126,7 +128,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder
             .position_at_end(fn_value.get_last_basic_block().unwrap());
         self.state.push(EvalType::Function);
-        let compile_scope = self.compile_scope(body);
+        let compile_scope = self.compile_scope(&exprs[1..]);
         self.state.pop();
         if let Some(ret) = compile_scope? {
             self.builder.build_return(Some(&ret));

@@ -9,12 +9,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        if exprs.len() != 1 {
-            return Err("Expected a single expression for a loop".to_string());
-        }
-        let UMPL2Expr::Scope(scope) = &exprs[0] else {
-            return Err("Expected a scope for a loop".to_string());
-        };
         let loop_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "loop");
@@ -30,7 +24,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             connection: phi_return,
         });
         self.builder.position_at_end(loop_bb);
-        for expr in scope {
+        for expr in exprs {
             self.compile_expr(expr)?;
         }
         self.builder.build_unconditional_branch(loop_bb);
@@ -44,7 +38,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        if exprs.len() != 3 {
+        if exprs.len() < 2 {
             return Err("Expected 3 expression for for loop".to_string());
         }
         // iterates with `in order`
@@ -53,10 +47,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
         let iter = &exprs[1];
         let iter = return_none!(self.compile_expr(iter)?).into_struct_value();
-        let UMPL2Expr::Scope(iter_scope) = &exprs[2] else {
-            return Err("Expected a scope for a loop".to_string());
-        };
-        let phi = self.make_iter(iter, name.clone(), iter_scope)?;
+        let phi = self.make_iter(iter, name.clone(), &exprs[2..])?;
         Ok(Some(phi.as_basic_value()))
     }
 
@@ -322,7 +313,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        if exprs.len() != 2 {
+        if exprs.is_empty() {
             return Err("expected 2 expression for while loop".to_string());
         }
         let loop_bb = self
@@ -353,10 +344,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // if we break b/c condition not met the loop return hempty
         phi_return.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.builder.position_at_end(loop_bb);
-        let UMPL2Expr::Scope(scope) = &exprs[1] else {
-            return Err("while loop with scope".to_string());
-        };
-        for expr in scope {
+        for expr in &exprs[1..] {
             self.compile_expr(expr)?;
         }
         self.builder.build_unconditional_branch(loop_start_bb);

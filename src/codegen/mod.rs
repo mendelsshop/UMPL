@@ -418,9 +418,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Label(s) => self.compile_label(s),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
-            // UMPL2Expr::Link(_, _) |
-            UMPL2Expr::Scope(exprs) => self.compile_scope(exprs), // create new basic block use uncdoital br to new bb
-                                                                  // store the block address and the current fn_value in some sort of hashmap with the name as the key
         }
     }
 
@@ -470,17 +467,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         // we should probalby compile with root env as opposed to whatever env the compiler was in when it reached this mod
         // one way to do this is to keep a list of modules with thein envs including one for the root ...
-        if exprs.len() != 2 {
+        if exprs.is_empty() {
             Err("Mod requires either a name and scope")?;
         }
         let UMPL2Expr::Ident(module_name) = &exprs[0] else {
             return Err("Mod requires a module name as its first argument")?;
         };
-        let UMPL2Expr::Scope(module) = &exprs[0] else {
-            return Err("Mod requires a scope as its second argument")?;
-        };
         self.module_list.push(module_name.to_string());
-        for expr in module {
+        for expr in &exprs[1..] {
             // self.print_ir();
             self.compile_expr(expr)?;
         }
@@ -582,9 +576,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_special_form("quote".into(), Self::special_form_quote);
         self.insert_special_form("unquote".into(), Self::special_form_unquote);
         self.insert_special_form("quasiquote".into(), Self::special_form_quasiquote);
-        self.insert_special_form("skip".into(), Self::special_form_stop);
-        self.insert_special_form("stop".into(), Self::special_form_skip);
+        self.insert_special_form("skip".into(), Self::special_form_skip);
+        self.insert_special_form("stop".into(), Self::special_form_stop);
         self.insert_special_form("module".into(), Self::special_form_mod);
+        self.insert_special_form("begin".into(), Self::compile_scope);
     }
 
     pub fn get_main(&mut self) -> (FunctionValue<'ctx>, BasicBlock<'ctx>) {

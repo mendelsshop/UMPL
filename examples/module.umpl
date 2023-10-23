@@ -1,6 +1,6 @@
-module a  ᚜
+(module a  
 fn  🚗  1  ᚜ 1 ᚛
-    ᚛
+)
 
     
 !(print ( a#🚗 2)<)<
@@ -8,3 +8,4 @@ fn  🚗  1  ᚜ 1 ᚛
 let  q = fn  1  ᚜ (print ( a#🚗 2)<)<  ᚛
 (q 6)>
 (newline)<
+
