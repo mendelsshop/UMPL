@@ -16,7 +16,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Number(n) => n,
             UMPL2Expr::Application(a) if matches!(a.get(0), Some(UMPL2Expr::Number(_))) => {
                 // TODO: handel variadic functions
-                let UMPL2Expr::Number(n) = &exprs[0] else {
+                let UMPL2Expr::Number(n) = &a[0] else {
                     unreachable!()
                 };
                 n

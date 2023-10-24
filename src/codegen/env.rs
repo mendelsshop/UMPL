@@ -28,7 +28,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         exprs: &[UMPL2Expr],
     ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
-        if exprs.len() != 2 {
+        if exprs.len() < 2 {
             return Err("define must have 2 expressions".to_string());
         }
         match &exprs[0] {
@@ -38,7 +38,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(Some(self.hempty().into()))
             }
             UMPL2Expr::Application(app) => {
-                if app.len() < 2 || app.len() > 3 {
+                if app.is_empty() {
                     return Err("defining procedures with define must specify name, arg count and possibly varidicity".to_string());
                 }
                 let UMPL2Expr::Ident(name) = &app[0] else {
@@ -46,12 +46,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 };
                 let argc = &app[1];
                 let varidicity = app.get(2).cloned();
-                let scope = &exprs[1];
-                let lambda = return_none!(if let Some(vard) = varidicity {
-                    self.special_form_lambda(&[argc.clone(), vard, scope.clone()])
-                } else {
-                    self.special_form_lambda(&[argc.clone(), scope.clone()])
-                }?);
+                let mut scope = exprs[1..].to_vec();
+                let signature = varidicity.map_or_else(
+                    || UMPL2Expr::Application(vec![argc.clone()]),
+                    |vard| UMPL2Expr::Application(vec![argc.clone(), vard]),
+                );
+                scope.insert(0, signature);
+                let lambda = return_none!(self.special_form_lambda(&scope)?);
                 self.insert_variable_new_ptr(name, lambda)?;
                 Ok(Some(self.hempty().into()))
             }
