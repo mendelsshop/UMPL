@@ -85,7 +85,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         value: PointerValue<'ctx>,
     ) -> Result<(), String> {
         self.variables.last_mut().map_or_else(
-            || Err(format!("cannot create variable `{name}`",)),
+            || Err(format!("cannot create variable `{name}`")),
             |scope| {
                 if scope.insert(name.clone(), VarType::Lisp(value)).is_some() {
                     Err(format!("cannot reassign {name}, use set! instead",))
@@ -94,6 +94,60 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             },
         )
+    }
+
+    pub fn set_variable(
+        &mut self,
+        name: RC<str>,
+        value: BasicValueEnum<'ctx>,
+    ) -> Result<(), String> {
+        let ptr = self
+            .get_variable(&name)
+            .ok_or(format!("could not use set!: {name} not found"))?;
+        match ptr {
+            VarType::Lisp(l) => {
+                self.builder.build_store(l, value);
+            }
+            VarType::SpecialForm(_) => {
+                let ty = self.types.object;
+                let ptr = self.create_entry_block_alloca(ty, &name).unwrap();
+                self.builder.build_store(ptr, value);
+                {
+                    self.variables.last_mut().map_or_else(
+                        || Err(format!("cannot create variable `{name}`")),
+                        |scope| {
+                            scope.insert(name.clone(), VarType::Lisp(ptr));
+                            Ok(())
+                        },
+                    )
+                }?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_or_new(&mut self, name: RC<str>, ptr: PointerValue<'ctx>) -> Result<(), String> {
+        let scope = self
+            .variables
+            .last_mut()
+            .ok_or_else(|| format!("cannot create variable `{name}`"))?;
+        scope.insert(name, VarType::Lisp(ptr));
+        Ok(())
+    }
+    pub fn special_form_set(
+        &mut self,
+        exprs: &[UMPL2Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
+        if exprs.len() != 2 {
+            return Err("set must have 2 expressions".to_string());
+        }
+        if let UMPL2Expr::Ident(i) = &exprs[0] {
+            let v = return_none!(self.compile_expr(&exprs[1])?);
+            self.set_variable(i.clone(), v)?;
+            Ok(Some(self.hempty().into()))
+        } else {
+            Err("set must provide identifier".to_string())
+        }
     }
 
     pub fn get_scope(&self) -> (inkwell::types::StructType<'ctx>, PointerValue<'ctx>) {

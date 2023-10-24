@@ -78,3 +78,6 @@ simplfies mostly too: (inconsisteny betweeen how args are defined ie number vs s
 
 qussiquote -> :
 unquote -> $
+
+set! -> hashmap -> classes (clos)
+clos

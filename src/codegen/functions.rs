@@ -37,8 +37,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     "arg data",
                 )
                 .unwrap();
-            // TODO: this should not error if there is a variable with the same name b/c lecical scopeing means variable shadowing is okay
-            self.insert_new_variable(i.to_string().into(), arg_object);
+            self.insert_new_variable(i.to_string().into(), arg_object)
+                .unwrap(); // allowed to unwarp b/c error only if theres is no environment -> compiler borked
             let next_arg = self
                 .builder
                 .build_struct_gep(

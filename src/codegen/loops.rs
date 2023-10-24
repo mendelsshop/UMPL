@@ -174,7 +174,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let this = self.builder.build_alloca(self.types.object, "save this");
         self.builder.build_store(this, val);
 
-        self.insert_new_variable(name, this); // this should be a set
+        self.set_or_new(name, this).unwrap(); // allowed to unwarp b/c error only if theres is no environment -> compiler borked
                                               // code goes here
         for expr in iter_scope {
             self.compile_expr(expr)?;
