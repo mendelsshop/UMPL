@@ -512,7 +512,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn insert_constant(&mut self, name: RC<str>, value: BasicValueEnum<'ctx>) {
         let ptr = self.module.add_global(self.types.object, None, &name);
         ptr.set_initializer(&value);
-        self.insert_variable(name, ptr.as_pointer_value());
+        self.insert_new_variable(name, ptr.as_pointer_value())
+            .unwrap(); // allowed to unwarp b/c this the default environment
     }
 
     fn make_println(&mut self) {

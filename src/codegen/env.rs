@@ -8,13 +8,15 @@ use super::Compiler;
 
 /// envoirnment/variable handling functions
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    // for adding builtin functions
     pub(super) fn insert_function(&mut self, name: RC<str>, function: FunctionValue<'ctx>) {
         if function.verify(true) {
             self.fpm.run_on(&function);
             let p = self.primitive(function.as_global_value().as_pointer_value());
             let gloabl_lambda = self.module.add_global(p.get_type(), None, &name);
             gloabl_lambda.set_initializer(&p);
-            self.insert_variable(name, gloabl_lambda.as_pointer_value());
+            self.insert_new_variable(name, gloabl_lambda.as_pointer_value())
+                .unwrap(); // allowed to unwrap here b.c this is only used for inseting builtin functions
         } else {
             println!("Failed to verify function {name}");
             self.print_ir();
@@ -32,7 +34,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         match &exprs[0] {
             UMPL2Expr::Ident(i) => {
                 let v = return_none!(self.compile_expr(&exprs[1])?);
-                self.insert_variable_new_ptr(i, v);
+                self.insert_variable_new_ptr(i, v)?;
                 Ok(Some(self.hempty().into()))
             }
             UMPL2Expr::Application(app) => {
@@ -50,7 +52,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 } else {
                     self.special_form_lambda(&[argc.clone(), scope.clone()])
                 }?);
-                self.insert_variable_new_ptr(name, lambda);
+                self.insert_variable_new_ptr(name, lambda)?;
                 Ok(Some(self.hempty().into()))
             }
             _ => {
@@ -70,24 +72,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     // }
 
     pub(super) fn new_env(&mut self) {
-        self.variables.push((HashMap::new(), vec![]));
+        self.variables.push(HashMap::new());
     }
 
     pub(super) fn pop_env(&mut self) {
         self.variables.pop();
     }
 
-    pub(super) fn insert_variable(&mut self, name: RC<str>, value: PointerValue<'ctx>) {
-        if let Some(scope) = self.variables.last_mut() {
-            scope.0.insert(name.clone(), VarType::Lisp(value));
-            scope.1.push(name);
-        }
+    pub(super) fn insert_new_variable(
+        &mut self,
+        name: RC<str>,
+        value: PointerValue<'ctx>,
+    ) -> Result<(), String> {
+        self.variables.last_mut().map_or_else(
+            || Err(format!("cannot create variable `{name}`",)),
+            |scope| {
+                if scope.insert(name.clone(), VarType::Lisp(value)).is_some() {
+                    Err(format!("cannot reassign {name}, use set! instead",))
+                } else {
+                    Ok(())
+                }
+            },
+        )
     }
 
     pub fn get_scope(&self) -> (inkwell::types::StructType<'ctx>, PointerValue<'ctx>) {
         let prev = self.get_current_env_name();
 
-        let value: Vec<_> = prev.collect();
+        let value: Vec<_> = prev;
         let env_struct_type = self.context.struct_type(
             &std::iter::repeat(self.types.object)
                 .take(value.len())
@@ -110,8 +122,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         (env_struct_type, env_pointer)
     }
 
-    pub fn get_current_env_name(&self) -> impl Iterator<Item = &RC<str>> {
-        self.variables.last().unwrap().1.iter()
+    pub fn get_current_env_name(&self) -> Vec<RC<str>> {
+        self.variables
+            .last()
+            .unwrap()
+            .iter()
+            .map(|v| v.0.clone())
+            .collect()
     }
 
     // returns a procedure or special form, while get var returns only a lisp expression (so could be a proc)
@@ -119,10 +136,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.variables
             .iter()
             .rev()
-            .cloned()
-            .flat_map(|v| v.0)
-            .find(|v| v.0 == name.clone())
+            .flatten()
+            .find(|v| v.0 == name)
             .map(|v| v.1)
+            .cloned()
     }
 
     pub(super) fn get_var(&self, s: &std::rc::Rc<str>) -> Result<BasicValueEnum<'ctx>, String> {
@@ -142,8 +159,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         ) -> Result<Option<BasicValueEnum<'ctx>>, String>,
     ) {
         if let Some(scope) = self.variables.last_mut() {
-            scope.0.insert(name.clone(), VarType::SpecialForm(func));
-            scope.1.push(name);
+            scope.insert(name, VarType::SpecialForm(func));
         }
     }
 }

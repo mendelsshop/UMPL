@@ -166,7 +166,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.fn_value = Some(thunk);
         let entry = self.context.append_basic_block(thunk, "entry");
         self.builder.position_at_end(entry);
-        let env_iter = self.get_current_env_name().cloned().collect::<Vec<_>>();
+        let env_iter = self.get_current_env_name();
         // right now even though we take the first parameter to be the "envoirnment" we don't actully use it, maybee remove that parameter
         let envs = self
             .builder
@@ -188,7 +188,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_extract_value(envs, i, "load captured")
                 .unwrap();
             self.builder.build_store(alloca, arg);
-            self.insert_variable(cn.clone(), alloca);
+            self.insert_new_variable(cn.clone(), alloca).unwrap(); // allowed to unwrap b/c we create new scope and copy variables from old scope to here so if old scope correct -> new scope correct
         }
         let ret = self.compile_expr(object);
         match ret {

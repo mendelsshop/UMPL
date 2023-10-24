@@ -178,7 +178,7 @@ pub struct Functions<'ctx> {
 pub struct Compiler<'a, 'ctx> {
     context: &'ctx Context,
     pub(crate) module: &'a Module<'ctx>,
-    variables: Vec<(HashMap<RC<str>, VarType<'a, 'ctx>>, Vec<RC<str>>)>,
+    variables: Vec<HashMap<RC<str>, VarType<'a, 'ctx>>>,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     pub(crate) string: HashMap<RC<str>, GlobalValue<'ctx>>,
@@ -486,12 +486,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         i: &RC<str>,
         v: BasicValueEnum<'ctx>,
-    ) -> Option<BasicValueEnum<'ctx>> {
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         let ty = self.types.object;
         let ptr = self.create_entry_block_alloca(ty, i).unwrap();
         self.builder.build_store(ptr, v);
-        self.insert_variable(i.clone(), ptr);
-        Some(self.types.boolean.const_zero().as_basic_value_enum())
+        self.insert_new_variable(i.clone(), ptr)?;
+        Ok(self.types.boolean.const_zero().as_basic_value_enum())
     }
 
     fn actual_value(&self, thunked: StructValue<'ctx>) -> StructValue<'ctx> {

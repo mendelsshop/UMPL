@@ -18,6 +18,8 @@ use itertools::Itertools;
 
 use crate::{ast::UMPL2Expr, interior_mut::RC, lexer::umpl_parse};
 use std::fs;
+use std::io::BufReader;
+use std::io::Read;
 #[derive(Debug)]
 pub enum ParseError<'a> {
     Macro(MacroError),
@@ -277,20 +279,21 @@ fn expand_macro(
 impl MacroExpander {
     fn special_form_module(&mut self, exprs: &[UMPL2Expr]) -> Result<Vec<UMPL2Expr>, MacroError> {
         let mut body = if exprs.len() == 1 && matches!(exprs[0], UMPL2Expr::String(_)) {
-            let UMPL2Expr::String(path) = &exprs[0] else {unreachable!()};
+            let UMPL2Expr::String(path) = &exprs[0] else {
+                unreachable!()
+            };
             // it must be module as a path
             // TODO: dont panic but error
             let file = fs::File::open(path.to_string()).unwrap();
-            use std::io::BufReader;
-            use std::io::Read;
+
             let mut buf = BufReader::new(file);
             let mut contents = String::new();
-             buf.read_to_string(&mut contents);
+            buf.read_to_string(&mut contents);
             umpl_parse(&contents).unwrap()
         } else {
             exprs.to_vec()
         };
-        body =self.expand(&body)?;
+        body = self.expand(&body)?;
         body.insert(0, "mod".into());
         Ok(body)
     }

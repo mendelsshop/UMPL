@@ -174,8 +174,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let this = self.builder.build_alloca(self.types.object, "save this");
         self.builder.build_store(this, val);
 
-        self.insert_variable(name, this);
-        // code goes here
+        self.insert_new_variable(name, this); // this should be a set
+                                              // code goes here
         for expr in iter_scope {
             self.compile_expr(expr)?;
         }

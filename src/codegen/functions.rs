@@ -37,7 +37,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     "arg data",
                 )
                 .unwrap();
-            self.insert_variable(i.to_string().into(), arg_object);
+            // TODO: this should not error if there is a variable with the same name b/c lecical scopeing means variable shadowing is okay
+            self.insert_new_variable(i.to_string().into(), arg_object);
             let next_arg = self
                 .builder
                 .build_struct_gep(
@@ -101,7 +102,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_extract_value(call_info, 0, "get number of args")
             .unwrap();
-        let env_iter = self.get_current_env_name().cloned().collect::<Vec<_>>();
+        let env_iter = self.get_current_env_name();
         let envs = self
             .builder
             .build_load(
@@ -121,7 +122,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_extract_value(envs, i, "load captured")
                 .unwrap();
             self.builder.build_store(alloca, arg);
-            self.insert_variable(cn.clone(), alloca);
+            self.insert_new_variable(cn.clone(), alloca).unwrap();
         }
         let args = fn_value.get_nth_param(2).unwrap().into_pointer_value();
         self.extract_arguements(args, exprs);
