@@ -69,8 +69,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(arg_err);
         self.exit("arrity mismatch", 2);
         self.builder.position_at_end(normal);
-        // we go in reverse b/c if you look at compile application we use fold to create the linked list so the first becomes the last
-        for i in (0..(n.floor() as u32)).rev() {
+        for i in 0..(n.floor()  as u32 ) {
             let arg_load =
                 self.builder
                     .build_load(self.types.generic_pointer, current_node, "arg_load");
@@ -99,7 +98,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_load(self.types.generic_pointer, next_arg, "load next arg");
             self.builder.build_store(current_node, next_arg);
             // TODO: get var args
-        }
+         
+        }  
+            if !var.is_empty() {
+                // let mut cons_root = self.hempty();
+                // let root_ptr = self.create_entry_block_alloca(self.types.object, "var").unwrap();
+                // let current_ptr = self.create_entry_block_alloca(self.types.object, "helper").unwrap();
+                // self.builder.build_store(root_ptr, self.hempty());
+                self.insert_variable_new_ptr(&n.trunc().to_string().into(), self.hempty().into()).unwrap();
+            }
     }
 
     // lambda defined as ("lambda" (argc "+"|"*"|"") exprs)
@@ -242,7 +249,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(self.fn_value.unwrap(), "cont-application");
         let null = self.types.generic_pointer.const_null();
-        let args = return_none!(application.iter().skip(1).try_fold(null, |init, current| {
+        let args = return_none!(application.iter().skip(1).rev().try_fold(null, |init, current| {
             let ptr = self.builder.build_alloca(self.types.args, "add arg");
             self.builder.build_store(ptr, self.const_thunk(current)?);
             let next = self
