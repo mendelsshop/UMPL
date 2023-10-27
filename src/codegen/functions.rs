@@ -1,30 +1,76 @@
-use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, PointerValue};
+use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue, PointerValue};
 
 use crate::ast::UMPL2Expr;
 
 use super::{Compiler, EvalType, TyprIndex};
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    fn extract_arguements(&mut self, root: PointerValue<'ctx>, exprs: &[UMPL2Expr]) {
+    fn extract_arguements(
+        &mut self,
+        root: PointerValue<'ctx>,
+        argc: IntValue<'ctx>,
+        exprs: &[UMPL2Expr],
+    ) {
         let current_node = self
             .builder
             .build_alloca(self.types.generic_pointer, "arg pointer");
         self.builder.build_store(current_node, root);
         // let arg_cound = self.context.i64_type().const_zero();
 
-        let n = match &exprs[0] {
-            UMPL2Expr::Number(n) => n,
-            UMPL2Expr::Application(a) if matches!(a.get(0), Some(UMPL2Expr::Number(_))) => {
-                // TODO: handel variadic functions
-                let UMPL2Expr::Number(n) = &a[0] else {
-                    unreachable!()
-                };
-                n
-            }
+        let (n, var) = match &exprs[0] {
+            // UMPL2Expr::Number(n) => (n, "".into()),
+            UMPL2Expr::Application(a) => match a.as_slice() {
+                [UMPL2Expr::Number(n), UMPL2Expr::Ident(s)]
+                    if ["+".into(), "*".into()].contains(s) =>
+                {
+                    (n, (s.clone()))
+                }
+
+                [UMPL2Expr::Number(n)] => (n, "".into()),
+                _ => todo!("this function should return result so this can error"),
+            },
             _ => todo!("this function should return result so this can error"),
         };
+        if n.fract() != 0f64 {
+            todo!("this function should return result so this can error")
+        };
+        let arg_err = self
+            .context
+            .append_basic_block(self.fn_value.unwrap(), "arrity mismatch");
+        let normal = self
+            .context
+            .append_basic_block(self.fn_value.unwrap(), "normal");
+        let arrity_mismatch = match var.to_string().as_str() {
+            "+" => self.builder.build_int_compare(
+                inkwell::IntPredicate::UGE,
+                argc,
+                self.context
+                    .i64_type()
+                    .const_int(n.trunc() as u64 + 1, false),
+                "",
+            ),
 
-        for i in 0..(n.floor() as u32) {
+            "*" => self.builder.build_int_compare(
+                inkwell::IntPredicate::UGE,
+                argc,
+                self.context.i64_type().const_int(n.trunc() as u64, false),
+                "",
+            ),
+
+            _ => self.builder.build_int_compare(
+                inkwell::IntPredicate::EQ,
+                argc,
+                self.context.i64_type().const_int(n.trunc() as u64, false),
+                "",
+            ),
+        };
+        self.builder
+            .build_conditional_branch(arrity_mismatch, normal, arg_err);
+        self.builder.position_at_end(arg_err);
+        self.exit("arrity mismatch", 2);
+        self.builder.position_at_end(normal);
+        // we go in reverse b/c if you look at compile application we use fold to create the linked list so the first becomes the last
+        for i in (0..(n.floor() as u32)).rev() {
             let arg_load =
                 self.builder
                     .build_load(self.types.generic_pointer, current_node, "arg_load");
@@ -52,6 +98,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder
                     .build_load(self.types.generic_pointer, next_arg, "load next arg");
             self.builder.build_store(current_node, next_arg);
+            // TODO: get var args
         }
     }
 
@@ -98,7 +145,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(jump_bb);
         self.builder.build_indirect_branch(jmp_block, &[]);
         self.builder.position_at_end(cont_bb);
-        let _ac = self
+        let ac = self
             .builder
             .build_extract_value(call_info, 0, "get number of args")
             .unwrap();
@@ -125,7 +172,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.insert_new_variable(cn.clone(), alloca).unwrap();
         }
         let args = fn_value.get_nth_param(2).unwrap().into_pointer_value();
-        self.extract_arguements(args, exprs);
+        self.extract_arguements(args, ac.into_int_value(), exprs);
         self.builder
             .position_at_end(fn_value.get_last_basic_block().unwrap());
         self.state.push(EvalType::Function);
@@ -176,7 +223,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         } else {
             return_none!(self.compile_expr(&application[0])?)
         };
-        let arg_len = application.len();
+        let arg_len = application.len() - 1; // ignore the first thing (the function itself)
         let call_info = self.types.call_info.const_named_struct(&[
             self.context
                 .i64_type()

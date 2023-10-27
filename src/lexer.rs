@@ -460,7 +460,7 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
             let name = map_to_umpl(r.0, UMPL2Expr::Ident);
             // TODO: maybe if no count given then randomly choose a count
             let param_count = r.1 .0.unwrap();
-            let variadic = map_to_umpl(r.1 .1 .0, UMPL2Expr::String);
+            let variadic = map_to_umpl(r.1 .1 .0, UMPL2Expr::Ident);
             let scope = r.1 .1 .1;
             let fn_ident = "lambda".into();
             // function can either be (lambda (n *) exprs) or (lambda (n +) exprs) or (lambda n exprs) n = arg count

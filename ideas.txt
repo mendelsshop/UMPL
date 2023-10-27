@@ -81,3 +81,12 @@ unquote -> $
 
 set! -> hashmap -> classes (clos)
 clos
+
+
+---
+pass single pointer to each function for all the arguments
+so ll code would be same as far as define goes
+so instead of using linkedlist have it be struct/arrayz
+and each variable if its a function could store the argc and varidicity
+so VarType would have another variant for functions .. but whay about thunks ie if we pass in a function to another function the passed in funnction loses its argc and varidicity
+or do we not used llvm function calls at all and go with something more sicp like but in llvm

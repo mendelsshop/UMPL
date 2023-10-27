@@ -38,7 +38,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(Some(self.hempty().into()))
             }
             UMPL2Expr::Application(app) => {
-                if app.is_empty() {
+                if app.len() < 2 {
                     return Err("defining procedures with define must specify name, arg count and possibly varidicity".to_string());
                 }
                 let UMPL2Expr::Ident(name) = &app[0] else {

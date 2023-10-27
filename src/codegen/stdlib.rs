@@ -551,6 +551,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.insert_function("println".into(), func);
     }
 
+    // similar to scheme's eqv function
+    fn make_eq(&mut self) {
+        // not
+        let func = self
+            .module
+            .add_function("not", self.types.primitive_ty, None);
+        let entry = self.context.append_basic_block(func, "entry");
+        self.builder.position_at_end(entry);
+        self.fn_value = Some(func);
+
+        let args = self
+            .extract_arguements_primitive::<1>(func.get_nth_param(1).unwrap().into_pointer_value());
+        let args = self.actual_value(args[0]);
+    }
+
     pub(super) fn init_stdlib(&mut self) {
         self.make_accesors();
         self.make_add();
