@@ -1,0 +1,3 @@
+(define (tree 1 *) '1' )
+
+(tree ;foo .8. )>

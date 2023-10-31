@@ -27,12 +27,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
 
                 [UMPL2Expr::Number(n)] => (n, "".into()),
-                _ => todo!("this function should return result so this can error"),
+                _ => todo!("self function should return result so self can error"),
             },
-            _ => todo!("this function should return result so this can error"),
+            _ => todo!("self function should return result so self can error"),
         };
         if n.fract() != 0f64 {
-            todo!("this function should return result so this can error")
+            todo!("self function should return result so self can error")
         };
         let arg_err = self
             .context
@@ -69,7 +69,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(arg_err);
         self.exit("arrity mismatch", 2);
         self.builder.position_at_end(normal);
-        for i in 0..(n.floor()  as u32 ) {
+        for i in 0..(n.floor() as u32) {
             let arg_load =
                 self.builder
                     .build_load(self.types.generic_pointer, current_node, "arg_load");
@@ -98,15 +98,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_load(self.types.generic_pointer, next_arg, "load next arg");
             self.builder.build_store(current_node, next_arg);
             // TODO: get var args
-         
-        }  
-            if !var.is_empty() {
-                // let mut cons_root = self.hempty();
-                // let root_ptr = self.create_entry_block_alloca(self.types.object, "var").unwrap();
-                // let current_ptr = self.create_entry_block_alloca(self.types.object, "helper").unwrap();
-                // self.builder.build_store(root_ptr, self.hempty());
-                self.insert_variable_new_ptr(&n.trunc().to_string().into(), self.hempty().into()).unwrap();
-            }
+        }
+        // means there is a variable amount of arguments
+        if !var.is_empty() {
+            let argleft = self.builder.build_int_sub(
+                argc,
+                self.context.i64_type().const_int(n.trunc() as u64, false),
+                "args left",
+            );
+
+            self.insert_variable_new_ptr(
+                &n.trunc().to_string().into(),
+                self.builder
+                    .build_call(
+                        self.functions.va_procces,
+                        &[current_node.into(), argleft.into()],
+                        "variadic arg procces",
+                    )
+                    .try_as_basic_value()
+                    .unwrap_left(),
+            )
+            .unwrap();
+        }
     }
 
     // lambda defined as ("lambda" (argc "+"|"*"|"") exprs)
@@ -249,16 +262,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(self.fn_value.unwrap(), "cont-application");
         let null = self.types.generic_pointer.const_null();
-        let args = return_none!(application.iter().skip(1).rev().try_fold(null, |init, current| {
-            let ptr = self.builder.build_alloca(self.types.args, "add arg");
-            self.builder.build_store(ptr, self.const_thunk(current)?);
-            let next = self
-                .builder
-                .build_struct_gep(self.types.args, ptr, 1, "next arg")
-                .unwrap();
-            self.builder.build_store(next, init);
-            Some(ptr)
-        }));
+        let args =
+            return_none!(application
+                .iter()
+                .skip(1)
+                .rev()
+                .try_fold(null, |init, current| {
+                    let ptr = self.builder.build_alloca(self.types.args, "add arg");
+                    self.builder.build_store(ptr, self.const_thunk(current)?);
+                    let next = self
+                        .builder
+                        .build_struct_gep(self.types.args, ptr, 1, "next arg")
+                        .unwrap();
+                    self.builder.build_store(next, init);
+                    Some(ptr)
+                }));
         let fn_ty = self.extract_type(val).unwrap();
         let is_primitive = self.builder.build_int_compare(
             inkwell::IntPredicate::EQ,
@@ -315,5 +333,121 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_phi(self.types.object, "application::done");
         cont.add_incoming(&[(&unwrap_left, lambda_bb), (&unwrap_left_prim, primitve_bb)]);
         Ok(Some(cont.as_basic_value()))
+    }
+
+    pub(crate) fn make_va_process(&mut self) {
+        let old_f = self.fn_value;
+        self.fn_value = Some(self.functions.va_procces);
+        let va_entry = self
+            .context
+            .append_basic_block(self.functions.va_procces, "entry");
+        let early_exit = self
+            .context
+            .append_basic_block(self.functions.va_procces, "earlyreturn");
+        self.builder.position_at_end(early_exit);
+        let early_phi = self.builder.build_phi(self.types.object, "early_ret");
+        early_phi.add_incoming(&[(&self.hempty(), va_entry)]);
+        self.builder.build_return(Some(&early_phi.as_basic_value()));
+        self.builder.position_at_end(va_entry);
+        let more_args = self.builder.build_int_compare(
+            inkwell::IntPredicate::SLE,
+            self.functions
+                .va_procces
+                .get_nth_param(1)
+                .unwrap()
+                .into_int_value(),
+            self.context.i64_type().const_zero(),
+            "more args",
+        );
+        let get_next = self
+            .context
+            .append_basic_block(self.functions.va_procces, "get_next");
+        self.builder
+            .build_conditional_branch(more_args, early_exit, get_next);
+        self.builder.position_at_end(get_next);
+        let left = self.builder.build_int_unsigned_div(
+            self.functions
+                .va_procces
+                .get_nth_param(1)
+                .unwrap()
+                .into_int_value(),
+            self.context.i64_type().const_int(2, false),
+            "split left",
+        );
+        let left_tree = self
+            .builder
+            .build_call(
+                self.functions.va_procces,
+                &[
+                    self.functions.va_procces.get_first_param().unwrap().into(),
+                    left.into(),
+                ],
+                "process left",
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_struct_value();
+        let data = self
+            .builder
+            .build_load(
+                self.types.object,
+                self.functions
+                    .va_procces
+                    .get_first_param()
+                    .unwrap()
+                    .into_pointer_value(),
+                "get data",
+            )
+            .into_struct_value();
+        let next = self
+            .builder
+            .build_struct_gep(
+                self.types.args,
+                self.functions
+                    .va_procces
+                    .get_first_param()
+                    .unwrap()
+                    .into_pointer_value(),
+                1,
+                "next",
+            )
+            .unwrap();
+        let pv = self
+            .builder
+            .build_load(self.types.generic_pointer, next, "next")
+            .into_pointer_value();
+        let process_last = self
+            .context
+            .append_basic_block(self.functions.va_procces, "cgr");
+        let has_next = self.is_null(pv);
+        early_phi.add_incoming(&[(&self.const_cons(left_tree, data, self.hempty()), get_next)]);
+        self.builder
+            .build_conditional_branch(has_next, early_exit, process_last);
+        self.builder.position_at_end(process_last);
+        self.builder.build_store(
+            self.functions
+                .va_procces
+                .get_first_param()
+                .unwrap()
+                .into_pointer_value(),
+            pv,
+        );
+        let right = self
+            .builder
+            .build_call(
+                self.functions.va_procces,
+                &[
+                    self.functions.va_procces.get_first_param().unwrap().into(),
+                    left.into(),
+                ],
+                "process left",
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_struct_value();
+        self.builder
+            .build_return(Some(&self.const_cons(left_tree, data, right)));
+        self.functions.va_procces.verify(true);
+        self.fn_value = old_f;
     }
 }

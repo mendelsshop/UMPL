@@ -29,11 +29,11 @@ int main(int argc, char const *argv[])
 
     /* code */
     callInfo info;
-    info.jmp = NULL;
+    // info.jmp = NULL;
     // init jmp
     printff(info, NULL);
-    // info.jmp = jmp;
-    // printff(info, NULL);
+    info.jmp = jmp;
+    printff(info, NULL);
     // return 0;
     llNode *root = malloc(sizeof(treeNode));
     root->data = 1;
@@ -42,7 +42,7 @@ int main(int argc, char const *argv[])
     root->next->next = malloc(sizeof(treeNode));
     root->next->next->data = 3;
     info.argc = 3;
-    // info.jmp = NULL;
+    info.jmp = NULL;
     printff(info, root);
 }
 
@@ -74,6 +74,7 @@ early_exit:
     return 1;
 }
 
+// how we proccess variables arguments
 treeNode *proccess_var_args(int left, llNode *var_args)
 {
     if (left <= 0)

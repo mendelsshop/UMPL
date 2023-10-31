@@ -167,9 +167,8 @@ pub struct Types<'ctx> {
 #[derive(Clone, Copy, Debug)]
 /// Important function that the compiler needs to access
 pub struct Functions<'ctx> {
-    pub va_start: FunctionValue<'ctx>,
-    pub va_end: FunctionValue<'ctx>,
     exit: FunctionValue<'ctx>,
+    va_procces: FunctionValue<'ctx>,
     printf: FunctionValue<'ctx>,
     rand: FunctionValue<'ctx>,
 }
@@ -306,16 +305,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             context.i32_type().fn_type(&[types.string.into()], true),
             Some(Linkage::External),
         );
-        let va_arg_start = Intrinsic::find("llvm.va_start").unwrap();
-        let va_start = va_arg_start.get_declaration(module, &[]).unwrap();
-        let va_arg_end = Intrinsic::find("llvm.va_end").unwrap();
-        let va_end = va_arg_end.get_declaration(module, &[]).unwrap();
+
+        let va_procces_type = kind.fn_type(
+            &[types.generic_pointer.into(), context.i64_type().into()],
+            false,
+        );
+        let va_procces = module.add_function("va_procces", va_procces_type, None);
+
         let functions = Functions {
-            va_start,
-            va_end,
             exit,
             printf,
             rand,
+            va_procces,
         };
         kind.set_body(
             &[
@@ -590,6 +591,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.new_env();
             self.init_special_forms();
             self.init_stdlib();
+            self.make_va_process();
             self.new_env();
             let main_fn_type = self.context.i32_type().fn_type(&[], false);
             let main_fn = self.module.add_function("main", main_fn_type, None);
