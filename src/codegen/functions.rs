@@ -107,12 +107,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "args left",
             );
 
+            let cur_load = self.builder.build_load(self.types.generic_pointer, current_node, "load");
             self.insert_variable_new_ptr(
                 &n.trunc().to_string().into(),
                 self.builder
                     .build_call(
                         self.functions.va_procces,
-                        &[current_node.into(), argleft.into()],
+                        &[cur_load.into(), argleft.into()],
                         "variadic arg procces",
                     )
                     .try_as_basic_value()

@@ -1,3 +1,5 @@
-(define (tree 1 *) '1' )
+(define (tree 0 *) '0'  )
 
-(tree ;foo .8. )>
+(tree ;foo .8. 8 )>>>
+(define (cons 2) '1')
+(cons 7 (tree    1 2 3 ))>>>>>
