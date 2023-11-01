@@ -162,6 +162,7 @@ pub struct Types<'ctx> {
     /// and also a pointer to a basic block which the function should jump too (if non null) for (gotos)
     call_info: StructType<'ctx>,
     args: StructType<'ctx>,
+    va_arg: StructType<'ctx>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -262,6 +263,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ],
             false,
         );
+        let va_arg = context.struct_type(&[kind.into(), generic_pointer.into()], false);
         let types = Types {
             object: kind,
             ty: context.i8_type(),
@@ -286,6 +288,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             thunk: kind.fn_type(&[generic_pointer.into()], false),
             primitive_ty: kind.fn_type(&[call_info.into(), generic_pointer.into()], false),
             args: context.struct_type(&[kind.into(), generic_pointer.into()], false),
+            va_arg,
             call_info,
         };
         let exit = module.add_function(
@@ -306,7 +309,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Some(Linkage::External),
         );
 
-        let va_procces_type = kind.fn_type(
+        let va_procces_type = va_arg.fn_type(
             &[types.generic_pointer.into(), context.i64_type().into()],
             false,
         );
@@ -330,6 +333,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 types.thunk_ty.as_basic_type_enum(),        // thunk
                 types.hempty.as_basic_type_enum(),          //hempty
                 types.generic_pointer.as_basic_type_enum(), // primitive function
+
             ],
             false,
         );
@@ -413,9 +417,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Bool(value) => Ok(Some(self.const_boolean(*value).as_basic_value_enum())),
             UMPL2Expr::String(value) => Ok(Some(self.const_string(value).as_basic_value_enum())),
             UMPL2Expr::Ident(s) => self.get_var(s).map(Some),
-
             UMPL2Expr::Application(application) => self.compile_application(application),
-
             UMPL2Expr::Label(s) => self.compile_label(s),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
             UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),

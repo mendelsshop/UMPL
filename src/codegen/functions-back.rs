@@ -107,9 +107,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "args left",
             );
 
-            let cur_load =
-                self.builder
-                    .build_load(self.types.generic_pointer, current_node, "load");
+            let cur_load = self.builder.build_load(self.types.generic_pointer, current_node, "load");
             self.insert_variable_new_ptr(
                 &n.trunc().to_string().into(),
                 self.builder
@@ -347,50 +345,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let early_exit = self
             .context
             .append_basic_block(self.functions.va_procces, "earlyreturn");
-
-        // early return
         self.builder.position_at_end(early_exit);
         let early_phi = self.builder.build_phi(self.types.object, "early_ret");
         early_phi.add_incoming(&[(&self.hempty(), va_entry)]);
-
-        let return_struct = self.types.va_arg.const_zero();
-        let return_struct = self
-            .builder
-            .build_insert_value(return_struct, self.hempty(), 0, "ret value")
-            .unwrap();
-        let return_struct = self
-            .builder
-            .build_insert_value(
-                return_struct,
-                self.types.generic_pointer.const_null(),
-                1,
-                "ret pointer",
-            )
-            .unwrap();
-
-        self.builder.build_return(Some(&return_struct));
-
-
-        // entry
+        self.builder.build_return(Some(&early_phi.as_basic_value()));
         self.builder.position_at_end(va_entry);
-        let current_arg = self
-            .builder
-            .build_alloca(self.types.generic_pointer, "node");
-        self.builder.build_call(
-            self.functions.printf,
-            &[
-                self.builder
-                    .build_global_string_ptr("\ncall %d\n", "p-format")
-                    .as_pointer_value()
-                    .into(),
-                self.functions.va_procces.get_nth_param(1).unwrap().into(),
-            ],
-            "print pointer",
-        );
-        self.builder.build_store(
-            current_arg,
-            self.functions.va_procces.get_first_param().unwrap(),
-        );
+        let current_arg = self.builder.build_alloca(self.types.generic_pointer, "node");
+        self.builder.build_call(self.functions.printf, &[self.builder.build_global_string_ptr("call %d\n", "p-format").as_pointer_value().into(), self.functions.va_procces.get_nth_param(1).unwrap().into()], "print pointer");
+        self.builder.build_store(current_arg, self.functions.va_procces.get_first_param().unwrap());
         let more_args = self.builder.build_int_compare(
             inkwell::IntPredicate::SLE,
             self.functions
@@ -406,8 +368,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .append_basic_block(self.functions.va_procces, "get_next");
         self.builder
             .build_conditional_branch(more_args, early_exit, get_next);
-
-        // get left part of tree
         self.builder.position_at_end(get_next);
         let left = self.builder.build_int_unsigned_div(
             self.functions
@@ -418,62 +378,47 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.context.i64_type().const_int(2, false),
             "split left",
         );
-        // the left procees arg seems to be casiing the issues (prpbably b/c of mutating root ponter so maybe each thing should return pointer to next thing)
-        let left_struct = self
+        let argl = self.builder.build_load(self.types.generic_pointer, current_arg, "argl");
+        let left_tree =
+        //  self.hempty()
+        self
             .builder
             .build_call(
                 self.functions.va_procces,
                 &[
-                    self.functions.va_procces.get_first_param().unwrap().into(),
+                    argl.into(),
                     left.into(),
                 ],
                 "process left",
             )
             .try_as_basic_value()
             .unwrap_left()
-            .into_struct_value();
-        let left_tree = self.builder.build_extract_value(left_struct, 0, "left tree").unwrap().into_struct_value();
-        // let argss = self.builder.build_alloca(self.types.args, "print");
-        // self.builder.build_store(argss, left_tree);
-        // let call_info = self.types.call_info.const_named_struct(&[
-        //     self.context.i64_type().const_int(1, false).into(),
-        //     self.types.generic_pointer.const_null().into(),
-        // ]);
-        // self.print_type(left_tree);
-        // self.builder.build_call(
-        //     self.module.get_function("println").unwrap(),
-        //     &[call_info.into(), argss.into()],
-        //     "print data",
-        // );
-        let next = self.builder.build_extract_value(left_struct, 1, "next pointer").unwrap().into_pointer_value();
-        let is_next_null = self.is_null(next);
-        let process_current = self.context.append_basic_block(self.functions.va_procces, "data");
-        self.builder.build_conditional_branch(is_next_null, early_exit, process_current);
-        early_phi.add_incoming(&[(&left_tree, get_next)]);
-        self.builder.position_at_end(process_current);
-        let data = self
-            .builder
-            .build_struct_gep(self.types.args, next, 0, "data")
-            .unwrap();
-        let data = self
-            .builder
-            .build_load(self.types.object, data, "data")
-            .into_struct_value();
-        // let argss = self.builder.build_alloca(self.types.args, "print");
-        // self.builder.build_store(argss, data);
-        // let call_info = self.types.call_info.const_named_struct(&[
-        //     self.context.i64_type().const_int(1, false).into(),
-        //     self.types.generic_pointer.const_null().into(),
-        // ]);
-        // self.print_type(data);
-        // self.builder.build_call(
-        //     self.module.get_function("print").unwrap(),
-        //     &[call_info.into(), argss.into()],
-        //     "print data",
-        // );
+            .into_struct_value()
+        ;
+        let data = self.builder.build_load(self.types.generic_pointer, current_arg, "data");
+        let data =self.builder.build_struct_gep(self.types.args, data.into_pointer_value(), 0, "data").unwrap();
+        let data =self.builder.build_load(self.types.object,data, "data").into_struct_value();
+        // let data = self
+        //     .builder
+        //     .build_load(
+        //         self.types.object,
+        //         self.functions
+        //             .va_procces
+        //             .get_first_param()
+        //             .unwrap()
+        //             .into_pointer_value(),
+        //         "get data",
+        //     )
+        //     .into_struct_value();
+        let next = self.builder.build_load(self.types.generic_pointer ,current_arg, "next");
         let next = self
             .builder
-            .build_struct_gep(self.types.args, next, 1, "next")
+            .build_struct_gep(
+                self.types.args,
+                next.into_pointer_value(),
+                1,
+                "next",
+            )
             .unwrap();
         let next = self
             .builder
@@ -483,51 +428,42 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(self.functions.va_procces, "cgr");
         let has_next = self.is_null(next);
-        early_phi.add_incoming(&[(&self.const_cons(left_tree, data, self.hempty()), process_current)]);
+        // let pv = self.builder.build_malloc(self.types.object, "m").unwrap();
+        early_phi.add_incoming(&[(&self.const_cons(left_tree, data, self.hempty()), get_next)]);
         self.builder
             .build_conditional_branch(has_next, early_exit, process_last);
         self.builder.position_at_end(process_last);
-
-        let current =
-            self.builder
-                .build_load(self.types.generic_pointer, current_arg, "arg update");
+        let current = self.builder.build_load(self.types.generic_pointer, current_arg, "arg update");
+        self.builder.build_call(self.functions.printf, &[self.builder.build_global_string_ptr("call %p-%d\n", "p-format").as_pointer_value().into(), next.into(),self.functions.va_procces.get_nth_param(1).unwrap().into()], "print pointer");
         self.builder.build_store(current.into_pointer_value(), next);
-        let left = self.builder.build_int_sub(
-            self.functions
-                .va_procces
-                .get_nth_param(1)
-                .unwrap()
-                .into_int_value(),
-            left,
-            "",
-        );
-        let left =
-            self.builder
-                .build_int_sub(left, self.context.i64_type().const_int(1, false), "");
-        let right_struct = self
+        // self.builder.build_store(
+        //     self.functions
+        //         .va_procces
+        //         .get_first_param()
+        //         .unwrap()
+        //         .into_pointer_value(),
+        //     pv,
+        // );
+        let right = 
+        // self.hempty();
+        self
             .builder
             .build_call(
                 self.functions.va_procces,
-                &[next.into(), left.into()],
+                &[
+                    next.into(),
+                    left.into(),
+                ],
                 "process left",
             )
             .try_as_basic_value()
             .unwrap_left()
             .into_struct_value();
-        let right_tree = self.builder.build_extract_value(right_struct, 0, "right tree").unwrap().into_struct_value();
-        let next = self.builder.build_extract_value(left_struct, 1, "next pointer").unwrap().into_pointer_value();
-        let return_struct = self.types.va_arg.const_zero();
-        let return_struct = self
-            .builder
-            .build_insert_value(return_struct, self.const_cons(left_tree, data, right_tree), 0, "ret value")
-            .unwrap();
-        let return_struct = self
-            .builder
-            .build_insert_value(return_struct, next, 1, "ret pointer")
-            .unwrap();
-        self.builder.build_return(Some(&return_struct));
+        // let pv = self.builder.build_malloc(self.types.object, "m").unwrap();
+        self.builder
+            .build_return(Some(&self.const_cons( left_tree, right, data)));
+        // self.builder.build_return(Some(&right));
         self.functions.va_procces.verify(true);
-        self.fpm.run_on(&self.functions.va_procces);
         self.fn_value = old_f;
     }
 }
