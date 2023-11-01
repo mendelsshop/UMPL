@@ -107,7 +107,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "args left",
             );
 
-            let cur_load = self.builder.build_load(self.types.generic_pointer, current_node, "load");
+            let cur_load =
+                self.builder
+                    .build_load(self.types.generic_pointer, current_node, "load");
             self.insert_variable_new_ptr(
                 &n.trunc().to_string().into(),
                 self.builder
@@ -376,18 +378,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "split left",
         );
         let left_tree = self
-            .builder
-            .build_call(
-                self.functions.va_procces,
-                &[
-                    self.functions.va_procces.get_first_param().unwrap().into(),
-                    left.into(),
-                ],
-                "process left",
-            )
-            .try_as_basic_value()
-            .unwrap_left()
-            .into_struct_value();
+        .hempty();
+        // the left procees arg seems to be casiing the issues (prpbably b/c of mutating root ponter so maybe each thing should return pointer to next thing)
+        //     .builder
+        //     .build_call(
+        //         self.functions.va_procces,
+        //         &[
+        //             self.functions.va_procces.get_first_param().unwrap().into(),
+        //             left.into(),
+        //         ],
+        //         "process left",
+        //     )
+        //     .try_as_basic_value()
+        //     .unwrap_left()
+        //     .into_struct_value();
         let data = self
             .builder
             .build_load(
@@ -400,6 +404,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "get data",
             )
             .into_struct_value();
+        let argss = self.builder.build_alloca(self.types.args, "print");
+        self.builder.build_store(argss, data);
+        let call_info = self.types.call_info.const_named_struct(&[
+            self.context.i64_type().const_int(1, false).into(),
+            self.types.generic_pointer.const_null().into(),
+        ]);
+        self.builder.build_call(
+            self.module.get_function("print").unwrap(),
+            &[call_info.into(), argss.into()],
+            "print data",
+        );
         let next = self
             .builder
             .build_struct_gep(
@@ -438,7 +453,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_call(
                 self.functions.va_procces,
                 &[
-                    self.functions.va_procces.get_first_param().unwrap().into(),
+                    pv.into(),
                     left.into(),
                 ],
                 "process left",
