@@ -1,5 +1,6 @@
 (define (tree 0 *) '0'  )
 
-(tree ;foo 7 8 )>>>
+!(tree 1 2 3 4)>
 (define (cons 2) '1')
-(cons 7 (tree .i. 9 56 ;ggg  1 6 2 3 ))>>>>>
+let u = (cons 7 (tree 6 6 ))
+u>
