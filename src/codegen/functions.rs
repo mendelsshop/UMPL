@@ -342,11 +342,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let old_f = self.fn_value;
         let function = self.functions.va_procces;
         self.fn_value = Some(function);
-        
+
         // params
         let size = function.get_nth_param(1).unwrap().into_int_value();
         let var_args = function.get_first_param().unwrap().into_pointer_value();
-        
+
         // basic blocks
         let entry = self.context.append_basic_block(function, "entry");
         let early_exit = self.context.append_basic_block(function, "early exit");
@@ -361,60 +361,114 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_global_string_ptr("\ncall:  (sub) tree size: %d\n", "p-format")
                     .as_pointer_value()
                     .into(),
-             size.into()
+                size.into(),
             ],
             "print pointer",
         );
-        let done_subtree = self.builder.build_int_compare(inkwell::IntPredicate::SLT, size, self.context.i64_type().const_int(1, false), "early exit?");
-        self.builder.build_conditional_branch(done_subtree, early_exit, normal);
+        let done_subtree = self.builder.build_int_compare(
+            inkwell::IntPredicate::SLT,
+            size,
+            self.context.i64_type().const_int(1, false),
+            "early exit?",
+        );
+        self.builder
+            .build_conditional_branch(done_subtree, early_exit, normal);
 
         // early exit
         self.builder.position_at_end(early_exit);
         let return_struct = self.types.va_arg.const_zero();
-        let return_struct = self.builder.build_insert_value(return_struct, self.hempty(), 0, "return struct - data").unwrap();
-        let return_struct = self.builder.build_insert_value(return_struct, var_args, 1, "return struct - next").unwrap();
+        let return_struct = self
+            .builder
+            .build_insert_value(return_struct, self.hempty(), 0, "return struct - data")
+            .unwrap();
+        let return_struct = self
+            .builder
+            .build_insert_value(return_struct, var_args, 1, "return struct - next")
+            .unwrap();
         self.builder.build_return(Some(&return_struct));
 
         // normal
         self.builder.position_at_end(normal);
-        let mid = self.builder.build_int_signed_div(size, self.context.i64_type().const_int(2, false), "mid");
+        let mid = self.builder.build_int_signed_div(
+            size,
+            self.context.i64_type().const_int(2, false),
+            "mid",
+        );
 
-        let left_struct = self.builder.build_call(function, &[var_args.into(), mid.into()], "handle left")
+        let left_struct = self
+            .builder
+            .build_call(function, &[var_args.into(), mid.into()], "handle left")
             .try_as_basic_value()
             .unwrap_left()
             .into_struct_value();
-        let left_tree = self.builder.build_extract_value(left_struct, 0, "left tree").unwrap().into_struct_value();
-        let next = self.builder.build_extract_value(left_struct, 1, "left next").unwrap().into_pointer_value();
-        let data = self.builder.build_load(self.types.object, next, "this data").into_struct_value();
-        let next = self.builder.build_struct_gep(self.types.args, next, 1, "next arg").unwrap();
-        // let argss = self.builder.build_alloca(self.types.args, "print");
-        // self.builder.build_store(argss, data);
-        // let call_info = self.types.call_info.const_named_struct(&[
-        //     self.context.i64_type().const_int(1, false).into(),
-        //     self.types.generic_pointer.const_null().into(),
-        // ]);
-        // self.builder.build_call(
-        //     self.module.get_function("println").unwrap(),
-        //     &[call_info.into(), argss.into()],
-        //     "print data",
-        // );
-        let next = self.builder.build_load(self.types.generic_pointer, next, "next").into_pointer_value();
-        let right_struct = self.builder.build_call(function, &[next.into(), self.builder.build_int_sub(self.builder.build_int_sub(size, mid, "right size"), self.context.i64_type().const_int(1, false), "right size").into()], "handle right")
+        let left_tree = self
+            .builder
+            .build_extract_value(left_struct, 0, "left tree")
+            .unwrap()
+            .into_struct_value();
+        let next = self
+            .builder
+            .build_extract_value(left_struct, 1, "left next")
+            .unwrap()
+            .into_pointer_value();
+        let data = self
+            .builder
+            .build_load(self.types.object, next, "this data")
+            .into_struct_value();
+        let next = self
+            .builder
+            .build_struct_gep(self.types.args, next, 1, "next arg")
+            .unwrap();
+
+        let next = self
+            .builder
+            .build_load(self.types.generic_pointer, next, "next")
+            .into_pointer_value();
+        let right_struct = self
+            .builder
+            .build_call(
+                function,
+                &[
+                    next.into(),
+                    self.builder
+                        .build_int_sub(
+                            self.builder.build_int_sub(size, mid, "right size"),
+                            self.context.i64_type().const_int(1, false),
+                            "right size",
+                        )
+                        .into(),
+                ],
+                "handle right",
+            )
             .try_as_basic_value()
             .unwrap_left()
             .into_struct_value();
-        let right_tree = self.builder.build_extract_value(right_struct, 0, "right tree").unwrap().into_struct_value();
-        let next = self.builder.build_extract_value(right_struct, 1, "right next").unwrap().into_pointer_value();
+        let right_tree = self
+            .builder
+            .build_extract_value(right_struct, 0, "right tree")
+            .unwrap()
+            .into_struct_value();
+        let next = self
+            .builder
+            .build_extract_value(right_struct, 1, "right next")
+            .unwrap()
+            .into_pointer_value();
 
-        let ptr = self.builder.build_alloca(self.types.cons, "tree");
+        // we get around problems with cons and aloca by using malloc
+        let ptr = self.builder.build_malloc(self.types.cons, "tree").unwrap();
         let tree = self.const_cons_with_ptr(ptr, left_tree, data, right_tree);
 
         let return_struct = self.types.va_arg.const_zero();
-        let return_struct = self.builder.build_insert_value(return_struct, tree, 0, "return struct - data").unwrap();
-        let return_struct = self.builder.build_insert_value(return_struct, next, 1, "return struct - next").unwrap();
+        let return_struct = self
+            .builder
+            .build_insert_value(return_struct, tree, 0, "return struct - data")
+            .unwrap();
+        let return_struct = self
+            .builder
+            .build_insert_value(return_struct, next, 1, "return struct - next")
+            .unwrap();
         self.builder.build_return(Some(&return_struct));
 
-        
         function.verify(true);
         self.fpm.run_on(&function);
         self.fn_value = old_f;

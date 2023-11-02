@@ -90,3 +90,8 @@ so instead of using linkedlist have it be struct/arrayz
 and each variable if its a function could store the argc and varidicity
 so VarType would have another variant for functions .. but whay about thunks ie if we pass in a function to another function the passed in funnction loses its argc and varidicity
 or do we not used llvm function calls at all and go with something more sicp like but in llvm
+
+--
+differtiate between ;() in cdr versus in car/cgr (espically in print) so hempty only get printed if is the cdr
+--
+maybee we need gc b/c we started to malloc with variaidcs (because of allocas finickyness - or maybe we just need to inform llvm that these aloocas should live longer?)
