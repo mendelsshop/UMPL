@@ -332,7 +332,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_load(self.types.generic_pointer, current_node, "load args");
         let is_done = self
             .builder
-            .build_is_null(load_args.into_pointer_value(), "mull = done args");
+            .build_is_null(load_args.into_pointer_value(), "null = done args");
         self.builder
             .build_conditional_branch(is_done, done_bb, process_arg_bb);
 

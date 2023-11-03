@@ -1,0 +1,14 @@
+
+
+(define (map 2)
+    let f = '0'
+    let l = '1'
+    (if (hempty? l) 
+        ;()
+        (begin
+            (map f (car l))
+            (f (cdr l))
+            (map f (cgr l))
+        )
+    )
+)
