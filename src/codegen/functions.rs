@@ -1,10 +1,36 @@
 use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue, PointerValue};
 
-use crate::ast::UMPL2Expr;
+use crate::{ast::UMPL2Expr, interior_mut::RC};
 
 use super::{Compiler, EvalType, TyprIndex};
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    fn find_captured_variables(&mut self, exprs: &[UMPL2Expr]) -> Vec<RC<str>> {
+        let mut captured = vec![];
+        for expr in exprs {
+            match expr {
+                UMPL2Expr::Ident(i) => {
+                    if self.get_variable(i).is_some() {
+                        captured.push(i.clone());
+                    }
+                }
+                UMPL2Expr::Application(app) => {
+                    for expr in app {
+                        match expr {
+                            UMPL2Expr::Ident(i) => {
+                                if self.get_variable(i).is_some() {
+                                    captured.push(i.clone());
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        captured
+    }
     fn extract_arguements(
         &mut self,
         root: PointerValue<'ctx>,
@@ -126,6 +152,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     // lambda defined as ("lambda" (argc "+"|"*"|"") exprs)
+    // to fix foward refernces we scan out for variables that are not defined yet and bind them to a special undefined value which will error at runtime if not bound at function call time
+    // might have to similiar thing for thunks
+    // or if we could have a way to signal that a lookup is happening in a lambda and if the variable is not bound we create new binding with unassigned value
+    // the only problem is
+    // (define (f) 
+    /// (define (g) ; create unassigned u in g's environment
+    ///   (lambda () u)
+    /// ))
+    /// (define x ((f)))
+    /// (define u 1)
+    /// (x) ; access u in top level environment (which is reacheable from g's environment, but we created different u in g's environment)
     pub(crate) fn special_form_lambda(
         &mut self,
         exprs: &[UMPL2Expr],
