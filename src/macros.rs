@@ -515,7 +515,6 @@ impl MacroArg {
             (Self::KleeneClosure(_), UMPL2Expr::Application(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::Label(_)) => todo!(),
             (Self::KleeneClosure(_), UMPL2Expr::FnParam(_)) => todo!(),
-            (Self::KleeneClosure(_), UMPL2Expr::Hempty) => todo!(),
         }
         Ok(bindings)
     }

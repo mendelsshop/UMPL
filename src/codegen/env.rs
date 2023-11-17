@@ -218,7 +218,16 @@ pub enum VarType<'a, 'ctx> {
     
 // }
 
-// pub struct Env<'a, 'ctx> {
-//     bindings: HashMap<RC<str>, VarType<'a, 'ctx>>,
-//     parent: Option<MUTEX<RC<Env<'a, 'ctx>>>>,
-// }
+
+
+// At compile time right before we compile we know type so we can sometimes wrap compiled thing in a type 
+
+pub struct Env<'a , 'ctx> {
+    pub variables: Vec<HashMap<RC<str>, VarType<'a, 'ctx>>>,
+    pub real_env: PointerValue<'ctx>,
+    pub parent: RC<MUTEX<Env<'a, 'ctx>>>,
+}
+
+impl <'a, 'ctx> Env<'a, 'ctx> {
+
+}

@@ -504,8 +504,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let pi_value = self.const_number(PI);
         self.insert_constant("pi".into(), pi_value.into());
         // nil
-        let nil_value = UMPL2Expr::Application(vec![]).flatten(self);
-        self.insert_constant("nil".into(), nil_value.into());
+        self.insert_constant("nil".into(), self.hempty().into());
+        // hempty
+
+        self.insert_constant("hempty".into(), self.hempty().into());
     }
 
     // insert constants needed for stdlib variables like nil and pi, becuase there is no main function to init them in, so we make them globals

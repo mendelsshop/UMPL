@@ -17,7 +17,7 @@ pub trait FlattenAst<'a, 'ctx> {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx>;
 }
 
-#[derive(Clone, Default, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum UMPL2Expr {
     Bool(Boolean),
     Number(f64),
@@ -27,8 +27,6 @@ pub enum UMPL2Expr {
     Label(RC<str>),
     // should simlify to ident or the like ...
     FnParam(usize),
-    #[default]
-    Hempty,
 }
 impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
     fn flatten(self, compiler: &mut Compiler<'a, 'ctx>) -> StructValue<'ctx> {
@@ -40,7 +38,6 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for UMPL2Expr {
             Self::Application(a) => a.flatten(compiler),
             Self::Label(_) => todo!(),
             Self::FnParam(p) => compiler.const_symbol(&format!("'{p}'").into()),
-            Self::Hempty => compiler.hempty(),
         }
     }
 }
@@ -82,7 +79,6 @@ impl core::fmt::Display for UMPL2Expr {
             Self::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
             Self::Label(f0) => write!(f, "@{f0}"),
             Self::FnParam(f0) => write!(f, "'{f0}"),
-            Self::Hempty => write!(f, "hempty"),
         }
     }
 }

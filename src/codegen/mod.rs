@@ -419,7 +419,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             UMPL2Expr::Application(application) => self.compile_application(application),
             UMPL2Expr::Label(s) => self.compile_label(s),
             UMPL2Expr::FnParam(s) => self.get_var(&s.to_string().into()).map(Some),
-            UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
+            // UMPL2Expr::Hempty => Ok(Some(self.hempty().into())),
         }
     }
 

@@ -359,7 +359,7 @@ fn if_stmt() -> Box<Parser<UMPL2Expr>> {
         ]),
         |mut r| {
             let if_ident = "if".into();
-            let cond = r.next().unwrap_or_default();
+            let cond = r.next().unwrap();
             let cons = r.next().unwrap();
             let alt = r.next().unwrap();
             UMPL2Expr::Application(vec![if_ident, cond, cons, alt])
