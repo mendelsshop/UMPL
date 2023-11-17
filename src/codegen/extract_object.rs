@@ -62,7 +62,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_extract_value(cond_struct, 0, "get_type")
     }
 
-  pub(crate)  fn print_type(&self, object: StructValue<'ctx>) {
+    pub(crate) fn print_type(&self, object: StructValue<'ctx>) {
         let type_index = self.extract_type(object).unwrap().into_int_value();
         let print_fn = self.functions.printf;
 

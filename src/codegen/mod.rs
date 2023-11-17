@@ -333,7 +333,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 types.thunk_ty.as_basic_type_enum(),        // thunk
                 types.hempty.as_basic_type_enum(),          //hempty
                 types.generic_pointer.as_basic_type_enum(), // primitive function
-
             ],
             false,
         );

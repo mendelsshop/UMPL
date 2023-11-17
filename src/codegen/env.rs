@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
-use crate::{ast::UMPL2Expr, interior_mut::RC};
+use crate::{ast::UMPL2Expr, interior_mut::{RC, MUTEX}};
 
 use super::Compiler;
 
@@ -108,23 +108,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         match ptr {
             VarType::Lisp(l) => {
                 self.builder.build_store(l, value);
-            }
-            VarType::SpecialForm(_) => {
-                let ty = self.types.object;
-                let ptr = self.create_entry_block_alloca(ty, &name).unwrap();
-                self.builder.build_store(ptr, value);
-                {
-                    self.variables.last_mut().map_or_else(
-                        || Err(format!("cannot create variable `{name}`")),
-                        |scope| {
-                            scope.insert(name.clone(), VarType::Lisp(ptr));
-                            Ok(())
-                        },
-                    )
-                }?;
-            }
-        }
         Ok(())
+            }
+           VarType::SpecialForm(_) => Err(format!("set: Could not mutate syntax identifier")) 
+        }
     }
 
     pub fn set_or_new(&mut self, name: RC<str>, ptr: PointerValue<'ctx>) -> Result<(), String> {
@@ -226,3 +213,12 @@ pub enum VarType<'a, 'ctx> {
         fn(&mut Compiler<'a, 'ctx>, &[UMPL2Expr]) -> Result<Option<BasicValueEnum<'ctx>>, String>,
     ),
 }
+
+// pub struct UnboundVariables {
+    
+// }
+
+// pub struct Env<'a, 'ctx> {
+//     bindings: HashMap<RC<str>, VarType<'a, 'ctx>>,
+//     parent: Option<MUTEX<RC<Env<'a, 'ctx>>>>,
+// }

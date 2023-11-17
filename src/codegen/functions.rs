@@ -156,7 +156,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     // might have to similiar thing for thunks
     // or if we could have a way to signal that a lookup is happening in a lambda and if the variable is not bound we create new binding with unassigned value
     // the only problem is
-    // (define (f) 
+    // (define (f)
     /// (define (g) ; create unassigned u in g's environment
     ///   (lambda () u)
     /// ))
