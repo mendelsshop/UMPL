@@ -1,35 +1,142 @@
+use std::collections::HashMap;
+
 use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue, PointerValue};
 
 use crate::{ast::UMPL2Expr, interior_mut::RC};
 
 use super::{Compiler, EvalType, TyprIndex};
 
+#[derive(Debug, Clone)]
+pub enum PsudoVariable {
+    UserDefined,
+    SpecialForm(RC<str>),
+}
+
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    fn find_captured_variables(&mut self, exprs: &[UMPL2Expr]) -> Vec<RC<str>> {
-        let mut captured = vec![];
+    fn make_used_variables(&self) -> HashMap<RC<str>, PsudoVariable> {
+        // start at root env go up until we hit our current env
+        self.variables.iter().fold(HashMap::new(), |mut acc, env| {
+            for (name, var) in env {
+                match var {
+                    super::env::VarType::Lisp(_) => {
+                        acc.insert(name.clone(), PsudoVariable::UserDefined);
+                    }
+                    super::env::VarType::SpecialForm(_) => {}
+                }
+            }
+            acc
+        })
+    }
+
+    fn special_form_psudo_lambda(
+        &mut self,
+        mut variables: HashMap<RC<str>, PsudoVariable>,
+        exprs: &[UMPL2Expr],
+    ) -> Result<Vec<RC<str>>, String> {
+        if let Some(UMPL2Expr::Application(a)) = exprs.first() {
+            let n = match a.as_slice() {
+                [UMPL2Expr::Number(n), UMPL2Expr::String(s)]
+                    if (&["*", "+"]).contains(&&s.to_string().as_str()) =>
+                {
+                    *n + 1.0
+                }
+
+                [UMPL2Expr::Number(n)] => *n,
+                _ => {
+                    return Err(
+                        "lambda signature must be (lambda (argc [\"+\"|\"*\"|\"\"]) exprs)"
+                            .to_string(),
+                    )
+                }
+            };
+            variables.extend(
+                (0..n.trunc() as u64).map(|i| (i.to_string().into(), PsudoVariable::UserDefined)),
+            );
+            Ok(a[1..]
+                .into_iter()
+                .map(|e| self.find_free_variables_expr(e, variables.clone()))
+                .flatten()
+                .collect())
+        } else {
+            Err("lambda signature must be (lambda (argc [\"+\"|\"*\"|\"\"]) exprs)".to_string())
+        }
+    }
+
+    fn find_free_variables_expr(
+        &mut self,
+        expr: &UMPL2Expr,
+        variables: HashMap<RC<str>, PsudoVariable>,
+    ) -> Vec<RC<str>> {
+        match expr {
+            UMPL2Expr::Ident(ident) => {
+                if !variables.contains_key(ident) {
+                    vec![ident.clone()]
+                } else {
+                    vec![]
+                }
+            }
+            UMPL2Expr::Application(a) => self.find_free_variables(a, variables),
+            _ => vec![],
+        }
+    }
+
+    fn find_free_variables(
+        &mut self,
+        exprs: &[UMPL2Expr],
+        mut variables: HashMap<RC<str>, PsudoVariable>,
+    ) -> Vec<RC<str>> {
+        let mut free = vec![];
         for expr in exprs {
             match expr {
-                UMPL2Expr::Ident(i) => {
-                    if self.get_variable(i).is_some() {
-                        captured.push(i.clone());
+                UMPL2Expr::Ident(ident) => {
+                    if !variables.contains_key(ident) {
+                        free.push(ident.clone());
                     }
                 }
-                UMPL2Expr::Application(app) => {
-                    for expr in app {
-                        match expr {
-                            UMPL2Expr::Ident(i) => {
-                                if self.get_variable(i).is_some() {
-                                    captured.push(i.clone());
+                UMPL2Expr::Application(a) => {
+                    if let UMPL2Expr::Ident(ident) = &a[0] {
+                        if let Some(PsudoVariable::SpecialForm(sf)) = variables.get(ident) {
+                            match sf.to_string().as_str() {
+                                "lambda" => {
+                                    let mut variables_clone = variables.clone();
+                                    // add parameters to the variables $0, $1, $2, ...
+
+                                    variables.extend(
+                                        self.find_free_variables(&a[2..], variables_clone)
+                                            .into_iter()
+                                            .map(|v| (v, PsudoVariable::UserDefined)),
+                                    );
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
+                    let variables_clone = variables.clone();
+                    variables.extend(
+                        a.iter()
+                            .filter_map(|e| match e {
+                                UMPL2Expr::Ident(ident) => {
+                                    if !variables_clone.contains_key(ident) {
+                                        Some(vec![(ident.clone(), PsudoVariable::UserDefined)])
+                                    } else {
+                                        None
+                                    }
+                                }
+                                UMPL2Expr::Application(a) => Some(
+                                    self.find_free_variables(a, variables_clone.clone())
+                                        .into_iter()
+                                        .map(|v| (v, PsudoVariable::UserDefined))
+                                        .collect(),
+                                ),
+                                _ => None,
+                            })
+                            .flatten(),
+                    );
                 }
                 _ => {}
             }
         }
-        captured
+        free
     }
     fn extract_arguements(
         &mut self,

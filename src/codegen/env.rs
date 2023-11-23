@@ -2,7 +2,10 @@ use std::{collections::HashMap, fmt::format};
 
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
-use crate::{ast::UMPL2Expr, interior_mut::{RC, MUTEX}};
+use crate::{
+    ast::UMPL2Expr,
+    interior_mut::{MUTEX, RC},
+};
 
 use super::Compiler;
 
@@ -108,9 +111,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         match ptr {
             VarType::Lisp(l) => {
                 self.builder.build_store(l, value);
-        Ok(())
+                Ok(())
             }
-           VarType::SpecialForm(_) => Err(format!("set: Could not mutate syntax identifier")) 
+            VarType::SpecialForm(_) => Err(format!("set: Could not mutate syntax identifier")),
         }
     }
 
@@ -215,19 +218,15 @@ pub enum VarType<'a, 'ctx> {
 }
 
 // pub struct UnboundVariables {
-    
+
 // }
 
+// At compile time right before we compile we know type so we can sometimes wrap compiled thing in a type
 
-
-// At compile time right before we compile we know type so we can sometimes wrap compiled thing in a type 
-
-pub struct Env<'a , 'ctx> {
+pub struct Env<'a, 'ctx> {
     pub variables: Vec<HashMap<RC<str>, VarType<'a, 'ctx>>>,
     pub real_env: PointerValue<'ctx>,
     pub parent: RC<MUTEX<Env<'a, 'ctx>>>,
 }
 
-impl <'a, 'ctx> Env<'a, 'ctx> {
-
-}
+impl<'a, 'ctx> Env<'a, 'ctx> {}
