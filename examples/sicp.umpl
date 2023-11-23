@@ -1,0 +1,5 @@
+!(define x 5)
+!(if #t 5 (begin (define y 7) x 5))
+!(lambda (4 *) 6 6)
+!(d f f)
+(a 7 (y 66) (if 7 x y  ) t)

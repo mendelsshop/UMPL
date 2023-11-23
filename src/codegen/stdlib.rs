@@ -506,7 +506,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // nil
         self.insert_constant("nil".into(), self.hempty().into());
         // hempty
-
         self.insert_constant("hempty".into(), self.hempty().into());
     }
 

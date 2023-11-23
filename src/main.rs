@@ -13,6 +13,7 @@ use std::{
     process::exit,
 };
 
+use codegen::sicp::{Linkage, Register};
 use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, macros::parse_and_expand};
@@ -63,6 +64,9 @@ pub enum ArgType {
     Expand {
         filename: String,
     },
+    Sicp {
+        filename: String,
+    },
 }
 
 fn main() {
@@ -72,6 +76,7 @@ fn main() {
         ArgType::Compile { filename, output } => compile(&filename, &output),
         ArgType::Run { filename } => run(&filename),
         ArgType::Expand { filename } => expand(&filename),
+        ArgType::Sicp { filename } => sicp(&filename),
     }
 }
 
@@ -207,4 +212,20 @@ fn expand(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
     println!("{program:?}");
+}
+
+fn sicp(file: &str) {
+    let contents = fs::read_to_string(file).unwrap();
+    let program = parse_and_expand(&contents).unwrap();
+    for expr in program.0 {
+        println!(
+            "{}",
+            codegen::sicp::compile(expr, Register::Val, Linkage::Return)
+                .instructions()
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<String>>()
+                .join("\n")
+        );
+    }
 }
