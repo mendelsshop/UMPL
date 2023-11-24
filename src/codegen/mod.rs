@@ -5,7 +5,6 @@ use inkwell::{
     builder::Builder,
     context::Context,
     execution_engine::ExecutionEngine,
-    intrinsics::Intrinsic,
     module::{Linkage, Module},
     passes::PassManager,
     types::{BasicType, FloatType, FunctionType, IntType, PointerType, StructType},
@@ -36,8 +35,8 @@ mod labels;
 mod loops;
 mod object;
 mod quotation;
+pub mod register_to_llvm;
 pub mod sicp;
-mod register_to_llvm;
 mod stdlib;
 
 /// needed for when we reach stoppers like stop or skip

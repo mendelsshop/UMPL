@@ -7,6 +7,7 @@ use crate::{ast::UMPL2Expr, interior_mut::RC};
 use super::{Compiler, EvalType, TyprIndex};
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum PsudoVariable {
     UserDefined,
     SpecialForm(RC<str>),
@@ -28,6 +29,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         })
     }
 
+    #[allow(unused)]
     fn special_form_psudo_lambda(
         &mut self,
         mut variables: HashMap<RC<str>, PsudoVariable>,
@@ -62,6 +64,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    #[allow(unused)]
     fn find_free_variables_expr(
         &mut self,
         expr: &UMPL2Expr,
@@ -80,6 +83,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    #[allow(dead_code)]
     fn find_free_variables(
         &mut self,
         exprs: &[UMPL2Expr],

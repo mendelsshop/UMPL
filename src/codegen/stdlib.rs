@@ -2,10 +2,7 @@ use std::f64::consts::PI;
 
 use inkwell::values::{BasicValue, BasicValueEnum, PointerValue, StructValue};
 
-use crate::{
-    ast::{FlattenAst, UMPL2Expr},
-    interior_mut::RC,
-};
+use crate::interior_mut::RC;
 
 use super::{Compiler, TyprIndex};
 

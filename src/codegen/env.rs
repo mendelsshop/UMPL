@@ -1,6 +1,5 @@
-use std::{collections::HashMap, fmt::format};
-
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
+use std::collections::HashMap;
 
 use crate::{
     ast::UMPL2Expr,

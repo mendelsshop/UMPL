@@ -5,7 +5,7 @@
     missing_debug_implementations,
     clippy::missing_panics_doc
 )]
-#![allow(clippy::similar_names)]
+#![allow(clippy::similar_names, dead_code, unused)]
 
 use std::{
     fs,
@@ -13,7 +13,10 @@ use std::{
     process::exit,
 };
 
-use codegen::sicp::{Linkage, Register};
+use codegen::{
+    register_to_llvm::CodeGen,
+    sicp::{Linkage, Register},
+};
 use inkwell::{context::Context, passes::PassManager};
 
 use crate::{codegen::Compiler, macros::parse_and_expand};
@@ -217,15 +220,19 @@ fn expand(file: &str) {
 fn sicp(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
-    for expr in program.0 {
-        println!(
-            "{}",
+    let ir = program
+        .0
+        .into_iter()
+        .flat_map(|expr| {
             codegen::sicp::compile(expr, Register::Val, Linkage::Return)
                 .instructions()
-                .iter()
-                .map(|i| i.to_string())
-                .collect::<Vec<String>>()
-                .join("\n")
-        );
-    }
+                .to_vec()
+        })
+        .collect();
+    let context = Context::create();
+    let module = context.create_module(file);
+    let builder = context.create_builder();
+    let mut codegen = CodeGen::new(&context, &builder, &module);
+    codegen.compile(ir);
+    println!("{}", codegen.export_ir());
 }

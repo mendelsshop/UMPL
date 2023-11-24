@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fmt::{self, format}};
+use std::{
+    collections::HashSet,
+    fmt::{self},
+};
 
 use itertools::Itertools;
 
@@ -72,50 +75,69 @@ pub enum Operation {
 impl fmt::Display for Register {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Register::Env => write!(f, "env"),
-            Register::Argl => write!(f, "argl"),
-            Register::Val => write!(f, "val"),
-            Register::Proc => write!(f, "proc"),
-            Register::Continue => write!(f, "continue"),
+            Self::Env => write!(f, "env"),
+            Self::Argl => write!(f, "argl"),
+            Self::Val => write!(f, "val"),
+            Self::Proc => write!(f, "proc"),
+            Self::Continue => write!(f, "continue"),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Expr {
-    Const(String),
-    Label(Label),
+#[derive(Clone, Debug, PartialEq)]
+pub enum Const {
     Empty,
+    String(String),
+    Symbol(String),
+    Number(f64),
+    Boolean(bool),
     List(Box<Expr>, Box<Expr>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    Const(Const),
+    Label(Label),
     Register(Register),
     Op(Perform),
+}
+impl fmt::Display for Const {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::List(e1, e2) => {
+                let mut e2 = *e2.clone();
+                write!(f, "{e1}")?;
+                while let Expr::Const(Self::List(ne1, ne2)) = e2.clone() {
+                    write!(f, " {ne1}",)?;
+                    e2 = *ne2;
+                }
+                if e2 == Expr::Const(Self::Empty) {
+                    write!(f, ")")
+                } else {
+                    write!(f, " . {e2}")
+                }
+            }
+            Self::String(s) => write!(f, "{s}"),
+            Self::Symbol(s) => write!(f, "{s}"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Empty => write!(f, "()"),
+            Self::Boolean(b) => write!(f, "{b}"),
+        }
+    }
 }
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Const(s) => write!(f, "(const {})", s),
-            Expr::Label(l) => write!(f, "(label {})", l),
-            Expr::List(e1, e2) => {
-                let mut e2 = *e2.clone();
-                write!(f, "{}", e1)?;
-                while let Expr::List(ne1, ne2) = e2.clone() {
-                    write!(f, " {}", ne1)?;
-                    e2 = *ne2;
-                }
-                if e2 == Expr::Empty {
-                    write!(f, ")")
-                } else {
-                    write!(f, " . {}", e2)
-                }
-            }
-            Expr::Register(r) => write!(f, "(reg {})", r),
-            Expr::Op(p) => write!(f, "{}", p),
-            Expr::Empty => write!(f, "()"),
+            Self::Const(s) => write!(f, "(const {s})",),
+            Self::Label(l) => write!(f, "(label {l})",),
+            Self::Register(r) => write!(f, "(reg {r})",),
+            Self::Op(p) => write!(f, "{p}",),
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Goto {
     Label(Label),
     Register(Register),
@@ -124,13 +146,13 @@ pub enum Goto {
 impl fmt::Display for Goto {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Goto::Label(l) => write!(f, "(label {})", l),
-            Goto::Register(r) => write!(f, "(reg {})", r),
+            Self::Label(l) => write!(f, "(label {l})"),
+            Self::Register(r) => write!(f, "(reg {r})"),
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Perform {
     op: Operation,
     args: Vec<Expr>,
@@ -138,11 +160,15 @@ pub struct Perform {
 
 impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let decamel = |str:String|str  .split_inclusive(|x: char|x.is_uppercase()).map(str::to_lowercase).join("-");
+        let decamel = |str: String| {
+            str.split_inclusive(|x: char| x.is_uppercase())
+                .map(str::to_lowercase)
+                .join("-")
+        };
         let kebabified = decamel(format!("{self:?}"));
         match self {
             Self::False | Self::PrimitiveProcedure => write!(f, "{kebabified}?"),
-            _ => write!(f, "{kebabified}")
+            _ => write!(f, "{kebabified}"),
         }
     }
 }
@@ -161,6 +187,7 @@ impl fmt::Display for Perform {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Assign(Register, Expr),
     Test(Perform),
@@ -170,21 +197,19 @@ pub enum Instruction {
     Restore(Register),
     Perform(Perform),
     Label(Label),
-    Nop,
 }
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Instruction::Assign(r, e) => write!(f, " (assign {} {})", r, e),
-            Instruction::Test(p) => write!(f, " (test {})", p),
-            Instruction::Branch(l) => write!(f, " (branch (label {}))", l),
-            Instruction::Goto(g) => write!(f, " (goto {})", g),
-            Instruction::Save(r) => write!(f, " (save {})", r),
-            Instruction::Restore(r) => write!(f, " (restore {})", r),
-            Instruction::Perform(r) => write!(f, " (perform {})", r),
-            Instruction::Label(l) => write!(f, "{}", l),
-            Instruction::Nop => write!(f, "(nop)"),
+            Self::Assign(r, e) => write!(f, " (assign {r} {e})"),
+            Self::Test(p) => write!(f, " (test {p})",),
+            Self::Branch(l) => write!(f, " (branch (label {l}))",),
+            Self::Goto(g) => write!(f, " (goto {g})",),
+            Self::Save(r) => write!(f, " (save {r})",),
+            Self::Restore(r) => write!(f, " (restore {r})",),
+            Self::Perform(r) => write!(f, " (perform {r})",),
+            Self::Label(l) => write!(f, "{l}",),
         }
     }
 }
@@ -377,7 +402,10 @@ fn compile_variable(exp: String, target: Register, linkage: Linkage) -> Instruct
                 target,
                 Expr::Op(Perform {
                     op: Operation::LookupVariableValue,
-                    args: vec![Expr::Const(exp), Expr::Register(Register::Env)],
+                    args: vec![
+                        Expr::Const(Const::Symbol(exp)),
+                        Expr::Register(Register::Env),
+                    ],
                 }),
             )],
         ),
@@ -393,10 +421,10 @@ fn compile_assignment(
         Some(UMPL2Expr::Ident(i)) => i.to_string(),
         _ => panic!(),
     };
-    let get_value_code = match exp.get(2) {
-        Some(v) => compile(v.clone(), Register::Val, Linkage::Next),
-        _ => panic!(),
-    };
+    let get_value_code = exp.get(2).map_or_else(
+        || panic!(),
+        |v| compile(v.clone(), Register::Val, Linkage::Next),
+    );
     end_with_linkage(
         linkage,
         preserving(
@@ -411,13 +439,13 @@ fn compile_assignment(
                         Expr::Op(Perform {
                             op: Operation::SetVariableValue,
                             args: vec![
-                                Expr::Const(var),
+                                Expr::Const(Const::Symbol(var)),
                                 Expr::Register(Register::Val),
                                 Expr::Register(Register::Env),
                             ],
                         }),
                     ),
-                    Instruction::Assign(target, Expr::Const("ok".to_string())),
+                    Instruction::Assign(target, Expr::Const(Const::Symbol("ok".to_string()))),
                 ],
             ),
         ),
@@ -434,10 +462,10 @@ fn compile_defeninition(
         // Some(UMPL2Expr::Applicati
         _ => panic!(),
     };
-    let get_value_code = match exp.get(2) {
-        Some(v) => compile(v.clone(), Register::Val, Linkage::Next),
-        _ => panic!(),
-    };
+    let get_value_code = exp.get(2).map_or_else(
+        || panic!(),
+        |v| compile(v.clone(), Register::Val, Linkage::Next),
+    );
     end_with_linkage(
         linkage,
         preserving(
@@ -452,13 +480,13 @@ fn compile_defeninition(
                         Expr::Op(Perform {
                             op: Operation::DefineVariable,
                             args: vec![
-                                Expr::Const(var),
+                                Expr::Const(Const::Symbol(var)),
                                 Expr::Register(Register::Val),
                                 Expr::Register(Register::Env),
                             ],
                         }),
                     ),
-                    Instruction::Assign(target, Expr::Const("ok".to_string())),
+                    Instruction::Assign(target, Expr::Const(Const::Symbol("ok".to_string()))),
                 ],
             ),
         ),
@@ -585,8 +613,10 @@ fn compile_lambda_body(mut lambda: Vec<UMPL2Expr>, proc_entry: String) -> Instru
         .trunc() as u64;
         lambda.remove(0);
         (0..arg_c)
-            .map(|i| Expr::Const(format!("'{i}'")))
-            .rfold(Expr::Empty, |a, b| Expr::List(Box::new(b), Box::new(a)))
+            .map(|i| Expr::Const(Const::Symbol(format!("'{i}'"))))
+            .rfold(Expr::Const(Const::Empty), |a, b| {
+                Expr::Const(Const::List(Box::new(b), Box::new(a)))
+            })
     };
 
     append_instruction_sequnce(
@@ -626,7 +656,7 @@ fn compile_application(
 ) -> InstructionSequnce {
     let proc_code = compile(exp[0].clone(), Register::Proc, Linkage::Next);
     let operand_codes = exp[1..]
-        .into_iter()
+        .iter()
         .map(|exp| compile(exp.clone(), Register::Val, Linkage::Next))
         .collect();
     preserving(
@@ -797,7 +827,10 @@ fn construct_arg_list(operand_codes: Vec<InstructionSequnce>) -> InstructionSequ
         InstructionSequnce::new(
             hashset!(),
             hashset!(Register::Argl),
-            vec![Instruction::Assign(Register::Argl, Expr::Empty)],
+            vec![Instruction::Assign(
+                Register::Argl,
+                Expr::Const(Const::Empty),
+            )],
         ),
         |a, b| preserving(hashset!(Register::Env), a, b),
     )
@@ -807,22 +840,24 @@ impl From<UMPL2Expr> for Expr {
     fn from(value: UMPL2Expr) -> Self {
         match value {
             UMPL2Expr::Bool(b) => match b {
-                crate::ast::Boolean::False => Self::Const("#f".to_string()),
-                crate::ast::Boolean::True => Self::Const("#t".to_string()),
+                crate::ast::Boolean::False => Self::Const(Const::Boolean(false)),
+                crate::ast::Boolean::True => Self::Const(Const::Boolean(true)),
                 crate::ast::Boolean::Maybee => Self::Op(Perform {
                     op: Operation::RandomBool,
                     args: vec![],
                 }),
             },
-            UMPL2Expr::Number(n) => Self::Const(n.to_string()),
-            UMPL2Expr::String(s) => Self::Const(s.to_string()),
-            UMPL2Expr::Ident(i) => Expr::Const(i.to_string()),
+            UMPL2Expr::Number(n) => Self::Const(Const::Number(n)),
+            UMPL2Expr::String(s) => Self::Const(Const::String(s.to_string())),
+            UMPL2Expr::Ident(i) => Self::Const(Const::Symbol(i.to_string())),
             UMPL2Expr::Application(a) => a
                 .into_iter()
                 .map(Into::into)
-                .rfold(Expr::Empty, |a, b| Expr::List(Box::new(b), Box::new(a))),
-            UMPL2Expr::Label(l) => Expr::Label(l.to_string()),
-            UMPL2Expr::FnParam(i) => Expr::Const(format!("'{}'", i)),
+                .rfold(Self::Const(Const::Empty), |a, b| {
+                    Self::Const(Const::List(Box::new(b), Box::new(a)))
+                }),
+            UMPL2Expr::Label(l) => Self::Label(l.to_string()),
+            UMPL2Expr::FnParam(i) => Self::Const(Const::Symbol(format!("'{i}'"))),
         }
     }
 }
