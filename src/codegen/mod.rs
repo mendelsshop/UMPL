@@ -37,6 +37,7 @@ mod loops;
 mod object;
 mod quotation;
 pub mod sicp;
+mod register_to_llvm;
 mod stdlib;
 
 /// needed for when we reach stoppers like stop or skip
