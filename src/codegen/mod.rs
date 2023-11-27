@@ -36,6 +36,7 @@ mod loops;
 mod object;
 mod quotation;
 pub mod register_to_llvm;
+pub mod register_to_llvm_more_opt;
 pub mod sicp;
 mod stdlib;
 
