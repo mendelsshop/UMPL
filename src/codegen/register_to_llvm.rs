@@ -397,8 +397,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn compile_const(&mut self, constant: Const) -> StructValue<'ctx> {
         match constant {
             Const::Empty => self.empty(),
-            Const::String(_) => self.empty(),
-            Const::Symbol(_) => self.empty(),
+            Const::String(s) => {
+                self.create_string(s)
+            }
+            Const::Symbol(s) => self.create_string(s), // TODO: intern the symbol
             Const::Number(n) => {
                 let number = self.context.f64_type().const_float(n);
                 self.make_object(&number, TypeIndex::number)
@@ -422,5 +424,17 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.make_object(&cons, TypeIndex::cons)
             }
         }
+    }
+
+    fn create_string(&mut self, s: String) -> StructValue<'ctx> {
+        let strlen = s.chars().count();
+        let global_str = self.builder.build_global_string_ptr(&s, &s).as_pointer_value();
+        let obj = self.types.string.const_zero();
+        let mut add_to_string = |  string_object, name, expr, index| {
+            self.builder
+                .build_insert_value(string_object, expr, index, &format!("insert {name}"))
+                .unwrap()
+        };
+        add_to_string(add_to_string(obj, "string length",self.context.i32_type().const_int( strlen as u64,false).as_basic_value_enum(), 0).into_struct_value(), "string data", global_str.as_basic_value_enum(), 1).into_struct_value()
     }
 }
