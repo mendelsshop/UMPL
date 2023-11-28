@@ -15,7 +15,7 @@ use inkwell::{
 use inkwell::{module::Linkage, types::BasicTypeEnum};
 use itertools::Itertools;
 
-use super::sicp::{Const, Expr, Goto, Instruction, Perform, Register, Operation};
+use super::sicp::{Const, Expr, Goto, Instruction, Operation, Perform, Register};
 
 macro_rules! fixed_map {
     (@inner $(#[$attrs:meta])* $struct:ident, <$($gen:tt),*>, $type:ty, $index:ty {$($fields:ident)*} fn $new:ident($($param:ident: $param_type:ty),*) -> $ret:ty $new_block:block) => {
@@ -364,7 +364,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
-        let args = action.args().to_vec().into_iter().map(|e|self.compile_expr(e));
+        let args: Vec<_> = action
+            .args()
+            .to_vec()
+            .into_iter()
+            .map(|e| self.compile_expr(e))
+            .collect();
         match action.op() {
             Operation::LookupVariableValue => todo!(),
             Operation::CompiledProcedureEnv => todo!(),
@@ -372,14 +377,61 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::DefineVariable => todo!(),
             Operation::ApplyPrimitiveProcedure => todo!(),
             Operation::ExtendEnvoirnment => todo!(),
-            Operation::Cons => todo!(),
+            Operation::Cons => {
+                let car = *args.first().unwrap();
+                let cdr = *args.get(1).unwrap();
+                self.make_cons(car, cdr)
+            }
             Operation::SetVariableValue => todo!(),
-            Operation::False => todo!(),
-            Operation::RandomBool => todo!(),
-            Operation::MakeCompiledProcedure => todo!(),
+            Operation::False => {
+                let boolean = self
+                    .builder
+                    .build_not(self.truthy(*args.first().unwrap()), "not truthy");
+                self.make_object(&boolean, TypeIndex::number)
+            }
+            Operation::RandomBool => {
+                let bool = self
+                    .builder
+                    .build_call(self.functions.rand, &[], "random bool")
+                    .try_as_basic_value()
+                    .unwrap_left();
+                let bool = self.builder.build_int_signed_rem(
+                    bool.into_int_value(),
+                    self.context.i32_type().const_int(2, false),
+                    "truncate to bool",
+                );
+
+                self.make_object(&bool, TypeIndex::number)
+            }
+            Operation::MakeCompiledProcedure => {
+                let compiled_procedure_string =
+                    self.create_string("compiled-procedure".to_string());
+                let compiled_procedure_string =
+                    self.make_object(&compiled_procedure_string, TypeIndex::string);
+                let compiled_procedure_entry = args.first().unwrap();
+                let compiled_procedure_env = args.get(1).unwrap();
+                let tail = self.empty();
+                let tail = self.make_cons(*compiled_procedure_env, tail);
+                let tail = self.make_cons(*compiled_procedure_entry, tail);
+                self.make_cons(compiled_procedure_string, tail)
+            }
             Operation::PrimitiveProcedure => todo!(),
         }
-        self.empty()
+    }
+
+    fn make_cons(&mut self, car: StructValue<'ctx>, cdr: StructValue<'ctx>) -> StructValue<'ctx> {
+        let cons = self.types.cons.const_zero();
+        let cons = self
+            .builder
+            .build_insert_value(cons, car, 0, "insert car - cons")
+            .unwrap()
+            .into_struct_value();
+        let cons = self
+            .builder
+            .build_insert_value(cons, cdr, 1, "insert cdr - cons")
+            .unwrap()
+            .into_struct_value();
+        self.make_object(&cons, TypeIndex::cons)
     }
 
     fn empty(&mut self) -> StructValue<'ctx> {
@@ -412,9 +464,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn compile_const(&mut self, constant: Const) -> StructValue<'ctx> {
         match constant {
             Const::Empty => self.empty(),
-            Const::String(s) => {
-                self.create_string(s)
-            }
+            Const::String(s) => self.create_string(s),
             Const::Symbol(s) => self.create_string(s), // TODO: intern the symbol
             Const::Number(n) => {
                 let number = self.context.f64_type().const_float(n);
@@ -443,13 +493,31 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
     fn create_string(&mut self, s: String) -> StructValue<'ctx> {
         let strlen = s.chars().count();
-        let global_str = self.builder.build_global_string_ptr(&s, &s).as_pointer_value();
+        let global_str = self
+            .builder
+            .build_global_string_ptr(&s, &s)
+            .as_pointer_value();
         let obj = self.types.string.const_zero();
-        let mut add_to_string = |  string_object, name, expr, index| {
+        let mut add_to_string = |string_object, name, expr, index| {
             self.builder
                 .build_insert_value(string_object, expr, index, &format!("insert {name}"))
                 .unwrap()
         };
-        add_to_string(add_to_string(obj, "string length",self.context.i32_type().const_int( strlen as u64,false).as_basic_value_enum(), 0).into_struct_value(), "string data", global_str.as_basic_value_enum(), 1).into_struct_value()
+        add_to_string(
+            add_to_string(
+                obj,
+                "string length",
+                self.context
+                    .i32_type()
+                    .const_int(strlen as u64, false)
+                    .as_basic_value_enum(),
+                0,
+            )
+            .into_struct_value(),
+            "string data",
+            global_str.as_basic_value_enum(),
+            1,
+        )
+        .into_struct_value()
     }
 }
