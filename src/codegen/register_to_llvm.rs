@@ -15,7 +15,7 @@ use inkwell::{
 use inkwell::{module::Linkage, types::BasicTypeEnum};
 use itertools::Itertools;
 
-use super::sicp::{Const, Expr, Goto, Instruction, Perform, Register};
+use super::sicp::{Const, Expr, Goto, Instruction, Perform, Register, Operation};
 
 macro_rules! fixed_map {
     (@inner $(#[$attrs:meta])* $struct:ident, <$($gen:tt),*>, $type:ty, $index:ty {$($fields:ident)*} fn $new:ident($($param:ident: $param_type:ty),*) -> $ret:ty $new_block:block) => {
@@ -364,6 +364,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
+        let args = action.args().to_vec().into_iter().map(|e|self.compile_expr(e));
+        match action.op() {
+            Operation::LookupVariableValue => todo!(),
+            Operation::CompiledProcedureEnv => todo!(),
+            Operation::CompiledProcedureEntry => todo!(),
+            Operation::DefineVariable => todo!(),
+            Operation::ApplyPrimitiveProcedure => todo!(),
+            Operation::ExtendEnvoirnment => todo!(),
+            Operation::Cons => todo!(),
+            Operation::SetVariableValue => todo!(),
+            Operation::False => todo!(),
+            Operation::RandomBool => todo!(),
+            Operation::MakeCompiledProcedure => todo!(),
+            Operation::PrimitiveProcedure => todo!(),
+        }
         self.empty()
     }
 

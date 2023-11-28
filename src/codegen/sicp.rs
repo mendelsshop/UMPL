@@ -158,6 +158,16 @@ pub struct Perform {
     args: Vec<Expr>,
 }
 
+impl Perform {
+    pub fn op(&self) -> &Operation {
+        &self.op
+    }
+
+    pub fn args(&self) -> &[Expr] {
+        self.args.as_ref()
+    }
+}
+
 impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let decamel = |str: String| {
