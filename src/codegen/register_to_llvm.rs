@@ -341,6 +341,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.compile_perform(p);
             }
             Instruction::Label(l) => {
+                let label = self.labels.get(&l);
+                self.builder.build_unconditional_branch(*label.unwrap());
                 self.builder.position_at_end(*self.labels.get(&l).unwrap());
             }
         }
@@ -371,18 +373,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .map(|e| self.compile_expr(e))
             .collect();
         match action.op() {
-            Operation::LookupVariableValue => todo!(),
-            Operation::CompiledProcedureEnv => todo!(),
-            Operation::CompiledProcedureEntry => todo!(),
-            Operation::DefineVariable => todo!(),
-            Operation::ApplyPrimitiveProcedure => todo!(),
-            Operation::ExtendEnvoirnment => todo!(),
+            Operation::LookupVariableValue => self.empty(),
+            Operation::CompiledProcedureEnv => self.empty(),
+            Operation::CompiledProcedureEntry => self.empty(),
+            Operation::DefineVariable => self.empty(),
+            Operation::ApplyPrimitiveProcedure => self.empty(),
+            Operation::ExtendEnvoirnment => self.empty(),
             Operation::Cons => {
                 let car = *args.first().unwrap();
                 let cdr = *args.get(1).unwrap();
                 self.make_cons(car, cdr)
             }
-            Operation::SetVariableValue => todo!(),
+            Operation::SetVariableValue => self.empty(),
             Operation::False => {
                 let boolean = self
                     .builder
@@ -415,7 +417,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let tail = self.make_cons(*compiled_procedure_entry, tail);
                 self.make_cons(compiled_procedure_string, tail)
             }
-            Operation::PrimitiveProcedure => todo!(),
+            Operation::PrimitiveProcedure => self.empty(),
         }
     }
 

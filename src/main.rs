@@ -18,6 +18,7 @@ use codegen::{
     sicp::{Linkage, Register},
 };
 use inkwell::{context::Context, passes::PassManager};
+use itertools::Itertools;
 
 use crate::{codegen::Compiler, macros::parse_and_expand};
 use clap::{Parser, Subcommand};
@@ -220,7 +221,8 @@ fn expand(file: &str) {
 fn sicp(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
-    let ir = program
+    println!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
+    let ir: Vec<_> = program
         .0
         .into_iter()
         .flat_map(|expr| {
@@ -229,10 +231,11 @@ fn sicp(file: &str) {
                 .to_vec()
         })
         .collect();
+    println!("{}", ir.iter().map(ToString::to_string).join("\n"));
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
     let mut codegen = CodeGen::new(&context, &builder, &module);
     codegen.compile(ir);
-    println!("{}", codegen.export_ir());
+    println!("\n{}", codegen.export_ir());
 }
