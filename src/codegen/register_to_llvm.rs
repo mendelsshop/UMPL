@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasher};
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -141,6 +141,7 @@ pub struct Types<'ctx> {
     cons: StructType<'ctx>,
     pointer: PointerType<'ctx>,
     types: TypeMap<'ctx>,
+    stack: StructType<'ctx>,
 }
 /// Important function that the compiler needs to access
 pub struct Functions<'ctx> {
@@ -185,6 +186,7 @@ pub struct CodeGen<'a, 'ctx> {
     types: Types<'ctx>,
     functions: Functions<'ctx>,
     flag: PointerValue<'ctx>,
+    stack: PointerValue<'ctx>,
 }
 
 impl<'a, 'ctx> CodeGen<'a, 'ctx> {
@@ -203,11 +205,13 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let object = context.struct_type(&[context.i32_type().into(), pointer.into()], false);
         let string = context.struct_type(&[context.i32_type().into(), pointer.into()], false);
         let cons = context.struct_type(&[pointer.into(), pointer.into()], false);
+        let stack = context.struct_type(&[object.into(), pointer.into()], false);
         let types = Types {
             object,
             string,
             cons,
             pointer,
+            stack,
             types: TypeMap::new(
                 context.struct_type(&[], false).into(),
                 context.bool_type().into(),
@@ -219,6 +223,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ),
         };
         Self {
+            stack: builder.build_alloca(string, "stack"),
             context,
             flag: builder.build_alloca(types.object, "flag"),
             builder,
@@ -335,8 +340,46 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         .build_indirect_branch(label, &self.labels.values().copied().collect_vec());
                 }
             },
-            Instruction::Save(_) => {}
-            Instruction::Restore(_) => {}
+            Instruction::Save(reg) => {
+                let prev_stack =
+                    self.builder
+                        .build_load(self.types.stack, self.stack, "load stack");
+                let prev_stack_ptr = self
+                    .builder
+                    .build_alloca(self.types.stack, "previous stack");
+                self.builder.build_store(prev_stack_ptr, prev_stack);
+                let new_stack = self.types.stack.const_zero();
+                let new_stack = self
+                    .builder
+                    .build_insert_value(new_stack, self.registers.get(reg), 0, "save register")
+                    .unwrap();
+
+                let new_stack = self
+                    .builder
+                    .build_insert_value(new_stack, prev_stack_ptr, 1, "save previous stack")
+                    .unwrap();
+                self.builder.build_store(self.stack, new_stack);
+            }
+            Instruction::Restore(reg) => {
+                let stack = self
+                    .builder
+                    .build_load(self.types.stack, self.stack, "stack");
+                let old_stack = self
+                    .builder
+                    .build_extract_value(stack.into_struct_value(), 1, "old stack")
+                    .unwrap();
+                let current = self
+                    .builder
+                    .build_extract_value(stack.into_struct_value(), 0, "current stack")
+                    .unwrap();
+                self.builder.build_store(self.registers.get(reg), current);
+                let old_stack = self.builder.build_load(
+                    self.types.stack,
+                    old_stack.into_pointer_value(),
+                    "load previous stack",
+                );
+                self.builder.build_store(self.stack, old_stack);
+            }
             Instruction::Perform(p) => {
                 self.compile_perform(p);
             }
