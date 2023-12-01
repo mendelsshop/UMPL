@@ -176,6 +176,14 @@ impl<'ctx> Functions<'ctx> {
     }
 }
 
+macro_rules! make_accessors {
+    ($name:ident $outer:ident $inner:ident) => {
+        pub fn $name(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+            self.$outer(self.$inner(cons))
+        }
+    };
+}
+
 pub struct CodeGen<'a, 'ctx> {
     context: &'ctx Context,
     builder: &'a Builder<'ctx>,
@@ -194,6 +202,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder.build_extract_value(cond_struct, 0, "get_type")
     }
     extract!(get_label, label, "label");
+    extract!(get_cons, cons, "cons");
     pub fn new(
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
@@ -223,7 +232,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ),
         };
         Self {
-            stack: builder.build_alloca(string, "stack"),
+            stack: builder.build_alloca(stack, "stack"),
             context,
             flag: builder.build_alloca(types.object, "flag"),
             builder,
@@ -417,8 +426,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .collect();
         match action.op() {
             Operation::LookupVariableValue => self.empty(),
-            Operation::CompiledProcedureEnv => self.empty(),
-            Operation::CompiledProcedureEntry => self.empty(),
+            Operation::CompiledProcedureEnv => {
+                let proc = args[0];
+                self.make_caddr(proc)
+            }
+            Operation::CompiledProcedureEntry => {
+                let proc = args[0];
+                self.make_cadr(proc)
+            }
             Operation::DefineVariable => self.empty(),
             Operation::ApplyPrimitiveProcedure => self.empty(),
             Operation::ExtendEnvoirnment => self.empty(),
@@ -452,7 +467,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let compiled_procedure_string =
                     self.create_string("compiled-procedure".to_string());
                 let compiled_procedure_string =
-                    self.make_object(&compiled_procedure_string, TypeIndex::string);
+                    self.make_object(&compiled_procedure_string, TypeIndex::symbol);
                 let compiled_procedure_entry = args.first().unwrap();
                 let compiled_procedure_env = args.get(1).unwrap();
                 let tail = self.empty();
@@ -463,6 +478,50 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::PrimitiveProcedure => self.empty(),
         }
     }
+    fn make_car(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+        let cons = self.get_cons(cons).into_struct_value();
+        self.builder
+            .build_extract_value(cons, 0, "car")
+            .unwrap()
+            .into_struct_value()
+    }
+
+    fn make_cdr(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+        let cons = self.get_cons(cons).into_struct_value();
+        self.builder
+            .build_extract_value(cons, 1, "cdr")
+            .unwrap()
+            .into_struct_value()
+    }
+
+    make_accessors!(make_caar make_car make_car);
+    make_accessors!(make_cadr make_car make_cdr);
+    make_accessors!(make_cdar make_cdr make_car);
+    make_accessors!(make_cddr make_cdr make_cdr);
+    make_accessors!(make_caaar make_car make_caar);
+    make_accessors!(make_caadr make_car make_cadr);
+    make_accessors!(make_cadar make_car make_cdar);
+    make_accessors!(make_caddr make_car make_cddr);
+    make_accessors!(make_cdaar make_cdr make_caar);
+    make_accessors!(make_cdadr make_cdr make_cadr);
+    make_accessors!(make_cddar make_cdr make_cdar);
+    make_accessors!(make_cdddr make_cdr make_cddr);
+    make_accessors!(make_caaaar make_car make_caaar);
+    make_accessors!(make_caaadr make_car make_caadr);
+    make_accessors!(make_caadar make_car make_cadar);
+    make_accessors!(make_caaddr make_car make_caddr);
+    make_accessors!(make_cadaar make_car make_cdaar);
+    make_accessors!(make_cadadr make_car make_cdadr);
+    make_accessors!(make_caddar make_car make_cddar);
+    make_accessors!(make_cadddr make_car make_cdddr);
+    make_accessors!(make_cdaaar make_cdr make_caaar);
+    make_accessors!(make_cdaadr make_cdr make_caadr);
+    make_accessors!(make_cdadar make_cdr make_cadar);
+    make_accessors!(make_cdaddr make_cdr make_caddr);
+    make_accessors!(make_cddaar make_cdr make_cdaar);
+    make_accessors!(make_cddadr make_cdr make_cdadr);
+    make_accessors!(make_cdddar make_cdr make_cddar);
+    make_accessors!(make_cddddr make_cdr make_cdddr);
 
     fn make_cons(&mut self, car: StructValue<'ctx>, cdr: StructValue<'ctx>) -> StructValue<'ctx> {
         let cons = self.types.cons.const_zero();

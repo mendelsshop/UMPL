@@ -153,6 +153,7 @@ impl fmt::Display for Goto {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+// TODO: consider combining the Operation enum with this so that each operation can declare its arity
 pub struct Perform {
     op: Operation,
     args: Vec<Expr>,
