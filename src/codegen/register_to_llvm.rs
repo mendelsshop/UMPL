@@ -436,7 +436,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             }
             Operation::DefineVariable => self.empty(),
             Operation::ApplyPrimitiveProcedure => self.empty(),
-            Operation::ExtendEnvoirnment => self.empty(),
+            Operation::ExtendEnvoirnment => {
+                let vars = args[0];
+                let vals = args[1];
+                let env = args[2];
+
+                let frame = self.make_cons(vals, vals);
+                self.make_cons(frame, env)
+            }
             Operation::Cons => {
                 let car = *args.first().unwrap();
                 let cdr = *args.get(1).unwrap();
@@ -478,20 +485,50 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::PrimitiveProcedure => self.empty(),
         }
     }
-    fn make_car(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+
+    fn car(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
         let cons = self.get_cons(cons).into_struct_value();
         self.builder
-            .build_extract_value(cons, 0, "car")
+            .build_extract_value(cons, 0, "get car")
             .unwrap()
+            .into_pointer_value()
+    }
+
+    fn cdr(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
+        let cons = self.get_cons(cons).into_struct_value();
+        self.builder
+            .build_extract_value(cons, 1, "get cdr")
+            .unwrap()
+            .into_pointer_value()
+    }
+    fn make_car(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+        self.builder
+            .build_load(self.types.object, self.car(cons), "load car")
             .into_struct_value()
     }
 
     fn make_cdr(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
-        let cons = self.get_cons(cons).into_struct_value();
         self.builder
-            .build_extract_value(cons, 1, "cdr")
-            .unwrap()
+            .build_load(self.types.object, self.cdr(cons), "load cdr")
             .into_struct_value()
+    }
+
+    fn make_set_car(
+        &self,
+        cons: StructValue<'ctx>,
+        new_value: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        self.builder.build_store(self.car(cons), new_value);
+        self.empty()
+    }
+
+    fn make_set_cdr(
+        &self,
+        cons: StructValue<'ctx>,
+        new_value: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        self.builder.build_store(self.cdr(cons), new_value);
+        self.empty()
     }
 
     make_accessors!(make_caar make_car make_car);
@@ -538,7 +575,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.make_object(&cons, TypeIndex::cons)
     }
 
-    fn empty(&mut self) -> StructValue<'ctx> {
+    fn empty(&self) -> StructValue<'ctx> {
         self.types.object.const_zero()
     }
 
