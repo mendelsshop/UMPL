@@ -146,6 +146,7 @@ pub struct Types<'ctx> {
 /// Important function that the compiler needs to access
 pub struct Functions<'ctx> {
     exit: FunctionValue<'ctx>,
+    strncmp: FunctionValue<'ctx>,
     printf: FunctionValue<'ctx>,
     rand: FunctionValue<'ctx>,
 }
@@ -172,7 +173,24 @@ impl<'ctx> Functions<'ctx> {
             ),
             Some(Linkage::External),
         );
-        Self { exit, printf, rand }
+        let strncmp = module.add_function(
+            "strncmp",
+            context.i32_type().fn_type(
+                &[
+                    context.i8_type().ptr_type(AddressSpace::default()).into(),
+                    context.i8_type().ptr_type(AddressSpace::default()).into(),
+                    context.i32_type().into(),
+                ],
+                false,
+            ),
+            Some(Linkage::External),
+        );
+        Self {
+            exit,
+            printf,
+            rand,
+            strncmp,
+        }
     }
 }
 
@@ -415,6 +433,28 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             }
             Expr::Op(p) => self.compile_perform(p),
         }
+    }
+
+    // lookup variable for set! and plain variable lookup
+    fn lookup_variable(&self, var: StructValue<'ctx>, env: StructValue<'ctx>) -> StructValue<'ctx> {
+        let lookup_entry_bb = self.context.append_basic_block(self.main, "lookup-entry");
+        let unbound_bb = self.context.append_basic_block(self.main, "unbound");
+        let lookup_bb = self.context.append_basic_block(self.main, "lookup");
+        let scan_bb = self.context.append_basic_block(self.main, "scan");
+        let next_env_bb = self.context.append_basic_block(self.main, "next-env");
+        let check_bb = self.context.append_basic_block(self.main, "scan");
+        let found_bb = self.context.append_basic_block(self.main, "found");
+        let scan_next_bb = self.context.append_basic_block(self.main, "scan-next");
+
+        let env_ptr = self.builder.build_alloca(self.types.object, "env");
+        self.builder.build_store(env_ptr, env);
+
+        self.builder.position_at_end(unbound_bb);
+        self.exit("unbounded variable", 1);
+
+        self.builder.position_at_end(lookup_entry_bb);
+
+        self.empty()
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
