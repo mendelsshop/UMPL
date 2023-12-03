@@ -48,7 +48,7 @@ macro_rules! fixed_map {
 }
 
 macro_rules! extract {
-    ($fn_name:ident, $type:ident, $name:literal) => {
+    ($fn_name:ident, $unsafe:ident, $type:ident, $name:literal) => {
         pub(super) fn $fn_name(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
             let current_fn = self.main;
             let prefix = |end| format!("extract-{}:{end}", $name);
@@ -74,6 +74,11 @@ macro_rules! extract {
             self.exit(&format!("type mismtatch expected {}\n", $name), 1);
 
             self.builder.position_at_end(ret_block);
+            self.$unsafe(val)
+        }
+        pub(super) fn $unsafe(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
+            let current_fn = self.main;
+            let prefix = |end| format!("extract-{}:{end}", $name);
             let pointer = self
                 .builder
                 .build_extract_value(val, 1, &prefix("return"))
@@ -202,6 +207,21 @@ macro_rules! make_accessors {
     };
 }
 
+macro_rules! is_type {
+    ($name:ident,$type:literal,$typeindex:ident) => {
+        fn $name(&self, obj: StructValue<'ctx>) -> IntValue<'ctx> {
+            let arg_type = self.extract_type(obj).unwrap();
+            self.builder.build_int_compare(
+                inkwell::IntPredicate::EQ,
+                arg_type.into_int_value(),
+                self.context
+                    .i32_type()
+                    .const_int(TypeIndex::$typeindex as u64, false),
+                "is hempty",
+            )
+        }
+    };
+}
 pub struct CodeGen<'a, 'ctx> {
     context: &'ctx Context,
     builder: &'a Builder<'ctx>,
@@ -219,8 +239,16 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn extract_type(&self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
         self.builder.build_extract_value(cond_struct, 0, "get_type")
     }
-    extract!(get_label, label, "label");
-    extract!(get_cons, cons, "cons");
+    is_type!(is_hempty, "hempty", empty);
+    is_type!(is_number, "number", number);
+    is_type!(is_boolean, "boolean", bool);
+    is_type!(is_string, "string", string);
+    is_type!(is_symbol, "symbol", symbol);
+    is_type!(is_cons, "cons", cons);
+    is_type!(is_label, "label", label);
+    extract!(get_label, unsafe_get_label, label, "label");
+    extract!(get_cons, unsafe_get_cons, cons, "cons");
+    extract!(get_symbol, unsafe_get_symbol, symbol, "symbol");
     pub fn new(
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
@@ -249,6 +277,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 cons.into(),
             ),
         };
+        let registers = RegiMap::new(builder, object);
+        // the empty environment
+        builder.build_store(registers.get(Register::Env), types.object.const_zero());
         Self {
             stack: builder.build_alloca(stack, "stack"),
             context,
@@ -257,7 +288,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             module,
             main,
             labels: HashMap::new(),
-            registers: RegiMap::new(builder, object),
+            registers,
             types,
             functions: Functions::new(module, context),
         }
@@ -436,6 +467,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 
     // lookup variable for set! and plain variable lookup
+    // returns a tuple contatining the cons of the found variable and the rest of the vars in the frame
     fn lookup_variable(&self, var: StructValue<'ctx>, env: StructValue<'ctx>) -> StructValue<'ctx> {
         let lookup_entry_bb = self.context.append_basic_block(self.main, "lookup-entry");
         let unbound_bb = self.context.append_basic_block(self.main, "unbound");
@@ -448,13 +480,92 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
         let env_ptr = self.builder.build_alloca(self.types.object, "env");
         self.builder.build_store(env_ptr, env);
+        self.builder.build_unconditional_branch(lookup_entry_bb);
 
         self.builder.position_at_end(unbound_bb);
         self.exit("unbounded variable", 1);
 
         self.builder.position_at_end(lookup_entry_bb);
+        let env_load = self
+            .builder
+            .build_load(self.types.object, env_ptr, "load env");
+        self.builder.build_conditional_branch(
+            self.is_hempty(env_load.into_struct_value()),
+            unbound_bb,
+            lookup_bb,
+        );
 
-        self.empty()
+        self.builder.position_at_end(lookup_bb);
+        let frame = self.make_car(env_load.into_struct_value());
+        let vars_pointer = self.builder.build_alloca(self.types.object, "vars");
+        let vals_pointer = self.builder.build_alloca(self.types.object, "vals");
+        let vars = self.make_car(frame);
+        self.builder.build_store(vars_pointer, self.make_car(frame));
+        self.builder.build_store(vals_pointer, self.make_cdr(frame));
+        self.builder.build_unconditional_branch(scan_bb);
+
+        self.builder.position_at_end(scan_bb);
+        self.builder
+            .build_conditional_branch(self.is_hempty(vars), next_env_bb, check_bb);
+
+        self.builder.position_at_end(next_env_bb);
+        let new_env = self.make_cdr(env_load.into_struct_value());
+        self.builder.build_store(env_ptr, new_env);
+
+        self.builder.position_at_end(check_bb);
+        let vars_load = self
+            .builder
+            .build_load(self.types.object, vars_pointer, "load vars")
+            .into_struct_value();
+        let vars_car = self.make_car(vars_load);
+        self.builder.build_conditional_branch(
+            self.compare_symbol(var, vars_car),
+            found_bb,
+            scan_next_bb,
+        );
+
+        self.builder.position_at_end(scan_next_bb);
+        let vals_load = self
+            .builder
+            .build_load(self.types.object, vals_pointer, "load vals")
+            .into_struct_value();
+        self.builder.build_store(vars_pointer, self.cdr(vars_load));
+        self.builder.build_store(vals_pointer, self.cdr(vals_load));
+        self.builder.build_unconditional_branch(scan_bb);
+
+        self.builder.build_unconditional_branch(found_bb);
+        vals_load
+    }
+
+    fn compare_symbol(&self, s1: StructValue<'ctx>, s2: StructValue<'ctx>) -> IntValue<'ctx> {
+        let s1 = self.unsafe_get_symbol(s1).into_struct_value();
+        let s2 = self.unsafe_get_symbol(s2).into_struct_value();
+        let len1 = self
+            .builder
+            .build_extract_value(s1, 0, "get str length")
+            .unwrap()
+            .into_int_value();
+        let len2 = self
+            .builder
+            .build_extract_value(s2, 0, "get str length")
+            .unwrap()
+            .into_int_value();
+        let s1 = self.builder.build_extract_value(s1, 1, "get str").unwrap();
+        let s2 = self.builder.build_extract_value(s2, 1, "get str").unwrap();
+        let str_len_matches =
+            self.builder
+                .build_int_compare(IntPredicate::EQ, len1, len2, "len matches");
+        let str_cmp = self
+            .builder
+            .build_call(
+                self.functions.strncmp,
+                &[s1.into(), s2.into(), len1.into()],
+                "strcmp",
+            )
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_int_value();
+        self.builder.build_and(str_len_matches, str_cmp, "eq?")
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
@@ -465,7 +576,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .map(|e| self.compile_expr(e))
             .collect();
         match action.op() {
-            Operation::LookupVariableValue => self.empty(),
+            Operation::LookupVariableValue => {
+                let var = args[0];
+                let env = args[1];
+                self.make_car(self.lookup_variable(var, env))
+            }
             Operation::CompiledProcedureEnv => {
                 let proc = args[0];
                 self.make_caddr(proc)
@@ -489,7 +604,13 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let cdr = *args.get(1).unwrap();
                 self.make_cons(car, cdr)
             }
-            Operation::SetVariableValue => self.empty(),
+            Operation::SetVariableValue => {
+                let var = args[0];
+                let new_val = args[1];
+                let env = args[2];
+                self.make_set_car(self.lookup_variable(var, env), new_val);
+                self.empty()
+            }
             Operation::False => {
                 let boolean = self
                     .builder
