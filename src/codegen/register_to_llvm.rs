@@ -49,7 +49,7 @@ macro_rules! fixed_map {
 }
 
 macro_rules! extract {
-    ($fn_name:ident, $unsafe:ident, $type:ident, $name:literal) => {
+    ($fn_name:ident, $unchecked:ident, $type:ident, $name:literal) => {
         pub(super) fn $fn_name(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
             let current_fn = self.main;
             let prefix = |end| format!("extract-{}:{end}", $name);
@@ -71,9 +71,9 @@ macro_rules! extract {
                 .build_conditional_branch(condition, ret_block, self.error_block);
 
             self.builder.position_at_end(ret_block);
-            self.$unsafe(val)
+            self.$unchecked(val)
         }
-        pub(super) fn $unsafe(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
+        pub(super) fn $unchecked(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
             let current_fn = self.main;
             let prefix = |end| format!("extract-{}:{end}", $name);
             let pointer = self
@@ -252,10 +252,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     is_type!(is_symbol, "symbol", symbol);
     is_type!(is_cons, "cons", cons);
     is_type!(is_label, "label", label);
-    extract!(get_primitive, unsafe_get_primitive, primitive, "primitive");
-    extract!(get_label, unsafe_get_label, label, "label");
-    extract!(get_cons, unsafe_get_cons, cons, "cons");
-    extract!(get_symbol, unsafe_get_symbol, symbol, "symbol");
+    extract!(get_primitive, unchecked_get_primitive, primitive, "primitive");
+    extract!(get_label, unchecked_get_label, label, "label");
+    extract!(get_cons, unchecked_get_cons, cons, "cons");
+    extract!(get_symbol, unchecked_get_symbol, symbol, "symbol");
     pub fn new(
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
@@ -343,11 +343,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     pub fn set_error(&self, reason: &str, code: i32) {
         self.error_phi.add_incoming(&[(
             &self.types.error.const_named_struct(&[
-                self.context.i32_type().const_int(code as u64, false).into(),
                 self.builder
                     .build_global_string_ptr(reason, "error exit")
                     .as_basic_value_enum()
                     .into(),
+                self.context.i32_type().const_int(code as u64, false).into(),
             ]),
             self.builder.get_insert_block().unwrap(),
         )]);
@@ -376,12 +376,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             });
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
-        // println!("{}", self.export_ir());
+        println!("{}", self.export_ir());
         self.fpm.run_on(&self.main);
         let fpm = PassManager::create(());
         // TODO: more optimizations
-        fpm.add_function_inlining_pass();
-        fpm.add_merge_functions_pass();
+        // fpm.add_function_inlining_pass();
+        // fpm.add_merge_functions_pass();
         fpm.add_global_dce_pass();
         fpm.add_ipsccp_pass();
         // makes hard to debug llvm ir
@@ -389,7 +389,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         fpm.add_constant_merge_pass();
 
         fpm.add_new_gvn_pass();
-        fpm.add_instruction_combining_pass();
+        // fpm.add_instruction_combining_pass();
         fpm.add_reassociate_pass();
         fpm.add_gvn_pass();
         fpm.add_basic_alias_analysis_pass();
@@ -397,8 +397,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         fpm.add_aggressive_inst_combiner_pass();
         // // doesn't work with current goto implementation
         // fpm.add_cfg_simplification_pass();
-        fpm.add_aggressive_dce_pass();
-        fpm.add_function_inlining_pass();
+        // fpm.add_aggressive_dce_pass();
+        // fpm.add_function_inlining_pass();
         fpm.add_strip_dead_prototypes_pass();
 
         fpm.run_on(self.module);
@@ -574,12 +574,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         );
 
         self.builder.position_at_end(lookup_bb);
-        let frame = self.make_car(env_load.into_struct_value());
+        let frame = self.make_unchecked_car(env_load.into_struct_value());
         let vars_pointer = self.builder.build_alloca(self.types.object, "vars");
         let vals_pointer = self.builder.build_alloca(self.types.object, "vals");
-        let vars = self.make_car(frame);
-        self.builder.build_store(vars_pointer, self.make_car(frame));
-        self.builder.build_store(vals_pointer, self.make_cdr(frame));
+        let vars = self.make_unchecked_car(frame);
+        self.builder.build_store(vars_pointer, self.make_unchecked_car(frame));
+        self.builder.build_store(vals_pointer, self.make_unchecked_cdr(frame));
         self.builder.build_unconditional_branch(scan_bb);
 
         self.builder.position_at_end(scan_bb);
@@ -587,15 +587,16 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .build_conditional_branch(self.is_hempty(vars), next_env_bb, check_bb);
 
         self.builder.position_at_end(next_env_bb);
-        let new_env = self.make_cdr(env_load.into_struct_value());
+        let new_env = self.make_unchecked_cdr(env_load.into_struct_value());
         self.builder.build_store(env_ptr, new_env);
+        self.builder.build_unconditional_branch(lookup_entry_bb);
 
         self.builder.position_at_end(check_bb);
         let vars_load = self
             .builder
             .build_load(self.types.object, vars_pointer, "load vars")
             .into_struct_value();
-        let vars_car = self.make_car(vars_load);
+        let vars_car = self.make_unchecked_car(vars_load);
         self.builder.build_conditional_branch(
             self.compare_symbol(var, vars_car),
             found_bb,
@@ -607,17 +608,17 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .builder
             .build_load(self.types.object, vals_pointer, "load vals")
             .into_struct_value();
-        self.builder.build_store(vars_pointer, self.cdr(vars_load));
-        self.builder.build_store(vals_pointer, self.cdr(vals_load));
+        self.builder.build_store(vars_pointer, self.make_unchecked_cdr(vars_load));
+        self.builder.build_store(vals_pointer, self.make_unchecked_cdr(vals_load));
         self.builder.build_unconditional_branch(scan_bb);
 
-        self.builder.build_unconditional_branch(found_bb);
+        self.builder.position_at_end(found_bb);
         vals_load
     }
 
     fn compare_symbol(&self, s1: StructValue<'ctx>, s2: StructValue<'ctx>) -> IntValue<'ctx> {
-        let s1 = self.unsafe_get_symbol(s1).into_struct_value();
-        let s2 = self.unsafe_get_symbol(s2).into_struct_value();
+        let s1 = self.unchecked_get_symbol(s1).into_struct_value();
+        let s2 = self.unchecked_get_symbol(s2).into_struct_value();
         let len1 = self
             .builder
             .build_extract_value(s1, 0, "get str length")
@@ -643,7 +644,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value();
-        self.builder.build_and(str_len_matches, str_cmp, "eq?")
+        self.builder.build_and(str_len_matches, self.builder.build_int_cast(str_cmp,self.context.bool_type(), ""), "eq?")
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
@@ -660,7 +661,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::LookupVariableValue => {
                 let var = args[0];
                 let env = args[1];
-                self.make_car(self.lookup_variable(var, env))
+                self.make_unchecked_car(self.lookup_variable(var, env))
             }
             Operation::CompiledProcedureEnv => {
                 let proc = args[0];
@@ -674,17 +675,17 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let var = args[0];
                 let val = args[1];
                 let env = args[2];
-                let frame = self.make_car(env);
+                let frame = self.make_unchecked_car(env);
                 // set the vars part of the frame
-                self.make_set_car(frame, self.make_cons(var, self.make_car(frame)));
+                self.make_unchecked_set_car(frame, self.make_cons(var, self.make_unchecked_car(frame)));
                 // set the vals part of the frame
-                self.make_set_cdr(frame, self.make_cons(val, self.make_cdr(frame)));
+                self.make_unchecked_set_cdr(frame, self.make_cons(val, self.make_unchecked_cdr(frame)));
                 self.empty()
             }
             Operation::ApplyPrimitiveProcedure => {
                 let proc = args[0];
                 let argl = args[1];
-                let proc = self.unsafe_get_primitive(proc);
+                let proc = self.unchecked_get_primitive(proc);
                 self.builder
                     .build_indirect_call(
                         self.types.primitive,
@@ -713,7 +714,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let var = args[0];
                 let new_val = args[1];
                 let env = args[2];
-                self.make_set_car(self.lookup_variable(var, env), new_val);
+                self.make_unchecked_set_car(self.lookup_variable(var, env), new_val);
                 self.empty()
             }
             Operation::False => {
@@ -754,7 +755,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         }
     }
 
-    // TODO: make unsafe versions of *car and *cdr function to avoid dealing with br(s) added self.get_cons (which is causing problems with multiple br(s) per block in variable lookup and other places)
+    // TODO: make unchecked versions of *car and *cdr function to avoid dealing with br(s) added self.get_cons (which is causing problems with multiple br(s) per block in variable lookup and other places)
     // or turn car,cdr into llvm functions 
     fn car(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
         let cons = self.get_cons(cons).into_struct_value();
@@ -798,6 +799,50 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
         self.builder.build_store(self.cdr(cons), new_value);
+        self.empty()
+    }
+    fn unchecked_car(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
+        let cons = self.unchecked_get_cons(cons).into_struct_value();
+        self.builder
+            .build_extract_value(cons, 0, "get car")
+            .unwrap()
+            .into_pointer_value()
+    }
+
+    fn unchecked_cdr(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
+        let cons = self.unchecked_get_cons(cons).into_struct_value();
+        self.builder
+            .build_extract_value(cons, 1, "get cdr")
+            .unwrap()
+            .into_pointer_value()
+    }
+    fn make_unchecked_car(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+        self.builder
+            .build_load(self.types.object, self.unchecked_car(cons), "load car")
+            .into_struct_value()
+    }
+
+    fn make_unchecked_cdr(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
+        self.builder
+            .build_load(self.types.object, self.unchecked_cdr(cons), "load cdr")
+            .into_struct_value()
+    }
+
+    fn make_unchecked_set_car(
+        &self,
+        cons: StructValue<'ctx>,
+        new_value: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        self.builder.build_store(self.unchecked_car(cons), new_value);
+        self.empty()
+    }
+
+    fn make_unchecked_set_cdr(
+        &self,
+        cons: StructValue<'ctx>,
+        new_value: StructValue<'ctx>,
+    ) -> StructValue<'ctx> {
+        self.builder.build_store(self.unchecked_cdr(cons), new_value);
         self.empty()
     }
 
