@@ -172,9 +172,13 @@ impl Perform {
 impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let decamel = |str: String| {
-            str.split_inclusive(|x: char| x.is_uppercase())
-                .map(str::to_lowercase)
-                .join("-")
+            str.chars().fold("".to_string(), |str, c| {
+                if c.is_ascii_uppercase() && !str.is_empty() {
+                    str + &format!("-{}", c.to_ascii_lowercase())
+                } else {
+                    str + &c.to_ascii_lowercase().to_string()
+                }
+            })
         };
         let kebabified = decamel(format!("{self:?}"));
         match self {
@@ -629,7 +633,7 @@ fn compile_lambda_body(mut lambda: Vec<UMPL2Expr>, proc_entry: String) -> Instru
                 Expr::Const(Const::List(Box::new(b), Box::new(a)))
             })
     };
-
+    // TODO: do aritty checks by either going through argl and getting the length, having a register that contains the length of the arguments, or combine the 2 together and argl could be a pair of the length of the arguements and the arguements
     append_instruction_sequnce(
         InstructionSequnce::new(
             hashset!(Register::Env, Register::Proc, Register::Argl),
@@ -666,6 +670,7 @@ fn compile_application(
     linkage: Linkage,
 ) -> InstructionSequnce {
     let proc_code = compile(exp[0].clone(), Register::Proc, Linkage::Next);
+    // TODO: make it non strict by essentially turning each argument into zero parameter function and then when we need to unthunk the parameter we just call the function with the env
     let operand_codes = exp[1..]
         .iter()
         .map(|exp| compile(exp.clone(), Register::Val, Linkage::Next))

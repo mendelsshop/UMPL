@@ -4,4 +4,4 @@
 !(d f f)
 !(a 7 (y 66) (if 7 x y  ) t)
 (4)
-9
+(define foo (lambda (0) 5))

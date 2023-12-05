@@ -5,7 +5,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    types::{PointerType, StructType},
+    types::{FunctionType, PointerType, StructType},
     values::{
         AggregateValue, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
         StructValue,
@@ -92,7 +92,7 @@ macro_rules! extract {
     };
 }
 
-fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symbol label cons}
+fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symbol label cons primitive}
       fn new(
         empty: BasicTypeEnum<'ctx>,
         bool: BasicTypeEnum<'ctx>,
@@ -100,7 +100,8 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
         string: BasicTypeEnum<'ctx>,
         symbol: BasicTypeEnum<'ctx>,
         label: BasicTypeEnum<'ctx>,
-        cons: BasicTypeEnum<'ctx>
+        cons: BasicTypeEnum<'ctx>,
+        primitive: BasicTypeEnum<'ctx>
     ) -> Self {
         Self {
             empty,
@@ -110,6 +111,7 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
             symbol,
             label,
             cons,
+            primitive,
         }
     }
 );
@@ -138,6 +140,7 @@ pub enum TypeIndex {
     symbol = 4,
     label = 5,
     cons = 6,
+    primitive = 7,
 }
 
 pub struct Types<'ctx> {
@@ -147,6 +150,7 @@ pub struct Types<'ctx> {
     pointer: PointerType<'ctx>,
     types: TypeMap<'ctx>,
     stack: StructType<'ctx>,
+    primitive_type: FunctionType<'ctx>,
 }
 /// Important function that the compiler needs to access
 pub struct Functions<'ctx> {
@@ -241,6 +245,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
     is_type!(is_hempty, "hempty", empty);
     is_type!(is_number, "number", number);
+    is_type!(is_primitive, "primitive", primitive);
     is_type!(is_boolean, "boolean", bool);
     is_type!(is_string, "string", string);
     is_type!(is_symbol, "symbol", symbol);
@@ -261,12 +266,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let string = context.struct_type(&[context.i32_type().into(), pointer.into()], false);
         let cons = context.struct_type(&[pointer.into(), pointer.into()], false);
         let stack = context.struct_type(&[object.into(), pointer.into()], false);
+        let primitive_type = object.fn_type(&[object.into()], false);
         let types = Types {
             object,
             string,
             cons,
             pointer,
             stack,
+            primitive_type,
             types: TypeMap::new(
                 context.struct_type(&[], false).into(),
                 context.bool_type().into(),
@@ -275,6 +282,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 string.into(),
                 pointer.into(),
                 cons.into(),
+                primitive_type.ptr_type(AddressSpace::default()).into(),
             ),
         };
         let registers = RegiMap::new(builder, object);
@@ -372,6 +380,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let flag = self
                     .builder
                     .build_load(self.types.object, self.flag, "load flag");
+                // TODO: hack technically (in most cases) if we have a branch, the next instruction after it will be a label so we dont need a new block for each branch but rather we should either "peek" ahead to the next instruction to obtain the label
+                // or encode the label as part of the branch variant
                 let next_label = self.context.append_basic_block(self.main, "next-block");
                 self.builder.build_conditional_branch(
                     self.truthy(flag.into_struct_value()),
@@ -589,7 +599,17 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let proc = args[0];
                 self.make_cadr(proc)
             }
-            Operation::DefineVariable => self.empty(),
+            Operation::DefineVariable => {
+                let var = args[0];
+                let val = args[1];
+                let env = args[2];
+                let frame = self.make_car(env);
+                // set the vars part of the frame
+                self.make_set_car(frame, self.make_cons(var, self.make_car(frame)));
+                // set the vals part of the frame
+                self.make_set_cdr(frame, self.make_cons(val, self.make_cdr(frame)));
+                self.empty()
+            }
             Operation::ApplyPrimitiveProcedure => self.empty(),
             Operation::ExtendEnvoirnment => {
                 let vars = args[0];
@@ -643,7 +663,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let tail = self.make_cons(*compiled_procedure_entry, tail);
                 self.make_cons(compiled_procedure_string, tail)
             }
-            Operation::PrimitiveProcedure => self.empty(),
+            Operation::PrimitiveProcedure => {
+                self.make_object(&self.is_primitive(args[0]), TypeIndex::bool)
+            }
         }
     }
 
@@ -721,7 +743,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     make_accessors!(make_cdddar make_cdr make_cddar);
     make_accessors!(make_cddddr make_cdr make_cdddr);
 
-    fn make_cons(&mut self, car: StructValue<'ctx>, cdr: StructValue<'ctx>) -> StructValue<'ctx> {
+    fn make_cons(&self, car: StructValue<'ctx>, cdr: StructValue<'ctx>) -> StructValue<'ctx> {
         let cons = self.types.cons.const_zero();
         let cons = self
             .builder
