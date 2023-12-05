@@ -5,6 +5,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
+    passes::PassManager,
     types::{FunctionType, PointerType, StructType},
     values::{
         AggregateValue, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
@@ -55,9 +56,6 @@ macro_rules! extract {
             let ret_block = self
                 .context
                 .append_basic_block(current_fn, &prefix("return"));
-            let error_block = self
-                .context
-                .append_basic_block(current_fn, &prefix("error"));
 
             let ty = self.extract_type(val).unwrap().into_int_value();
             let condition = self.builder.build_int_compare(
@@ -68,10 +66,9 @@ macro_rules! extract {
                     .const_int(TypeIndex::$type as u64, false),
                 &prefix("cmp-type"),
             );
+            self.set_error(&format!("type mismtatch expected {}\n", $name), 1);
             self.builder
-                .build_conditional_branch(condition, ret_block, error_block);
-            self.builder.position_at_end(error_block);
-            self.exit(&format!("type mismtatch expected {}\n", $name), 1);
+                .build_conditional_branch(condition, ret_block, self.error_block);
 
             self.builder.position_at_end(ret_block);
             self.$unsafe(val)
@@ -150,7 +147,8 @@ pub struct Types<'ctx> {
     pointer: PointerType<'ctx>,
     types: TypeMap<'ctx>,
     stack: StructType<'ctx>,
-    primitive_type: FunctionType<'ctx>,
+    primitive: FunctionType<'ctx>,
+    error: StructType<'ctx>,
 }
 /// Important function that the compiler needs to access
 pub struct Functions<'ctx> {
@@ -236,7 +234,10 @@ pub struct CodeGen<'a, 'ctx> {
     types: Types<'ctx>,
     functions: Functions<'ctx>,
     flag: PointerValue<'ctx>,
+    fpm: &'a PassManager<FunctionValue<'ctx>>,
     stack: PointerValue<'ctx>,
+    error_block: BasicBlock<'ctx>,
+    error_phi: inkwell::values::PhiValue<'ctx>,
 }
 
 impl<'a, 'ctx> CodeGen<'a, 'ctx> {
@@ -251,6 +252,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     is_type!(is_symbol, "symbol", symbol);
     is_type!(is_cons, "cons", cons);
     is_type!(is_label, "label", label);
+    extract!(get_primitive, unsafe_get_primitive, primitive, "primitive");
     extract!(get_label, unsafe_get_label, label, "label");
     extract!(get_cons, unsafe_get_cons, cons, "cons");
     extract!(get_symbol, unsafe_get_symbol, symbol, "symbol");
@@ -258,22 +260,23 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
         module: &'a Module<'ctx>,
+        fpm: &'a PassManager<FunctionValue<'ctx>>,
     ) -> Self {
-        let main = module.add_function("main", context.i32_type().fn_type(&[], false), None);
-        builder.position_at_end(context.append_basic_block(main, "entry"));
         let pointer = context.bool_type().ptr_type(AddressSpace::default());
         let object = context.struct_type(&[context.i32_type().into(), pointer.into()], false);
         let string = context.struct_type(&[context.i32_type().into(), pointer.into()], false);
         let cons = context.struct_type(&[pointer.into(), pointer.into()], false);
         let stack = context.struct_type(&[object.into(), pointer.into()], false);
         let primitive_type = object.fn_type(&[object.into()], false);
+        let error = context.struct_type(&[pointer.into(), context.i32_type().into()], false);
         let types = Types {
             object,
             string,
             cons,
             pointer,
             stack,
-            primitive_type,
+            primitive: primitive_type,
+            error,
             types: TypeMap::new(
                 context.struct_type(&[], false).into(),
                 context.bool_type().into(),
@@ -285,8 +288,35 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 primitive_type.ptr_type(AddressSpace::default()).into(),
             ),
         };
-        let registers = RegiMap::new(builder, object);
+        let functions = Functions::new(module, context);
         // the empty environment
+        let main = module.add_function("main", context.i32_type().fn_type(&[], false), None);
+        let entry_bb = context.append_basic_block(main, "entry");
+        let error_block = context.append_basic_block(main, "error");
+        builder.position_at_end(error_block);
+        // error phi
+        let error_phi = builder.build_phi(error, "error phi");
+        {
+            let error_msg = builder
+                .build_extract_value(
+                    error_phi.as_basic_value().into_struct_value(),
+                    0,
+                    "error_msg",
+                )
+                .unwrap();
+            let error_code = builder
+                .build_extract_value(
+                    error_phi.as_basic_value().into_struct_value(),
+                    1,
+                    "error_code",
+                )
+                .unwrap();
+            builder.build_call(functions.printf, &[error_msg.into()], "print");
+            builder.build_return(Some(&error_code));
+        }
+
+        builder.position_at_end(entry_bb);
+        let registers = RegiMap::new(builder, object);
         builder.build_store(registers.get(Register::Env), types.object.const_zero());
         Self {
             stack: builder.build_alloca(stack, "stack"),
@@ -298,27 +328,30 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             labels: HashMap::new(),
             registers,
             types,
-            functions: Functions::new(module, context),
+            fpm,
+            functions,
+            error_phi,
+            error_block,
         }
     }
 
-    pub fn exit(&self, reason: &str, code: i32) {
-        self.builder.build_call(
-            self.functions.printf,
-            &[self
-                .builder
-                .build_global_string_ptr(reason, "error exit")
-                .as_basic_value_enum()
-                .into()],
-            "print",
-        );
-        self.builder.build_call(
-            self.functions.exit,
-            &[self.context.i32_type().const_int(code as u64, false).into()],
-            "exit",
-        );
+    // TODO: maybe make primitives be a block rather that a function and instead of doing an exit + unreachable with errors we could have an error block with a phi for for error string and ret code,
+    // or maybe still use functiions for primitives but try to understand trampolines
+    // the advantage of this is that the optimizer wouldn't get sometimes confused by unreacahbles, the disadvantage is if we go the primitive as block way is that  we have to use indirectbr for going to the primitive
+    // currentyl we use error block approach with primitives being functions, and that just means that primitives must do exit + uncreachable on their own
 
-        self.builder.build_unreachable();
+    pub fn set_error(&self, reason: &str, code: i32) {
+        self.error_phi.add_incoming(&[(
+            &self.types.error.const_named_struct(&[
+                self.context.i32_type().const_int(code as u64, false).into(),
+                self.builder
+                    .build_global_string_ptr(reason, "error exit")
+                    .as_basic_value_enum()
+                    .into(),
+            ]),
+            self.builder.get_insert_block().unwrap(),
+        )]);
+
     }
     pub fn export_ir(&self) -> String {
         self.module.to_string()
@@ -341,6 +374,34 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .for_each(|inst| {
                 self.compile_instructions(inst);
             });
+        self.builder
+            .build_return(Some(&self.context.i32_type().const_zero()));
+        // println!("{}", self.export_ir());
+        self.fpm.run_on(&self.main);
+        let fpm = PassManager::create(());
+        // TODO: more optimizations
+        fpm.add_function_inlining_pass();
+        fpm.add_merge_functions_pass();
+        fpm.add_global_dce_pass();
+        fpm.add_ipsccp_pass();
+        // makes hard to debug llvm ir
+        // fpm.add_strip_symbol_pass();
+        fpm.add_constant_merge_pass();
+
+        fpm.add_new_gvn_pass();
+        fpm.add_instruction_combining_pass();
+        fpm.add_reassociate_pass();
+        fpm.add_gvn_pass();
+        fpm.add_basic_alias_analysis_pass();
+        fpm.add_promote_memory_to_register_pass();
+        fpm.add_aggressive_inst_combiner_pass();
+        // // doesn't work with current goto implementation
+        // fpm.add_cfg_simplification_pass();
+        fpm.add_aggressive_dce_pass();
+        fpm.add_function_inlining_pass();
+        fpm.add_strip_dead_prototypes_pass();
+
+        fpm.run_on(self.module);
     }
 
     fn truthy(&self, val: StructValue<'ctx>) -> IntValue<'ctx> {
@@ -390,24 +451,34 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 );
                 self.builder.position_at_end(next_label);
             }
-            Instruction::Goto(g) => match g {
-                Goto::Label(l) => {
-                    self.builder
-                        .build_unconditional_branch(*self.labels.get(&l).unwrap());
-                }
-                Goto::Register(r) => {
-                    let register = self.registers.get(r);
-                    let register =
+            Instruction::Goto(g) => {
+                match g {
+                    Goto::Label(l) => {
                         self.builder
-                            .build_load(self.types.object, register, "load register");
-                    let label = self
-                        .get_label(register.into_struct_value())
-                        .into_pointer_value();
-                    self.builder
-                        // we need all possible labels as destinations b/c indirect br requires a destination but we dont which one at compile time so we use all of them - maybe fixed with register_to_llvm_more_opt
-                        .build_indirect_branch(label, &self.labels.values().copied().collect_vec());
+                            .build_unconditional_branch(*self.labels.get(&l).unwrap());
+                    }
+                    Goto::Register(r) => {
+                        let register = self.registers.get(r);
+                        let register =
+                            self.builder
+                                .build_load(self.types.object, register, "load register");
+                        let label = self
+                            .get_label(register.into_struct_value())
+                            .into_pointer_value();
+                        self.builder
+                            // we need all possible labels as destinations b/c indirect br requires a destination but we dont which one at compile time so we use all of them - maybe fixed with register_to_llvm_more_opt
+                            .build_indirect_branch(
+                                label,
+                                &self.labels.values().copied().collect_vec(),
+                            );
+                    }
                 }
-            },
+                // we create new block/label b/c goto should be last instruction for a block so this "dummy" label acts as a catch all for anything afterwords
+                // realy only needed b/c for label instruction we assume we should just br to the label, but if we digit goto followed by new label we would have double br
+                // note wwe mahe similiar problem with branch
+                let next_label = self.context.append_basic_block(self.main, "next-block");
+                self.builder.position_at_end(next_label)
+            }
             Instruction::Save(reg) => {
                 let prev_stack =
                     self.builder
@@ -480,7 +551,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     // returns a tuple contatining the cons of the found variable and the rest of the vars in the frame
     fn lookup_variable(&self, var: StructValue<'ctx>, env: StructValue<'ctx>) -> StructValue<'ctx> {
         let lookup_entry_bb = self.context.append_basic_block(self.main, "lookup-entry");
-        let unbound_bb = self.context.append_basic_block(self.main, "unbound");
         let lookup_bb = self.context.append_basic_block(self.main, "lookup");
         let scan_bb = self.context.append_basic_block(self.main, "scan");
         let next_env_bb = self.context.append_basic_block(self.main, "next-env");
@@ -492,16 +562,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder.build_store(env_ptr, env);
         self.builder.build_unconditional_branch(lookup_entry_bb);
 
-        self.builder.position_at_end(unbound_bb);
-        self.exit("unbounded variable", 1);
-
         self.builder.position_at_end(lookup_entry_bb);
+        self.set_error("unbound variable", 1);
         let env_load = self
             .builder
             .build_load(self.types.object, env_ptr, "load env");
         self.builder.build_conditional_branch(
             self.is_hempty(env_load.into_struct_value()),
-            unbound_bb,
+            self.error_block,
             lookup_bb,
         );
 
@@ -579,6 +647,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
+        // TODO: dont compile all the args before the match on operation b/c some of them could be better written or something if we had the actual types at compile time
+        // similiar to the idea of combining the operastion and its args
+        // TODO: each operation could be function or block(s) + phi so instead of compiling the following code each time we find a perform we would do it only once
         let args: Vec<_> = action
             .args()
             .to_vec()
@@ -610,7 +681,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.make_set_cdr(frame, self.make_cons(val, self.make_cdr(frame)));
                 self.empty()
             }
-            Operation::ApplyPrimitiveProcedure => self.empty(),
+            Operation::ApplyPrimitiveProcedure => {
+                let proc = args[0];
+                let argl = args[1];
+                let proc = self.unsafe_get_primitive(proc);
+                self.builder
+                    .build_indirect_call(
+                        self.types.primitive,
+                        proc.into_pointer_value(),
+                        &[argl.into()],
+                        "call primitive",
+                    )
+                    .try_as_basic_value()
+                    .unwrap_left()
+                    .into_struct_value()
+            }
             Operation::ExtendEnvoirnment => {
                 let vars = args[0];
                 let vals = args[1];
@@ -669,6 +754,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         }
     }
 
+    // TODO: make unsafe versions of *car and *cdr function to avoid dealing with br(s) added self.get_cons (which is causing problems with multiple br(s) per block in variable lookup and other places)
+    // or turn car,cdr into llvm functions 
     fn car(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
         let cons = self.get_cons(cons).into_struct_value();
         self.builder
@@ -745,14 +832,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
     fn make_cons(&self, car: StructValue<'ctx>, cdr: StructValue<'ctx>) -> StructValue<'ctx> {
         let cons = self.types.cons.const_zero();
+        let car_ptr = self.builder.build_alloca(self.types.object, "car ptr");
+        let cdr_ptr = self.builder.build_alloca(self.types.object, "cdr ptr");
+        self.builder.build_store(car_ptr, car);
+        self.builder.build_store(cdr_ptr, cdr);
         let cons = self
             .builder
-            .build_insert_value(cons, car, 0, "insert car - cons")
+            .build_insert_value(cons, car_ptr, 0, "insert car - cons")
             .unwrap()
             .into_struct_value();
         let cons = self
             .builder
-            .build_insert_value(cons, cdr, 1, "insert cdr - cons")
+            .build_insert_value(cons, cdr_ptr, 1, "insert cdr - cons")
             .unwrap()
             .into_struct_value();
         self.make_object(&cons, TypeIndex::cons)

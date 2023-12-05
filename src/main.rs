@@ -235,7 +235,8 @@ fn sicp(file: &str) {
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
-    let mut codegen = CodeGen::new(&context, &builder, &module);
+    let fpm = init_function_optimizer(&module);
+    let mut codegen = CodeGen::new(&context, &builder, &module, &fpm);
     codegen.compile(ir);
     println!("\n{}", codegen.export_ir());
 }
