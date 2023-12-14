@@ -252,7 +252,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     is_type!(is_symbol, "symbol", symbol);
     is_type!(is_cons, "cons", cons);
     is_type!(is_label, "label", label);
-    extract!(get_primitive, unchecked_get_primitive, primitive, "primitive");
+    extract!(
+        get_primitive,
+        unchecked_get_primitive,
+        primitive,
+        "primitive"
+    );
     extract!(get_label, unchecked_get_label, label, "label");
     extract!(get_cons, unchecked_get_cons, cons, "cons");
     extract!(get_symbol, unchecked_get_symbol, symbol, "symbol");
@@ -289,6 +294,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ),
         };
         let functions = Functions::new(module, context);
+        // simulating a primitive function until i define the actual primitives
+        let primitive_newline = module.add_function("newline", primitive_type, None);
+        {
+            let entry = context.append_basic_block(primitive_newline, "entry");
+            builder.position_at_end(entry);
+            builder.build_call(
+                functions.printf,
+                &[builder
+                    .build_global_string_ptr("\n", "\n")
+                    .as_pointer_value()
+                    .into()],
+                "call newline",
+            );
+            builder.build_return(Some(&primitive_newline.get_first_param().unwrap()));
+        }
         // the empty environment
         let main = module.add_function("main", context.i32_type().fn_type(&[], false), None);
         let entry_bb = context.append_basic_block(main, "entry");
@@ -317,8 +337,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
         builder.position_at_end(entry_bb);
         let registers = RegiMap::new(builder, object);
-        builder.build_store(registers.get(Register::Env), types.object.const_zero());
-        Self {
+        let this = Self {
             stack: builder.build_alloca(stack, "stack"),
             context,
             flag: builder.build_alloca(types.object, "flag"),
@@ -332,7 +351,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             functions,
             error_phi,
             error_block,
-        }
+        };
+        // adding a dummy primitive to the environment so defining variable (define ...) dont freak out the environment starts off as ()
+        let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
+        let primitive_newline = this.make_object(&primitive_print_ptr, TypeIndex::primitive);
+        let primiitve_env = this.make_cons(
+            this.make_cons(this.create_string("newline".to_string()), this.empty()),
+            this.make_cons(primitive_newline, this.empty()),
+        );
+        let env = this.make_cons(primiitve_env, this.empty());
+
+        builder.build_store(this.registers.get(Register::Env), env);
+        this
     }
 
     // TODO: maybe make primitives be a block rather that a function and instead of doing an exit + unreachable with errors we could have an error block with a phi for for error string and ret code,
@@ -351,7 +381,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ]),
             self.builder.get_insert_block().unwrap(),
         )]);
-
     }
     pub fn export_ir(&self) -> String {
         self.module.to_string()
@@ -578,8 +607,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let vars_pointer = self.builder.build_alloca(self.types.object, "vars");
         let vals_pointer = self.builder.build_alloca(self.types.object, "vals");
         let vars = self.make_unchecked_car(frame);
-        self.builder.build_store(vars_pointer, self.make_unchecked_car(frame));
-        self.builder.build_store(vals_pointer, self.make_unchecked_cdr(frame));
+        self.builder
+            .build_store(vars_pointer, self.make_unchecked_car(frame));
+        self.builder
+            .build_store(vals_pointer, self.make_unchecked_cdr(frame));
         self.builder.build_unconditional_branch(scan_bb);
 
         self.builder.position_at_end(scan_bb);
@@ -608,8 +639,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .builder
             .build_load(self.types.object, vals_pointer, "load vals")
             .into_struct_value();
-        self.builder.build_store(vars_pointer, self.make_unchecked_cdr(vars_load));
-        self.builder.build_store(vals_pointer, self.make_unchecked_cdr(vals_load));
+        self.builder
+            .build_store(vars_pointer, self.make_unchecked_cdr(vars_load));
+        self.builder
+            .build_store(vals_pointer, self.make_unchecked_cdr(vals_load));
         self.builder.build_unconditional_branch(scan_bb);
 
         self.builder.position_at_end(found_bb);
@@ -644,7 +677,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value();
-        self.builder.build_and(str_len_matches, self.builder.build_int_cast(str_cmp,self.context.bool_type(), ""), "eq?")
+        self.builder.build_and(
+            str_len_matches,
+            self.builder
+                .build_int_cast(str_cmp, self.context.bool_type(), ""),
+            "eq?",
+        )
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
@@ -677,9 +715,15 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let env = args[2];
                 let frame = self.make_unchecked_car(env);
                 // set the vars part of the frame
-                self.make_unchecked_set_car(frame, self.make_cons(var, self.make_unchecked_car(frame)));
+                self.make_unchecked_set_car(
+                    frame,
+                    self.make_cons(var, self.make_unchecked_car(frame)),
+                );
                 // set the vals part of the frame
-                self.make_unchecked_set_cdr(frame, self.make_cons(val, self.make_unchecked_cdr(frame)));
+                self.make_unchecked_set_cdr(
+                    frame,
+                    self.make_cons(val, self.make_unchecked_cdr(frame)),
+                );
                 self.empty()
             }
             Operation::ApplyPrimitiveProcedure => {
@@ -756,7 +800,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 
     // TODO: make unchecked versions of *car and *cdr function to avoid dealing with br(s) added self.get_cons (which is causing problems with multiple br(s) per block in variable lookup and other places)
-    // or turn car,cdr into llvm functions 
+    // or turn car,cdr into llvm functions
     fn car(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
         let cons = self.get_cons(cons).into_struct_value();
         self.builder
@@ -833,7 +877,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         cons: StructValue<'ctx>,
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
-        self.builder.build_store(self.unchecked_car(cons), new_value);
+        self.builder
+            .build_store(self.unchecked_car(cons), new_value);
         self.empty()
     }
 
@@ -842,7 +887,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         cons: StructValue<'ctx>,
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
-        self.builder.build_store(self.unchecked_cdr(cons), new_value);
+        self.builder
+            .build_store(self.unchecked_cdr(cons), new_value);
         self.empty()
     }
 
@@ -951,7 +997,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         }
     }
 
-    fn create_string(&mut self, s: String) -> StructValue<'ctx> {
+    fn create_string(&self, s: String) -> StructValue<'ctx> {
         let strlen = s.chars().count();
         let global_str = self
             .builder

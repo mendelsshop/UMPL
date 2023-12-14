@@ -226,7 +226,7 @@ fn sicp(file: &str) {
         .0
         .into_iter()
         .flat_map(|expr| {
-            codegen::sicp::compile(expr, Register::Val, Linkage::Return)
+            codegen::sicp::compile(expr, Register::Val, Linkage::Next)
                 .instructions()
                 .to_vec()
         })
