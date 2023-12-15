@@ -650,7 +650,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder.build_unconditional_branch(scan_bb);
 
         self.builder.position_at_end(found_bb);
-        vals_load
+        self
+            .builder
+            .build_load(self.types.object, vals_pointer, "load vals")
+            .into_struct_value()
     }
 
     fn compare_symbol(&self, s1: StructValue<'ctx>, s2: StructValue<'ctx>) -> IntValue<'ctx> {
