@@ -356,7 +356,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
         let primitive_newline = this.make_object(&primitive_print_ptr, TypeIndex::primitive);
         let primiitve_env = this.make_cons(
-            this.make_cons(this.create_string("newline".to_string()), this.empty()),
+            this.make_cons(this.create_symbol("newline"), this.empty()),
             this.make_cons(primitive_newline, this.empty()),
         );
         let env = this.make_cons(primiitve_env, this.empty());
@@ -405,32 +405,32 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             });
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
-        println!("{}", self.export_ir());
-        self.fpm.run_on(&self.main);
-        let fpm = PassManager::create(());
-        // TODO: more optimizations
-        // fpm.add_function_inlining_pass();
-        // fpm.add_merge_functions_pass();
-        fpm.add_global_dce_pass();
-        fpm.add_ipsccp_pass();
-        // makes hard to debug llvm ir
-        // fpm.add_strip_symbol_pass();
-        fpm.add_constant_merge_pass();
+        // println!("{}", self.export_ir());
+        // self.fpm.run_on(&self.main);
+        // let fpm = PassManager::create(());
+        // // TODO: more optimizations
+        // // fpm.add_function_inlining_pass();
+        // // fpm.add_merge_functions_pass();
+        // fpm.add_global_dce_pass();
+        // fpm.add_ipsccp_pass();
+        // // makes hard to debug llvm ir
+        // // fpm.add_strip_symbol_pass();
+        // fpm.add_constant_merge_pass();
 
-        fpm.add_new_gvn_pass();
-        // fpm.add_instruction_combining_pass();
-        fpm.add_reassociate_pass();
-        fpm.add_gvn_pass();
-        fpm.add_basic_alias_analysis_pass();
-        fpm.add_promote_memory_to_register_pass();
-        fpm.add_aggressive_inst_combiner_pass();
-        // // doesn't work with current goto implementation
-        // fpm.add_cfg_simplification_pass();
-        // fpm.add_aggressive_dce_pass();
-        // fpm.add_function_inlining_pass();
-        fpm.add_strip_dead_prototypes_pass();
+        // fpm.add_new_gvn_pass();
+        // // fpm.add_instruction_combining_pass();
+        // fpm.add_reassociate_pass();
+        // fpm.add_gvn_pass();
+        // fpm.add_basic_alias_analysis_pass();
+        // fpm.add_promote_memory_to_register_pass();
+        // fpm.add_aggressive_inst_combiner_pass();
+        // // // doesn't work with current goto implementation
+        // // fpm.add_cfg_simplification_pass();
+        // // fpm.add_aggressive_dce_pass();
+        // // fpm.add_function_inlining_pass();
+        // fpm.add_strip_dead_prototypes_pass();
 
-        fpm.run_on(self.module);
+        // fpm.run_on(self.module);
     }
 
     fn truthy(&self, val: StructValue<'ctx>) -> IntValue<'ctx> {
@@ -583,7 +583,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let lookup_bb = self.context.append_basic_block(self.main, "lookup");
         let scan_bb = self.context.append_basic_block(self.main, "scan");
         let next_env_bb = self.context.append_basic_block(self.main, "next-env");
-        let check_bb = self.context.append_basic_block(self.main, "scan");
+        let check_bb = self.context.append_basic_block(self.main, "check");
         let found_bb = self.context.append_basic_block(self.main, "found");
         let scan_next_bb = self.context.append_basic_block(self.main, "scan-next");
 
@@ -592,7 +592,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder.build_unconditional_branch(lookup_entry_bb);
 
         self.builder.position_at_end(lookup_entry_bb);
-        self.set_error("unbound variable", 1);
+        self.set_error("unbound variable\n", 1);
         let env_load = self
             .builder
             .build_load(self.types.object, env_ptr, "load env");
@@ -606,7 +606,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let frame = self.make_unchecked_car(env_load.into_struct_value());
         let vars_pointer = self.builder.build_alloca(self.types.object, "vars");
         let vals_pointer = self.builder.build_alloca(self.types.object, "vals");
-        let vars = self.make_unchecked_car(frame);
         self.builder
             .build_store(vars_pointer, self.make_unchecked_car(frame));
         self.builder
@@ -614,7 +613,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder.build_unconditional_branch(scan_bb);
 
         self.builder.position_at_end(scan_bb);
+        let vars = self
+            .builder
+            .build_load(self.types.object, vars_pointer, "vars")
+            .into_struct_value();
         self.builder
+            // vars might not be write theing here maybe vars pointer loaded b./c that what scan next sets
             .build_conditional_branch(self.is_hempty(vars), next_env_bb, check_bb);
 
         self.builder.position_at_end(next_env_bb);
@@ -667,22 +671,51 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let str_len_matches =
             self.builder
                 .build_int_compare(IntPredicate::EQ, len1, len2, "len matches");
+        let str_small_size = self.builder.build_select(
+            self.builder
+                .build_int_compare(IntPredicate::SLT, len1, len2, "smaller"),
+            len1,
+            len2,
+            "str smallaest size",
+        );
         let str_cmp = self
             .builder
             .build_call(
                 self.functions.strncmp,
-                &[s1.into(), s2.into(), len1.into()],
+                &[s1.into(), s2.into(), str_small_size.into()],
                 "strcmp",
             )
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value();
+        // strncmp returns
+        // Negative value if lhs appears before rhs in lexicographical order.
+        // Zero if lhs and rhs compare equal, or if count is zero.
+        // Positive value if lhs appears after rhs in lexicographical order
+        // so to know that the strings are the same we check that the result of strncmp is zero
+        let is_same = self.builder.build_int_compare(
+            IntPredicate::EQ,
+            str_cmp,
+            self.context.i32_type().const_zero(),
+            "is same string",
+        );
         self.builder.build_and(
             str_len_matches,
             self.builder
-                .build_int_cast(str_cmp, self.context.bool_type(), ""),
+                .build_int_cast(is_same, self.context.bool_type(), ""),
             "eq?",
         )
+    }
+
+    fn make_printf(&self, string: &str, values: Vec<BasicValueEnum<'ctx>>) {
+        let format = self
+            .builder
+            .build_global_string_ptr(string, "printf-format")
+            .as_pointer_value();
+        let mut values: Vec<_> = values.into_iter().map(Into::into).collect();
+        values.insert(0, format.into());
+        self.builder
+            .build_call(self.functions.printf, &values, "printf debug");
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
@@ -782,8 +815,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.make_object(&bool, TypeIndex::number)
             }
             Operation::MakeCompiledProcedure => {
-                let compiled_procedure_string =
-                    self.create_string("compiled-procedure".to_string());
+                let compiled_procedure_string = self.create_symbol("compiled-procedure");
                 let compiled_procedure_string =
                     self.make_object(&compiled_procedure_string, TypeIndex::symbol);
                 let compiled_procedure_entry = args.first().unwrap();
@@ -970,8 +1002,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn compile_const(&mut self, constant: Const) -> StructValue<'ctx> {
         match constant {
             Const::Empty => self.empty(),
-            Const::String(s) => self.create_string(s),
-            Const::Symbol(s) => self.create_string(s), // TODO: intern the symbol
+            Const::String(s) => self.create_string(&s),
+            Const::Symbol(s) => self.create_symbol(&s), // TODO: intern the symbol
             Const::Number(n) => {
                 let number = self.context.f64_type().const_float(n);
                 self.make_object(&number, TypeIndex::number)
@@ -997,7 +1029,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         }
     }
 
-    fn create_string(&self, s: String) -> StructValue<'ctx> {
+    fn create_symbol(&self, s: &str) -> StructValue<'ctx> {
+        self.make_object(&self.create_string_part(s), TypeIndex::symbol)
+    }
+    fn create_string(&self, s: &str) -> StructValue<'ctx> {
+        self.make_object(&self.create_string_part(s), TypeIndex::string)
+    }
+
+    fn create_string_part(&self, s: &str) -> StructValue<'ctx> {
         let strlen = s.chars().count();
         let global_str = self
             .builder

@@ -221,7 +221,7 @@ fn expand(file: &str) {
 fn sicp(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
-    println!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
+    // println!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
     let ir: Vec<_> = program
         .0
         .into_iter()
@@ -231,7 +231,7 @@ fn sicp(file: &str) {
                 .to_vec()
         })
         .collect();
-    println!("{}", ir.iter().map(ToString::to_string).join("\n"));
+    // println!("{}", ir.iter().map(ToString::to_string).join("\n"));
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
