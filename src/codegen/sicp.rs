@@ -561,7 +561,7 @@ fn compile_seq(seq: Vec<UMPL2Expr>, target: Register, linkage: Linkage) -> Instr
     seq.into_iter()
         .enumerate()
         .map(move |(i, exp)| {
-            if size == i - 1 {
+            if i == size - 1 {
                 compile(exp, target, linkage.clone())
             } else {
                 compile(exp, target, Linkage::Next)

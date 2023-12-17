@@ -290,7 +290,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 string.into(),
                 pointer.into(),
                 cons.into(),
-                primitive_type.ptr_type(AddressSpace::default()).into(),
+                pointer.into(),
             ),
         };
         let functions = Functions::new(module, context);
@@ -488,11 +488,13 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     }
                     Goto::Register(r) => {
                         let register = self.registers.get(r);
-                        let register =
-                            self.builder
-                                .build_load(self.types.object, register, "load register");
+                        let register = self.builder.build_load(
+                            self.types.object,
+                            register,
+                            &format!("load register {r}"),
+                        );
                         let label = self
-                            .get_label(register.into_struct_value())
+                            .unchecked_get_label(register.into_struct_value())
                             .into_pointer_value();
                         self.builder
                             // we need all possible labels as destinations b/c indirect br requires a destination but we dont which one at compile time so we use all of them - maybe fixed with register_to_llvm_more_opt
@@ -569,7 +571,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Expr::Register(r) => {
                 let reg = self.registers.get(r);
                 self.builder
-                    .build_load(self.types.object, reg, "load register")
+                    .build_load(self.types.object, reg, &format!("load register {r}"))
                     .into_struct_value()
             }
             Expr::Op(p) => self.compile_perform(p),
@@ -650,8 +652,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder.build_unconditional_branch(scan_bb);
 
         self.builder.position_at_end(found_bb);
-        self
-            .builder
+        self.builder
             .build_load(self.types.object, vals_pointer, "load vals")
             .into_struct_value()
     }
@@ -739,11 +740,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             }
             Operation::CompiledProcedureEnv => {
                 let proc = args[0];
-                self.make_caddr(proc)
+                self.make_unchecked_caddr(proc)
             }
             Operation::CompiledProcedureEntry => {
                 let proc = args[0];
-                self.make_cadr(proc)
+                self.make_unchecked_cadr(proc)
             }
             Operation::DefineVariable => {
                 let var = args[0];
@@ -801,7 +802,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let boolean = self
                     .builder
                     .build_not(self.truthy(*args.first().unwrap()), "not truthy");
-                self.make_object(&boolean, TypeIndex::number)
+                self.make_object(&boolean, TypeIndex::bool)
             }
             Operation::RandomBool => {
                 let bool = self
@@ -815,7 +816,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     "truncate to bool",
                 );
 
-                self.make_object(&bool, TypeIndex::number)
+                self.make_object(&bool, TypeIndex::bool)
             }
             Operation::MakeCompiledProcedure => {
                 let compiled_procedure_string = self.create_symbol("compiled-procedure");
@@ -927,6 +928,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.empty()
     }
 
+    make_accessors!(make_unchecked_cadr make_unchecked_car make_unchecked_cdr);
+    make_accessors!(make_unchecked_cddr make_unchecked_cdr make_unchecked_cdr);
+    make_accessors!(make_unchecked_caddr make_unchecked_car make_unchecked_cddr);
+
     make_accessors!(make_caar make_car make_car);
     make_accessors!(make_cadr make_car make_cdr);
     make_accessors!(make_cdar make_cdr make_car);
@@ -1013,7 +1018,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             }
             Const::Boolean(b) => {
                 let boolean = self.context.bool_type().const_int(u64::from(b), false);
-                self.make_object(&boolean, TypeIndex::number)
+                self.make_object(&boolean, TypeIndex::bool)
             }
             Const::List(car, cdr) => {
                 let cons: StructValue<'_> = self.types.cons.const_zero();

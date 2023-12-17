@@ -231,7 +231,7 @@ fn sicp(file: &str) {
                 .to_vec()
         })
         .collect();
-    // println!("{}", ir.iter().map(ToString::to_string).join("\n"));
+    // eprintln!("{}", ir.iter().map(ToString::to_string).join("\n"));
     let context = Context::create();
     let module = context.create_module(file);
     let builder = context.create_builder();
