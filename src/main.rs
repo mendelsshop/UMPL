@@ -95,8 +95,8 @@ fn init_function_optimizer<'ctx>(
     fpm.add_basic_alias_analysis_pass();
     fpm.add_promote_memory_to_register_pass();
     fpm.add_aggressive_inst_combiner_pass();
-    // // doesn't work with current goto implementation
-    // // fpm.add_cfg_simplification_pass();
+    // // doesn't work with current goto implementation (non sicp)
+    fpm.add_cfg_simplification_pass();
     fpm.add_aggressive_dce_pass();
     fpm.add_instruction_simplify_pass();
 
@@ -104,8 +104,8 @@ fn init_function_optimizer<'ctx>(
     fpm.add_bit_tracking_dce_pass();
     fpm.add_merged_load_store_motion_pass();
     fpm.add_ind_var_simplify_pass();
-    // // doesn't work with current goto implementation
-    // // fpm.add_jump_threading_pass();
+    // // doesn't work with current goto implementation (non sicp)
+    fpm.add_jump_threading_pass();
 
     fpm.add_scalarizer_pass();
     fpm.add_tail_call_elimination_pass();

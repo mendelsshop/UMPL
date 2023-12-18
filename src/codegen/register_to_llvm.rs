@@ -156,6 +156,8 @@ pub struct Functions<'ctx> {
     strncmp: FunctionValue<'ctx>,
     printf: FunctionValue<'ctx>,
     rand: FunctionValue<'ctx>,
+    srand: FunctionValue<'ctx>,
+    time: FunctionValue<'ctx>,
 }
 
 impl<'ctx> Functions<'ctx> {
@@ -192,11 +194,28 @@ impl<'ctx> Functions<'ctx> {
             ),
             Some(Linkage::External),
         );
+        let srand = module.add_function(
+            "srand",
+            context
+                .void_type()
+                .fn_type(&[context.i32_type().into()], false),
+            Some(Linkage::External),
+        );
+        let time = module.add_function(
+            "time",
+            context.i32_type().fn_type(
+                &[context.i32_type().ptr_type(AddressSpace::default()).into()],
+                false,
+            ),
+            Some(Linkage::External),
+        );
         Self {
             exit,
             printf,
             rand,
             strncmp,
+            srand,
+            time,
         }
     }
 }
@@ -335,7 +354,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             builder.build_return(Some(&error_code));
         }
 
+        error_phi.add_incoming(&[]);
+
         builder.position_at_end(entry_bb);
+        // init random number seed
+        {
+            let time = builder
+                .build_call(
+                    functions.time,
+                    &[types.pointer.const_null().into()],
+                    "get time to further randomize rng",
+                )
+                .try_as_basic_value()
+                .unwrap_left();
+            builder.build_call(functions.srand, &[time.into()], "set rng seed");
+        }
         let registers = RegiMap::new(builder, object);
         let this = Self {
             stack: builder.build_alloca(stack, "stack"),
@@ -406,31 +439,31 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
         // println!("{}", self.export_ir());
-        // self.fpm.run_on(&self.main);
-        // let fpm = PassManager::create(());
-        // // TODO: more optimizations
-        // // fpm.add_function_inlining_pass();
-        // // fpm.add_merge_functions_pass();
-        // fpm.add_global_dce_pass();
-        // fpm.add_ipsccp_pass();
-        // // makes hard to debug llvm ir
-        // // fpm.add_strip_symbol_pass();
-        // fpm.add_constant_merge_pass();
+        self.fpm.run_on(&self.main);
+        let fpm = PassManager::create(());
+        // TODO: more optimizations
+        fpm.add_function_inlining_pass();
+        fpm.add_merge_functions_pass();
+        fpm.add_global_dce_pass();
+        fpm.add_ipsccp_pass();
+        // makes hard to debug llvm ir
+        // fpm.add_strip_symbol_pass();
+        fpm.add_constant_merge_pass();
 
-        // fpm.add_new_gvn_pass();
-        // // fpm.add_instruction_combining_pass();
-        // fpm.add_reassociate_pass();
-        // fpm.add_gvn_pass();
-        // fpm.add_basic_alias_analysis_pass();
-        // fpm.add_promote_memory_to_register_pass();
-        // fpm.add_aggressive_inst_combiner_pass();
-        // // // doesn't work with current goto implementation
-        // // fpm.add_cfg_simplification_pass();
-        // // fpm.add_aggressive_dce_pass();
-        // // fpm.add_function_inlining_pass();
-        // fpm.add_strip_dead_prototypes_pass();
+        fpm.add_new_gvn_pass();
+        fpm.add_instruction_combining_pass();
+        fpm.add_reassociate_pass();
+        fpm.add_gvn_pass();
+        fpm.add_basic_alias_analysis_pass();
+        fpm.add_promote_memory_to_register_pass();
+        fpm.add_aggressive_inst_combiner_pass();
+        // // doesn't work with current goto implementation
+        fpm.add_cfg_simplification_pass();
+        fpm.add_aggressive_dce_pass();
+        fpm.add_function_inlining_pass();
+        fpm.add_strip_dead_prototypes_pass();
 
-        // fpm.run_on(self.module);
+        fpm.run_on(self.module);
     }
 
     fn truthy(&self, val: StructValue<'ctx>) -> IntValue<'ctx> {
@@ -519,9 +552,13 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     .build_alloca(self.types.stack, "previous stack");
                 self.builder.build_store(prev_stack_ptr, prev_stack);
                 let new_stack = self.types.stack.const_zero();
+                let reg = self.registers.get(reg);
+                let reg_value = self
+                    .builder
+                    .build_load(self.types.object, reg, "load register");
                 let new_stack = self
                     .builder
-                    .build_insert_value(new_stack, self.registers.get(reg), 0, "save register")
+                    .build_insert_value(new_stack, reg_value, 0, "save register")
                     .unwrap();
 
                 let new_stack = self
