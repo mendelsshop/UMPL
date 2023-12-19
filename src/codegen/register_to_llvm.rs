@@ -314,20 +314,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         };
         let functions = Functions::new(module, context);
         // simulating a primitive function until i define the actual primitives
-        let primitive_newline = module.add_function("newline", primitive_type, None);
-        {
-            let entry = context.append_basic_block(primitive_newline, "entry");
-            builder.position_at_end(entry);
-            builder.build_call(
-                functions.printf,
-                &[builder
-                    .build_global_string_ptr("\n", "\n")
-                    .as_pointer_value()
-                    .into()],
-                "call newline",
-            );
-            builder.build_return(Some(&primitive_newline.get_first_param().unwrap()));
-        }
+
         // the empty environment
         let main = module.add_function("main", context.i32_type().fn_type(&[], false), None);
         let entry_bb = context.append_basic_block(main, "entry");
@@ -353,8 +340,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             builder.build_call(functions.printf, &[error_msg.into()], "print");
             builder.build_return(Some(&error_code));
         }
-
-        error_phi.add_incoming(&[]);
 
         builder.position_at_end(entry_bb);
         // init random number seed
@@ -386,16 +371,39 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             error_block,
         };
         // adding a dummy primitive to the environment so defining variable (define ...) dont freak out the environment starts off as ()
-        let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
-        let primitive_newline = this.make_object(&primitive_print_ptr, TypeIndex::primitive);
-        let primiitve_env = this.make_cons(
-            this.make_cons(this.create_symbol("newline"), this.empty()),
-            this.make_cons(primitive_newline, this.empty()),
-        );
-        let env = this.make_cons(primiitve_env, this.empty());
-
-        builder.build_store(this.registers.get(Register::Env), env);
+        this.init_primitives();
         this
+    }
+
+    fn init_primitives(&self) {
+        let primitive_newline = self
+            .module
+            .add_function("newline", self.types.primitive, None);
+        {
+            let entry = self.context.append_basic_block(primitive_newline, "entry");
+            self.builder.position_at_end(entry);
+            self.builder.build_call(
+                self.functions.printf,
+                &[self
+                    .builder
+                    .build_global_string_ptr("\n", "\n")
+                    .as_pointer_value()
+                    .into()],
+                "call newline",
+            );
+            self.builder
+                .build_return(Some(&self.types.object.const_zero()));
+        }
+        let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
+        let primitive_newline = self.make_object(&primitive_print_ptr, TypeIndex::primitive);
+        let primiitve_env = self.make_cons(
+            self.make_cons(self.create_symbol("newline"), self.empty()),
+            self.make_cons(primitive_newline, self.empty()),
+        );
+        let env = self.make_cons(primiitve_env, self.empty());
+
+        self.builder
+            .build_store(self.registers.get(Register::Env), env);
     }
 
     // TODO: maybe make primitives be a block rather that a function and instead of doing an exit + unreachable with errors we could have an error block with a phi for for error string and ret code,
@@ -438,7 +446,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             });
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
-        // println!("{}", self.export_ir());
         self.fpm.run_on(&self.main);
         let fpm = PassManager::create(());
         // TODO: more optimizations
