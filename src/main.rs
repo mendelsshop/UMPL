@@ -221,7 +221,7 @@ fn expand(file: &str) {
 fn sicp(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
-    // println!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
+    // eprintln!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
     let ir: Vec<_> = program
         .0
         .into_iter()

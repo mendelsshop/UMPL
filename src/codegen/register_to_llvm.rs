@@ -313,9 +313,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ),
         };
         let functions = Functions::new(module, context);
-        // simulating a primitive function until i define the actual primitives
-
-        // the empty environment
         let main = module.add_function("main", context.i32_type().fn_type(&[], false), None);
         let entry_bb = context.append_basic_block(main, "entry");
         let error_block = context.append_basic_block(main, "error");
@@ -372,13 +369,31 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         };
         // adding a dummy primitive to the environment so defining variable (define ...) dont freak out the environment starts off as ()
         this.init_primitives();
+        builder.position_at_end(entry_bb);
         this
+    }
+
+    fn add_primitive(&self, name: &str, function: FunctionValue<'ctx>) {
+        let fn_pointer = function.as_global_value().as_pointer_value();
+        let primitive = self.make_object(&fn_pointer, TypeIndex::primitive);
+        let frame_ptr = 0;
     }
 
     fn init_primitives(&self) {
         let primitive_newline = self
             .module
             .add_function("newline", self.types.primitive, None);
+
+        let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
+        let primitive_newline_object = self.make_object(&primitive_print_ptr, TypeIndex::primitive);
+        let primiitve_env = self.make_cons(
+            self.make_cons(self.create_symbol("newline"), self.empty()),
+            self.make_cons(primitive_newline_object, self.empty()),
+        );
+        let env = self.make_cons(primiitve_env, self.empty());
+
+        self.builder
+            .build_store(self.registers.get(Register::Env), env);
         {
             let entry = self.context.append_basic_block(primitive_newline, "entry");
             self.builder.position_at_end(entry);
@@ -394,16 +409,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             self.builder
                 .build_return(Some(&self.types.object.const_zero()));
         }
-        let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
-        let primitive_newline = self.make_object(&primitive_print_ptr, TypeIndex::primitive);
-        let primiitve_env = self.make_cons(
-            self.make_cons(self.create_symbol("newline"), self.empty()),
-            self.make_cons(primitive_newline, self.empty()),
-        );
-        let env = self.make_cons(primiitve_env, self.empty());
-
-        self.builder
-            .build_store(self.registers.get(Register::Env), env);
     }
 
     // TODO: maybe make primitives be a block rather that a function and instead of doing an exit + unreachable with errors we could have an error block with a phi for for error string and ret code,
@@ -827,7 +832,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let vals = args[1];
                 let env = args[2];
 
-                let frame = self.make_cons(vals, vals);
+                let frame = self.make_cons(vars, vals);
                 self.make_cons(frame, env)
             }
             Operation::Cons => {

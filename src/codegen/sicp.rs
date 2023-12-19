@@ -278,7 +278,7 @@ pub fn compile(exp: UMPL2Expr, target: Register, linkage: Linkage) -> Instructio
             Some(_) => compile_application(a, target, linkage),
             None => todo!(),
         },
-        UMPL2Expr::FnParam(i) => compile_variable(i.to_string(), target, linkage),
+        UMPL2Expr::FnParam(i) => compile_variable(format!("'{i}'"), target, linkage),
         exp => compile_self_evaluating(exp.into(), target, linkage),
     }
 }
