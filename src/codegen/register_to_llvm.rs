@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::BuildHasher};
+use std::collections::HashMap;
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -51,7 +51,7 @@ macro_rules! fixed_map {
 macro_rules! extract {
     ($fn_name:ident, $unchecked:ident, $type:ident, $name:literal) => {
         pub(super) fn $fn_name(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
-            let current_fn = self.main;
+            let current_fn = self.current;
             let prefix = |end| format!("extract-{}:{end}", $name);
             let ret_block = self
                 .context
@@ -74,7 +74,7 @@ macro_rules! extract {
             self.$unchecked(val)
         }
         pub(super) fn $unchecked(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
-            let current_fn = self.main;
+            let current_fn = self.current;
             let prefix = |end| format!("extract-{}:{end}", $name);
             let pointer = self
                 .builder
@@ -247,7 +247,7 @@ pub struct CodeGen<'a, 'ctx> {
     context: &'ctx Context,
     builder: &'a Builder<'ctx>,
     module: &'a Module<'ctx>,
-    main: FunctionValue<'ctx>,
+    current: FunctionValue<'ctx>,
     labels: HashMap<String, BasicBlock<'ctx>>,
     registers: RegiMap<'ctx>,
     types: Types<'ctx>,
@@ -352,13 +352,13 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             builder.build_call(functions.srand, &[time.into()], "set rng seed");
         }
         let registers = RegiMap::new(builder, object);
-        let this = Self {
+        let mut this = Self {
             stack: builder.build_alloca(stack, "stack"),
             context,
             flag: builder.build_alloca(types.object, "flag"),
+            current: main,
             builder,
             module,
-            main,
             labels: HashMap::new(),
             registers,
             types,
@@ -369,46 +369,60 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         };
         // adding a dummy primitive to the environment so defining variable (define ...) dont freak out the environment starts off as ()
         this.init_primitives();
-        builder.position_at_end(entry_bb);
         this
     }
 
-    fn add_primitive(&self, name: &str, function: FunctionValue<'ctx>) {
+    fn make_primitive_pair(
+        &self,
+        name: &str,
+        function: FunctionValue<'ctx>,
+    ) -> (StructValue<'ctx>, StructValue<'ctx>) {
         let fn_pointer = function.as_global_value().as_pointer_value();
         let primitive = self.make_object(&fn_pointer, TypeIndex::primitive);
-        let frame_ptr = 0;
+        let name = self.create_symbol(name);
+        (name, primitive)
     }
 
-    fn init_primitives(&self) {
-        let primitive_newline = self
-            .module
-            .add_function("newline", self.types.primitive, None);
-
-        let primitive_print_ptr = primitive_newline.as_global_value().as_pointer_value();
-        let primitive_newline_object = self.make_object(&primitive_print_ptr, TypeIndex::primitive);
-        let primiitve_env = self.make_cons(
-            self.make_cons(self.create_symbol("newline"), self.empty()),
-            self.make_cons(primitive_newline_object, self.empty()),
-        );
-        let env = self.make_cons(primiitve_env, self.empty());
-
-        self.builder
-            .build_store(self.registers.get(Register::Env), env);
-        {
-            let entry = self.context.append_basic_block(primitive_newline, "entry");
-            self.builder.position_at_end(entry);
-            self.builder.build_call(
-                self.functions.printf,
-                &[self
+    fn init_primitives(&mut self) {
+        let primitive_newline = self.create_primitive("newline", |this, _, _| {
+            this.builder.build_call(
+                this.functions.printf,
+                &[this
                     .builder
                     .build_global_string_ptr("\n", "\n")
                     .as_pointer_value()
                     .into()],
                 "call newline",
             );
-            self.builder
-                .build_return(Some(&self.types.object.const_zero()));
-        }
+            this.builder.build_return(Some(&this.empty()));
+        });
+
+        let primitive_not = self.create_primitive("not", |this, primitive_not, entry| {
+            let args = primitive_not.get_first_param().unwrap().into_struct_value();
+            let arg = this.make_car(args); // when we do arrity check we can make this unchecked car
+            let truthy = this.truthy(arg);
+            let not_truthy = this.builder.build_not(truthy, "not");
+            this.builder
+                .build_return(Some(&this.make_object(&not_truthy, TypeIndex::bool)));
+        });
+        let primitives = [("newline", primitive_newline), ("not", primitive_not)];
+        let primitive_env = primitives
+            .into_iter()
+            .map(|(name, function)| self.make_primitive_pair(name, function))
+            .fold(
+                (self.empty(), self.empty()),
+                |(symbols, functions), (symbol, function)| {
+                    (
+                        self.make_cons(symbol, symbols),
+                        self.make_cons(function, functions),
+                    )
+                },
+            );
+        let primitive_env = self.make_cons(primitive_env.0, primitive_env.1);
+        let env = self.make_cons(primitive_env, self.empty());
+
+        self.builder
+            .build_store(self.registers.get(Register::Env), env);
     }
 
     // TODO: maybe make primitives be a block rather that a function and instead of doing an exit + unreachable with errors we could have an error block with a phi for for error string and ret code,
@@ -432,6 +446,34 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.module.to_string()
     }
 
+    pub fn create_primitive(
+        &mut self,
+        name: &str,
+        code: impl FnOnce(&mut Self, FunctionValue<'ctx>, BasicBlock<'ctx>),
+    ) -> FunctionValue<'ctx> {
+        self.create_functions(name, self.types.primitive, code)
+    }
+
+    /// creates a function with entry and puts builder at entry
+    /// then calls code
+    pub fn create_functions(
+        &mut self,
+        name: &str,
+        kind: FunctionType<'ctx>,
+        code: impl FnOnce(&mut Self, FunctionValue<'ctx>, BasicBlock<'ctx>),
+    ) -> FunctionValue<'ctx> {
+        let prev = self.builder.get_insert_block().unwrap();
+        let prev_function = self.current;
+        let function = self.module.add_function(name, kind, None);
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+        self.current = function;
+        code(self, function, entry);
+        self.builder.position_at_end(prev);
+        self.current = prev_function;
+        function
+    }
+
     pub fn compile(&mut self, instructions: Vec<Instruction>) {
         instructions
             .into_iter()
@@ -440,7 +482,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             // we need to know when to start compiling un der a new block
             .inspect(|x| {
                 if let Instruction::Label(l) = x {
-                    let v = self.context.append_basic_block(self.main, l);
+                    let v = self.context.append_basic_block(self.current, l);
                     self.labels.insert(l.clone(), v);
                 }
             })
@@ -451,7 +493,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             });
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()));
-        self.fpm.run_on(&self.main);
+        self.fpm.run_on(&self.current);
         let fpm = PassManager::create(());
         // TODO: more optimizations
         fpm.add_function_inlining_pass();
@@ -517,7 +559,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     .build_load(self.types.object, self.flag, "load flag");
                 // TODO: hack technically (in most cases) if we have a branch, the next instruction after it will be a label so we dont need a new block for each branch but rather we should either "peek" ahead to the next instruction to obtain the label
                 // or encode the label as part of the branch variant
-                let next_label = self.context.append_basic_block(self.main, "next-block");
+                let next_label = self.context.append_basic_block(self.current, "next-block");
                 self.builder.build_conditional_branch(
                     self.truthy(flag.into_struct_value()),
                     *self.labels.get(&l).unwrap(),
@@ -552,7 +594,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 // we create new block/label b/c goto should be last instruction for a block so this "dummy" label acts as a catch all for anything afterwords
                 // realy only needed b/c for label instruction we assume we should just br to the label, but if we digit goto followed by new label we would have double br
                 // note wwe mahe similiar problem with branch
-                let next_label = self.context.append_basic_block(self.main, "next-block");
+                let next_label = self.context.append_basic_block(self.current, "next-block");
                 self.builder.position_at_end(next_label)
             }
             Instruction::Save(reg) => {
@@ -630,13 +672,15 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     // lookup variable for set! and plain variable lookup
     // returns a tuple contatining the cons of the found variable and the rest of the vars in the frame
     fn lookup_variable(&self, var: StructValue<'ctx>, env: StructValue<'ctx>) -> StructValue<'ctx> {
-        let lookup_entry_bb = self.context.append_basic_block(self.main, "lookup-entry");
-        let lookup_bb = self.context.append_basic_block(self.main, "lookup");
-        let scan_bb = self.context.append_basic_block(self.main, "scan");
-        let next_env_bb = self.context.append_basic_block(self.main, "next-env");
-        let check_bb = self.context.append_basic_block(self.main, "check");
-        let found_bb = self.context.append_basic_block(self.main, "found");
-        let scan_next_bb = self.context.append_basic_block(self.main, "scan-next");
+        let lookup_entry_bb = self
+            .context
+            .append_basic_block(self.current, "lookup-entry");
+        let lookup_bb = self.context.append_basic_block(self.current, "lookup");
+        let scan_bb = self.context.append_basic_block(self.current, "scan");
+        let next_env_bb = self.context.append_basic_block(self.current, "next-env");
+        let check_bb = self.context.append_basic_block(self.current, "check");
+        let found_bb = self.context.append_basic_block(self.current, "found");
+        let scan_next_bb = self.context.append_basic_block(self.current, "scan-next");
 
         let env_ptr = self.builder.build_alloca(self.types.object, "env");
         self.builder.build_store(env_ptr, env);
