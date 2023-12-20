@@ -222,11 +222,12 @@ fn sicp(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
     // eprintln!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
+    let mut env = vec![];
     let ir: Vec<_> = program
         .0
         .into_iter()
         .flat_map(|expr| {
-            codegen::sicp::compile(expr, Register::Val, Linkage::Next)
+            codegen::sicp::compile(expr, Register::Val, Linkage::Next, &mut env)
                 .instructions()
                 .to_vec()
         })

@@ -253,29 +253,49 @@ impl InstructionSequnce {
     }
 }
 
-pub fn compile(exp: UMPL2Expr, target: Register, linkage: Linkage) -> InstructionSequnce {
+const SPECIAL_FORMS: [&str; 8] = [
+    "if", "define", "set!", "quote", "begin", "lambda", "cond", "let",
+];
+
+pub fn compile(
+    exp: UMPL2Expr,
+    target: Register,
+    linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
+) -> InstructionSequnce {
     match exp {
         UMPL2Expr::Ident(i) => compile_variable(i.to_string(), target, linkage),
         UMPL2Expr::Application(mut a) => match a.first() {
             Some(UMPL2Expr::Ident(i)) => match i.to_string().as_str() {
-                "quote" => compile_quoted(a, target, linkage),
-                "set!" => compile_assignment(a, target, linkage),
-                "define" => compile_defeninition(a, target, linkage),
-                "if" => compile_if(a, target, linkage),
-                "lambda" => compile_lambda(a, target, linkage),
-                "begin" => compile_seq(
+                "quote" if !bound_special_forms.contains(&"quote") => {
+                    (compile_quoted(a, target, linkage))
+                }
+                "set!" if !bound_special_forms.contains(&"set!") => {
+                    compile_assignment(a, target, linkage, bound_special_forms)
+                }
+                "define" if !bound_special_forms.contains(&"define") => {
+                    compile_defeninition(a, target, linkage, bound_special_forms)
+                }
+                "if" if !bound_special_forms.contains(&"if") => {
+                    compile_if(a, target, linkage, bound_special_forms)
+                }
+                "lambda" if !bound_special_forms.contains(&"lambda") => {
+                    compile_lambda(a, target, linkage, bound_special_forms)
+                }
+                "begin" if !bound_special_forms.contains(&"begin") => compile_seq(
                     {
                         a.remove(0);
                         a
                     },
                     target,
                     linkage,
+                    bound_special_forms,
                 ),
                 "cond" => todo!(),
                 "let" => todo!(),
-                _ => compile_application(a, target, linkage),
+                _ => compile_application(a, target, linkage, bound_special_forms),
             },
-            Some(_) => compile_application(a, target, linkage),
+            Some(_) => compile_application(a, target, linkage, bound_special_forms),
             None => todo!(),
         },
         UMPL2Expr::FnParam(i) => compile_variable(format!("'{i}'"), target, linkage),
@@ -431,6 +451,7 @@ fn compile_assignment(
     exp: Vec<UMPL2Expr>,
     target: Register,
     linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
     let var = match exp.get(1) {
         Some(UMPL2Expr::Ident(i)) => i.to_string(),
@@ -438,7 +459,7 @@ fn compile_assignment(
     };
     let get_value_code = exp.get(2).map_or_else(
         || panic!(),
-        |v| compile(v.clone(), Register::Val, Linkage::Next),
+        |v| compile(v.clone(), Register::Val, Linkage::Next, bound_special_forms),
     );
     end_with_linkage(
         linkage,
@@ -471,15 +492,19 @@ fn compile_defeninition(
     exp: Vec<UMPL2Expr>,
     target: Register,
     linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
     let var = match exp.get(1) {
         Some(UMPL2Expr::Ident(i)) => i.to_string(),
         // Some(UMPL2Expr::Applicati
         _ => panic!(),
     };
+    if let Some(i) = SPECIAL_FORMS.iter().position(|&x| x == var) {
+        bound_special_forms.push(SPECIAL_FORMS[i])
+    }
     let get_value_code = exp.get(2).map_or_else(
         || panic!(),
-        |v| compile(v.clone(), Register::Val, Linkage::Next),
+        |v| compile(v.clone(), Register::Val, Linkage::Next, bound_special_forms),
     );
     end_with_linkage(
         linkage,
@@ -508,7 +533,12 @@ fn compile_defeninition(
     )
 }
 
-fn compile_if(mut exp: Vec<UMPL2Expr>, target: Register, linkage: Linkage) -> InstructionSequnce {
+fn compile_if(
+    mut exp: Vec<UMPL2Expr>,
+    target: Register,
+    linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
+) -> InstructionSequnce {
     let t_branch = make_label_name("true-branch".to_string());
     let f_branch = make_label_name("false-branch".to_string());
     let after_if = make_label_name("after-if".to_string());
@@ -521,16 +551,26 @@ fn compile_if(mut exp: Vec<UMPL2Expr>, target: Register, linkage: Linkage) -> In
         panic!()
     }
 
-    let p_code = compile(exp.remove(1), Register::Val, Linkage::Next);
+    let p_code = compile(
+        exp.remove(1),
+        Register::Val,
+        Linkage::Next,
+        bound_special_forms,
+    );
 
     let a_code = {
-        let mut a = compile(exp.remove(1), target, consequent_linkage);
+        let mut a = compile(
+            exp.remove(1),
+            target,
+            consequent_linkage,
+            bound_special_forms,
+        );
         a.instructions.insert(0, Instruction::Label(t_branch));
         a
     };
 
     let c_code = {
-        let mut c = compile(exp.remove(1), target, linkage);
+        let mut c = compile(exp.remove(1), target, linkage, bound_special_forms);
         c.instructions
             .insert(0, Instruction::Label(f_branch.clone()));
         c.instructions.push(Instruction::Label(after_if));
@@ -556,15 +596,20 @@ fn compile_if(mut exp: Vec<UMPL2Expr>, target: Register, linkage: Linkage) -> In
     )
 }
 
-fn compile_seq(seq: Vec<UMPL2Expr>, target: Register, linkage: Linkage) -> InstructionSequnce {
+fn compile_seq(
+    seq: Vec<UMPL2Expr>,
+    target: Register,
+    linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
+) -> InstructionSequnce {
     let size = seq.len();
     seq.into_iter()
         .enumerate()
         .map(move |(i, exp)| {
             if i == size - 1 {
-                compile(exp, target, linkage.clone())
+                compile(exp, target, linkage.clone(), bound_special_forms)
             } else {
-                compile(exp, target, Linkage::Next)
+                compile(exp, target, Linkage::Next, bound_special_forms)
             }
         })
         .reduce(|a, b| preserving(hashset!(), a, b))
@@ -575,6 +620,7 @@ fn compile_lambda(
     mut lambda: Vec<UMPL2Expr>,
     target: Register,
     linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
     lambda.remove(0);
     let proc_entry = make_label_name("entry".to_string());
@@ -601,7 +647,7 @@ fn compile_lambda(
             )],
         ),
     );
-    let body = compile_lambda_body(lambda, proc_entry);
+    let body = compile_lambda_body(lambda, proc_entry, bound_special_forms);
     first_inst.instructions.extend(body.instructions);
     first_inst
         .instructions
@@ -609,7 +655,11 @@ fn compile_lambda(
     first_inst
 }
 
-fn compile_lambda_body(mut lambda: Vec<UMPL2Expr>, proc_entry: String) -> InstructionSequnce {
+fn compile_lambda_body(
+    mut lambda: Vec<UMPL2Expr>,
+    proc_entry: String,
+    bound_special_forms: &mut Vec<&str>,
+) -> InstructionSequnce {
     let formals = {
         let arg_c = match &lambda[0] {
             // UMPL2Expr::Number(n) => (n, "".into()),
@@ -660,7 +710,7 @@ fn compile_lambda_body(mut lambda: Vec<UMPL2Expr>, proc_entry: String) -> Instru
                 ),
             ],
         ),
-        compile_seq(lambda, Register::Val, Linkage::Return),
+        compile_seq(lambda, Register::Val, Linkage::Return, bound_special_forms),
     )
 }
 
@@ -668,12 +718,25 @@ fn compile_application(
     exp: Vec<UMPL2Expr>,
     target: Register,
     linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
-    let proc_code = compile(exp[0].clone(), Register::Proc, Linkage::Next);
+    let proc_code = compile(
+        exp[0].clone(),
+        Register::Proc,
+        Linkage::Next,
+        bound_special_forms,
+    );
     // TODO: make it non strict by essentially turning each argument into zero parameter function and then when we need to unthunk the parameter we just call the function with the env
     let operand_codes = exp[1..]
         .iter()
-        .map(|exp| compile(exp.clone(), Register::Val, Linkage::Next))
+        .map(|exp| {
+            compile(
+                exp.clone(),
+                Register::Val,
+                Linkage::Next,
+                bound_special_forms,
+            )
+        })
         .collect();
     preserving(
         hashset!(Register::Continue, Register::Env),
