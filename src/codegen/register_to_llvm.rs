@@ -8,8 +8,8 @@ use inkwell::{
     passes::PassManager,
     types::{FunctionType, PointerType, StructType},
     values::{
-        AggregateValue, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
-        StructValue,
+        AggregateValue, BasicValue, BasicValueEnum, FunctionValue, IntValue, PhiValue,
+        PointerValue, StructValue,
     },
     AddressSpace, IntPredicate,
 };
@@ -315,28 +315,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let functions = Functions::new(module, context);
         let main = module.add_function("main", context.i32_type().fn_type(&[], false), None);
         let entry_bb = context.append_basic_block(main, "entry");
-        let error_block = context.append_basic_block(main, "error");
-        builder.position_at_end(error_block);
-        // error phi
-        let error_phi = builder.build_phi(error, "error phi");
-        {
-            let error_msg = builder
-                .build_extract_value(
-                    error_phi.as_basic_value().into_struct_value(),
-                    0,
-                    "error_msg",
-                )
-                .unwrap();
-            let error_code = builder
-                .build_extract_value(
-                    error_phi.as_basic_value().into_struct_value(),
-                    1,
-                    "error_code",
-                )
-                .unwrap();
-            builder.build_call(functions.printf, &[error_msg.into()], "print");
-            builder.build_return(Some(&error_code));
-        }
+        let (error_block, error_phi) = init_error_handler(
+            main,
+            context,
+            builder,
+            error,
+            functions.printf,
+            functions.exit,
+        );
 
         builder.position_at_end(entry_bb);
         // init random number seed
@@ -367,7 +353,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             error_phi,
             error_block,
         };
-        // adding a dummy primitive to the environment so defining variable (define ...) dont freak out the environment starts off as ()
         this.init_primitives();
         this
     }
@@ -462,16 +447,37 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         kind: FunctionType<'ctx>,
         code: impl FnOnce(&mut Self, FunctionValue<'ctx>, BasicBlock<'ctx>),
     ) -> FunctionValue<'ctx> {
-        let prev = self.builder.get_insert_block().unwrap();
-        let prev_function = self.current;
         let function = self.module.add_function(name, kind, None);
+        let (prev_error, prev_error_phi, prev, prev_function) = (
+            self.error_block,
+            self.error_phi,
+            self.builder.get_insert_block().unwrap(),
+            self.current,
+        );
+
         let entry = self.context.append_basic_block(function, "entry");
+        (self.error_block, self.error_phi) = self.init_error_handler(function);
+
         self.builder.position_at_end(entry);
         self.current = function;
         code(self, function, entry);
         self.builder.position_at_end(prev);
-        self.current = prev_function;
+        (self.current, self.error_block, self.error_phi) =
+            (prev_function, prev_error, prev_error_phi);
         function
+    }
+    fn init_error_handler(
+        &self,
+        function: FunctionValue<'ctx>,
+    ) -> (BasicBlock<'ctx>, PhiValue<'ctx>) {
+        init_error_handler(
+            function,
+            self.context,
+            self.builder,
+            self.types.error,
+            self.functions.printf,
+            self.functions.exit,
+        )
     }
 
     pub fn compile(&mut self, instructions: Vec<Instruction>) {
@@ -1166,4 +1172,38 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         )
         .into_struct_value()
     }
+}
+
+fn init_error_handler<'a, 'ctx>(
+    function: FunctionValue<'ctx>,
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    error: StructType<'ctx>,
+    printf: FunctionValue<'ctx>,
+    exit: FunctionValue<'ctx>,
+) -> (BasicBlock<'ctx>, PhiValue<'ctx>) {
+    let error_block = context.append_basic_block(function, "error");
+    builder.position_at_end(error_block);
+    // error phi
+    let error_phi = builder.build_phi(error, "error phi");
+    {
+        let error_msg = builder
+            .build_extract_value(
+                error_phi.as_basic_value().into_struct_value(),
+                0,
+                "error_msg",
+            )
+            .unwrap();
+        let error_code = builder
+            .build_extract_value(
+                error_phi.as_basic_value().into_struct_value(),
+                1,
+                "error_code",
+            )
+            .unwrap();
+        builder.build_call(printf, &[error_msg.into()], "print");
+        builder.build_call(exit, &[error_code.into()], "print");
+        builder.build_unreachable();
+    }
+    (error_block, error_phi)
 }
