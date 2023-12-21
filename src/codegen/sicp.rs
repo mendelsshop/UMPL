@@ -494,23 +494,48 @@ fn compile_defeninition(
     linkage: Linkage,
     bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
-    let var = match exp.get(1) {
-        Some(UMPL2Expr::Ident(i)) => i.to_string(),
-        // Some(UMPL2Expr::Applicati
+    let (var, val) = match exp.get(1) {
+        Some(UMPL2Expr::Ident(i)) => (
+            i.to_string(),
+            compile(
+                exp.get(2).unwrap().clone(),
+                Register::Val,
+                Linkage::Next,
+                bound_special_forms,
+            ),
+        ),
+        Some(UMPL2Expr::Application(app)) => {
+            if app.len() < 2 {
+                panic!("defining procedures with define must specify name, arg count and possibly varidicity");
+            }
+            let UMPL2Expr::Ident(name) = &app[0] else {
+                panic!("first expression in define procedure not a symbol");
+            };
+            let argc = &app[1];
+            let varidicity = app.get(2).cloned();
+            let mut scope = exp[2..].to_vec();
+            let signature = varidicity.map_or_else(
+                || UMPL2Expr::Application(vec![argc.clone()]),
+                |vard| UMPL2Expr::Application(vec![argc.clone(), vard]),
+            );
+            scope.insert(0, signature);
+            scope.insert(0, "lambda".into());
+            (
+                name.to_string(),
+                compile_lambda(scope, Register::Val, Linkage::Next, bound_special_forms),
+            )
+        }
         _ => panic!(),
     };
     if let Some(i) = SPECIAL_FORMS.iter().position(|&x| x == var) {
         bound_special_forms.push(SPECIAL_FORMS[i])
     }
-    let get_value_code = exp.get(2).map_or_else(
-        || panic!(),
-        |v| compile(v.clone(), Register::Val, Linkage::Next, bound_special_forms),
-    );
+
     end_with_linkage(
         linkage,
         preserving(
             hashset![Register::Env],
-            get_value_code,
+            val,
             InstructionSequnce::new(
                 hashset![Register::Env, Register::Val],
                 hashset![target],
@@ -622,6 +647,7 @@ fn compile_lambda(
     linkage: Linkage,
     bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
+    let mut bound_special_forms = bound_special_forms.clone();
     lambda.remove(0);
     let proc_entry = make_label_name("entry".to_string());
     let after_lambda = make_label_name("after_lambda".to_string());
@@ -647,7 +673,7 @@ fn compile_lambda(
             )],
         ),
     );
-    let body = compile_lambda_body(lambda, proc_entry, bound_special_forms);
+    let body = compile_lambda_body(lambda, proc_entry, &mut bound_special_forms);
     first_inst.instructions.extend(body.instructions);
     first_inst
         .instructions
