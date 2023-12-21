@@ -367,8 +367,19 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let name = self.create_symbol(name);
         (name, primitive)
     }
+    fn init_accessors(&mut self) -> Vec<(&'static str, FunctionValue<'ctx>)> {
+        macro_rules! accessors {
+        ($(($name:literal $acces:ident )),*) => {
+            vec![$(($name, self.create_primitive($name, |this,func,_|{
+                self.builder.build_return(Some(&this.$acces(this.make_car(func.get_first_param().unwrap().into_struct_value()))));
+            }))),*]
+        };
 
+    }
+        accessors!(("car" make_car), ("cdr" make_cdr), ("caar" make_caar),("cadr" make_cadr),("cdar" make_cdar),("cddr" make_cddr),("caaar" make_caaar),("caadr" make_caadr),("cadar" make_cadar),("caddr" make_caddr),("cdaar" make_cdaar),("cdadr" make_cdadr),("cddar" make_cddar),("cdddr" make_cdddr),("caaaar" make_caaaar),("caaadr" make_caaadr),("caadar" make_caadar),("caaddr" make_caaddr),("cadaar" make_cadaar),("cadadr" make_cadadr),("caddar" make_caddar),("cadddr" make_cadddr),("cdaaar" make_cdaaar),("cdaadr" make_cdaadr),("cdadar" make_cdadar),("cdaddr" make_cdaddr),("cddaar" make_cddaar),("cddadr" make_cddadr),("cdddar" make_cdddar),("cddddr" make_cddddr))
+    }
     fn init_primitives(&mut self) {
+        let accesors = self.init_accessors();
         let primitive_newline = self.create_primitive("newline", |this, _, _| {
             this.builder.build_call(
                 this.functions.printf,
@@ -381,6 +392,26 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             );
             this.builder.build_return(Some(&this.empty()));
         });
+        let primitive_cons = self.create_primitive("cons", |this, cons, _| {
+            let argl = cons.get_first_param().unwrap().into_struct_value();
+            let car = this.make_car(argl);
+            let cdr = this.make_cadr(argl);
+            this.builder.build_return(Some(&this.make_cons(car, cdr)));
+        });
+        let primitive_set_car = self.create_primitive("set-car!", |this, set_car, _| {
+            let argl = set_car.get_first_param().unwrap().into_struct_value();
+            let cons = this.make_car(argl);
+            let val = this.make_cadr(argl);
+            this.make_set_car(cons, val);
+            this.builder.build_return(Some(&this.empty()));
+        });
+        let primitive_set_cdr = self.create_primitive("set-cdr!", |this, set_cdr, _| {
+            let argl = set_cdr.get_first_param().unwrap().into_struct_value();
+            let cons = this.make_car(argl);
+            let val = this.make_cadr(argl);
+            this.make_set_cdr(cons, val);
+            this.builder.build_return(Some(&this.empty()));
+        });
 
         let primitive_not = self.create_primitive("not", |this, primitive_not, entry| {
             let args = primitive_not.get_first_param().unwrap().into_struct_value();
@@ -390,9 +421,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             this.builder
                 .build_return(Some(&this.make_object(&not_truthy, TypeIndex::bool)));
         });
-        let primitives = [("newline", primitive_newline), ("not", primitive_not)];
+        let primitives = [
+            ("newline", primitive_newline),
+            ("not", primitive_not),
+            ("cons", primitive_cons),
+        ];
         let primitive_env = primitives
             .into_iter()
+            .chain(accesors.into_iter())
             .map(|(name, function)| self.make_primitive_pair(name, function))
             .fold(
                 (self.empty(), self.empty()),
