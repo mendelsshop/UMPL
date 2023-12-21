@@ -89,7 +89,7 @@ macro_rules! extract {
     };
 }
 
-fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symbol label cons primitive}
+fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symbol label cons primitive thunk}
       fn new(
         empty: BasicTypeEnum<'ctx>,
         bool: BasicTypeEnum<'ctx>,
@@ -98,7 +98,8 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
         symbol: BasicTypeEnum<'ctx>,
         label: BasicTypeEnum<'ctx>,
         cons: BasicTypeEnum<'ctx>,
-        primitive: BasicTypeEnum<'ctx>
+        primitive: BasicTypeEnum<'ctx>,
+        thunk: BasicTypeEnum<'ctx>
     ) -> Self {
         Self {
             empty,
@@ -109,6 +110,7 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
             label,
             cons,
             primitive,
+            thunk,
         }
     }
 );
@@ -138,6 +140,7 @@ pub enum TypeIndex {
     label = 5,
     cons = 6,
     primitive = 7,
+    thunk,
 }
 
 pub struct Types<'ctx> {
