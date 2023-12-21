@@ -33,13 +33,13 @@ mod extract_object;
 mod functions;
 mod labels;
 mod loops;
+mod multimap;
 mod object;
 mod quotation;
 pub mod register_to_llvm;
 pub mod register_to_llvm_more_opt;
 pub mod sicp;
 mod stdlib;
-mod multimap;
 
 /// needed for when we reach stoppers like stop or skip
 /// to tell us what type of code to generate ie, br or return
@@ -57,7 +57,6 @@ pub enum EvalType<'ctx> {
         connection: PhiValue<'ctx>,
     },
 }
-
 
 #[derive(Clone, Copy, Debug)]
 pub struct Types<'ctx> {

@@ -115,7 +115,7 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
     }
 );
 
-fixed_map!(#[allow(non_snake_case)]RegiMap, PointerValue<'ctx>,Register {Env Argl Val Proc Continue}
+fixed_map!(#[allow(non_snake_case)]RegiMap, PointerValue<'ctx>,Register {Env Argl Val Proc Continue Thunk}
     fn new(builder: &Builder<'ctx>, ty: StructType<'ctx>) -> Self {
         let create_register = |name| builder.build_alloca(ty, name);
         Self {
@@ -124,6 +124,7 @@ fixed_map!(#[allow(non_snake_case)]RegiMap, PointerValue<'ctx>,Register {Env Arg
             Val: create_register("val"),
             Proc: create_register("proc"),
             Continue: create_register("continue"),
+            Thunk: create_register("thunk"),
         }
     }
 
@@ -140,7 +141,7 @@ pub enum TypeIndex {
     label = 5,
     cons = 6,
     primitive = 7,
-    thunk,
+    thunk = 8,
 }
 
 pub struct Types<'ctx> {
@@ -274,6 +275,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     is_type!(is_symbol, "symbol", symbol);
     is_type!(is_cons, "cons", cons);
     is_type!(is_label, "label", label);
+    is_type!(is_thunk, "thunk", thunk);
     extract!(
         get_primitive,
         unchecked_get_primitive,
@@ -283,6 +285,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     extract!(get_label, unchecked_get_label, label, "label");
     extract!(get_cons, unchecked_get_cons, cons, "cons");
     extract!(get_symbol, unchecked_get_symbol, symbol, "symbol");
+    extract!(get_thunk, unchecked_get_thunk, thunk, "thunk");
     pub fn new(
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
@@ -313,6 +316,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 pointer.into(),
                 cons.into(),
                 pointer.into(),
+                context
+                    .struct_type(&[object.into(), object.into()], false)
+                    .into(),
             ),
         };
         let functions = Functions::new(module, context);
@@ -970,7 +976,54 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::PrimitiveProcedure => {
                 self.make_object(&self.is_primitive(args[0]), TypeIndex::bool)
             }
+            Operation::MakeThunk => {
+                let entry = args[0];
+                let env = args[1];
+                let thunk = self.list_to_struct(
+                    self.types.types.thunk.into_struct_type(),
+                    &[entry.into(), env.into()],
+                );
+                self.make_object(&thunk, TypeIndex::thunk)
+            }
+            Operation::ThunkEntry => {
+                let thunk = args[0];
+                let thunk = self.unchecked_get_thunk(thunk).into_struct_value();
+                self.builder
+                    .build_extract_value(thunk, 0, "thunk entry")
+                    .unwrap()
+                    .into_struct_value()
+            }
+            Operation::ThunkEnv => {
+                let thunk = args[0];
+                let thunk = self.unchecked_get_thunk(thunk).into_struct_value();
+                self.builder
+                    .build_extract_value(thunk, 0, "thunk entry")
+                    .unwrap()
+                    .into_struct_value()
+            }
+            Operation::NotThunk => {
+                let thunk = args[0];
+                let is_thunk = self.is_thunk(thunk);
+                let is_not_thunk = self.builder.build_not(is_thunk, "not thunk");
+                self.make_object(&is_not_thunk, TypeIndex::bool)
+            }
         }
+    }
+
+    fn list_to_struct(
+        &self,
+        struct_ty: StructType<'ctx>,
+        things: &[BasicValueEnum<'ctx>],
+    ) -> StructValue<'ctx> {
+        things
+            .into_iter()
+            .enumerate()
+            .fold(struct_ty.const_zero(), |strcut_val, (i, item)| {
+                self.builder
+                    .build_insert_value(strcut_val, item.clone(), i as u32, "insert into struct")
+                    .unwrap()
+                    .into_struct_value()
+            })
     }
 
     // TODO: make unchecked versions of *car and *cdr function to avoid dealing with br(s) added self.get_cons (which is causing problems with multiple br(s) per block in variable lookup and other places)

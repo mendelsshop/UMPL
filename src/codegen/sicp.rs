@@ -54,6 +54,7 @@ pub enum Register {
     Val,
     Proc,
     Continue,
+    Thunk,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -70,6 +71,10 @@ pub enum Operation {
     RandomBool,
     MakeCompiledProcedure,
     PrimitiveProcedure,
+    MakeThunk,
+    ThunkEntry,
+    ThunkEnv,
+    NotThunk,
 }
 
 impl fmt::Display for Register {
@@ -80,6 +85,7 @@ impl fmt::Display for Register {
             Self::Val => write!(f, "val"),
             Self::Proc => write!(f, "proc"),
             Self::Continue => write!(f, "continue"),
+            Self::Thunk => write!(f, "thunk"),
         }
     }
 }
@@ -182,7 +188,7 @@ impl fmt::Display for Operation {
         };
         let kebabified = decamel(format!("{self:?}"));
         match self {
-            Self::False | Self::PrimitiveProcedure => write!(f, "{kebabified}?"),
+            Self::False | Self::PrimitiveProcedure | Self::NotThunk => write!(f, "{kebabified}?"),
             _ => write!(f, "{kebabified}"),
         }
     }
@@ -576,7 +582,7 @@ fn compile_if(
         panic!()
     }
 
-    let p_code = compile(
+    let p_code = force_it(
         exp.remove(1),
         Register::Val,
         Linkage::Next,
@@ -740,37 +746,58 @@ fn compile_lambda_body(
     )
 }
 
+enum ProcedureType {
+    Primitive,
+    Compiled,
+}
 fn compile_application(
     exp: Vec<UMPL2Expr>,
     target: Register,
     linkage: Linkage,
     bound_special_forms: &mut Vec<&str>,
 ) -> InstructionSequnce {
-    let proc_code = compile(
+    let proc_code = force_it(
         exp[0].clone(),
         Register::Proc,
         Linkage::Next,
         bound_special_forms,
     );
     // TODO: make it non strict by essentially turning each argument into zero parameter function and then when we need to unthunk the parameter we just call the function with the env
-    let operand_codes = exp[1..]
-        .iter()
-        .map(|exp| {
-            compile(
-                exp.clone(),
-                Register::Val,
-                Linkage::Next,
-                bound_special_forms,
-            )
-        })
-        .collect();
+    let operand_codes_primitive = {
+        exp[1..]
+            .iter()
+            .map(|exp| {
+                force_it(
+                    exp.clone(),
+                    Register::Val,
+                    Linkage::Next,
+                    bound_special_forms,
+                )
+            })
+            .collect()
+    };
+    let operand_codes_compiled = {
+        exp[1..]
+            .iter()
+            .map(|exp| {
+                delay_it(
+                    exp.clone(),
+                    Register::Val,
+                    Linkage::Next,
+                    bound_special_forms,
+                )
+            })
+            .collect()
+    };
     preserving(
         hashset!(Register::Continue, Register::Env),
+        // hashset!(Register::Proc, Register::Continue),
         proc_code,
-        preserving(
-            hashset!(Register::Proc, Register::Continue),
-            construct_arg_list(operand_codes),
-            compile_procedure_call(target, linkage),
+        compile_procedure_call(
+            target,
+            linkage,
+            operand_codes_primitive,
+            operand_codes_compiled,
         ),
     )
 }
@@ -787,7 +814,12 @@ fn make_intsruction_sequnce(
     InstructionSequnce::new(needs, modifies, instructions)
 }
 
-fn compile_procedure_call(target: Register, linkage: Linkage) -> InstructionSequnce {
+fn compile_procedure_call(
+    target: Register,
+    linkage: Linkage,
+    operand_codes_primitive: Vec<InstructionSequnce>,
+    operand_codes_compiled: Vec<InstructionSequnce>,
+) -> InstructionSequnce {
     let primitive_branch = make_label_name("primitive-branch".to_string());
     let compiled_branch = make_label_name("compiled-branch".to_string());
     let after_call = make_label_name("after-call".to_string());
@@ -810,11 +842,17 @@ fn compile_procedure_call(target: Register, linkage: Linkage) -> InstructionSequ
         ),
         parallel_instruction_sequnce(
             append_instruction_sequnce(
-                make_label_instruction(compiled_branch),
+                append_instruction_sequnce(
+                    make_label_instruction(compiled_branch),
+                    construct_arg_list(operand_codes_primitive),
+                ),
                 compile_proc_appl(target, compiled_linkage),
             ),
             append_instruction_sequnce(
-                make_label_instruction(primitive_branch),
+                append_instruction_sequnce(
+                    make_label_instruction(primitive_branch),
+                    construct_arg_list(operand_codes_compiled),
+                ),
                 append_instruction_sequnce(
                     end_with_linkage(
                         linkage,
@@ -927,18 +965,108 @@ fn add_to_argl(inst: InstructionSequnce) -> InstructionSequnce {
     )
 }
 
-fn construct_arg_list(operand_codes: Vec<InstructionSequnce>) -> InstructionSequnce {
-    operand_codes.into_iter().map(add_to_argl).rev().fold(
-        InstructionSequnce::new(
+fn force_it(
+    exp: UMPL2Expr,
+    target: Register,
+    linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
+) -> InstructionSequnce {
+    let actual_value_label = make_label_name("actual-value".to_string());
+    let force_label = make_label_name("force".to_string());
+    let thunk = compile(exp, Register::Thunk, Linkage::Next, bound_special_forms);
+    append_instruction_sequnce(
+        thunk,
+        make_intsruction_sequnce(
             hashset!(),
-            hashset!(Register::Argl),
-            vec![Instruction::Assign(
-                Register::Argl,
-                Expr::Const(Const::Empty),
-            )],
+            hashset!(),
+            vec![
+                Instruction::Label(actual_value_label.clone()),
+                Instruction::Test(Perform {
+                    op: Operation::NotThunk,
+                    args: vec![Expr::Register(Register::Thunk)],
+                }),
+                Instruction::Branch(force_label.clone()),
+                Instruction::Assign(target, Expr::Register(Register::Thunk)),
+                Instruction::Label(force_label),
+                Instruction::Assign(
+                    Register::Val,
+                    Expr::Op(Perform {
+                        op: Operation::ThunkEntry,
+                        args: vec![Expr::Register(Register::Thunk)],
+                    }),
+                ),
+                Instruction::Assign(Register::Continue, Expr::Label(actual_value_label)),
+                Instruction::Goto(Goto::Register(Register::Val)),
+            ],
         ),
-        |a, b| preserving(hashset!(Register::Env), a, b),
     )
+}
+
+fn delay_it(
+    exp: UMPL2Expr,
+    target: Register,
+    linkage: Linkage,
+    bound_special_forms: &mut Vec<&str>,
+) -> InstructionSequnce {
+    let thunk_label = make_label_name("thunk".to_string());
+    let after_thunk = make_label_name("after-label".to_string());
+    let inst = append_instruction_sequnce(
+        make_intsruction_sequnce(
+            hashset!(),
+            hashset!(),
+            vec![Instruction::Goto(Goto::Label(after_thunk.clone()))],
+        ),
+        append_instruction_sequnce(
+            {
+                InstructionSequnce::new(
+                    hashset!(),
+                    hashset!(),
+                    vec![Instruction::Label(thunk_label.clone())],
+                )
+            },
+            compile(exp, Register::Val, Linkage::Next, bound_special_forms),
+        ),
+    );
+
+    append_instruction_sequnce(
+        inst,
+        make_intsruction_sequnce(
+            hashset!(),
+            hashset!(),
+            vec![
+                Instruction::Goto(Goto::Register(Register::Continue)),
+                Instruction::Label(after_thunk),
+                Instruction::Assign(
+                    target,
+                    Expr::Op(
+                        (Perform {
+                            op: Operation::MakeThunk,
+                            args: vec![Expr::Label(thunk_label), Expr::Register(Register::Env)],
+                        }),
+                    ),
+                ),
+            ],
+        ),
+    )
+}
+
+fn construct_arg_list(operand_codes: Vec<InstructionSequnce>) -> InstructionSequnce {
+    operand_codes
+        .into_iter()
+        // .map(delay_it)
+        .map(add_to_argl)
+        .rev()
+        .fold(
+            InstructionSequnce::new(
+                hashset!(),
+                hashset!(Register::Argl),
+                vec![Instruction::Assign(
+                    Register::Argl,
+                    Expr::Const(Const::Empty),
+                )],
+            ),
+            |a, b| preserving(hashset!(Register::Env), a, b),
+        )
 }
 
 impl From<UMPL2Expr> for Expr {

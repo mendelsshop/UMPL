@@ -72,11 +72,12 @@ macro_rules! fixed_map {
 //     }
 // );
 
-fixed_map!(#[allow(non_snake_case)]RegiMap, NewExpr, Register {Env Argl Val Proc Continue}
+fixed_map!(#[allow(non_snake_case)]RegiMap, NewExpr, Register {Env Argl Val Proc Continue Thunk}
     fn new() -> Self {
         let create_register = |name| NewExpr::Empty;
         Self {
             Env: create_register("env"),
+            Thunk: create_register("thunk"),
             Argl: create_register("argl"),
             Val: create_register("val"),
             Proc: create_register("proc"),
