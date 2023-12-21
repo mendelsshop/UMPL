@@ -844,14 +844,14 @@ fn compile_procedure_call(
             append_instruction_sequnce(
                 append_instruction_sequnce(
                     make_label_instruction(compiled_branch),
-                    construct_arg_list(operand_codes_primitive),
+                    construct_arg_list(operand_codes_compiled),
                 ),
                 compile_proc_appl(target, compiled_linkage),
             ),
             append_instruction_sequnce(
                 append_instruction_sequnce(
                     make_label_instruction(primitive_branch),
-                    construct_arg_list(operand_codes_compiled),
+                    construct_arg_list(operand_codes_primitive),
                 ),
                 append_instruction_sequnce(
                     end_with_linkage(
@@ -973,6 +973,7 @@ fn force_it(
 ) -> InstructionSequnce {
     let actual_value_label = make_label_name("actual-value".to_string());
     let force_label = make_label_name("force".to_string());
+    let done = make_label_name("done".to_string());
     let thunk = compile(exp, Register::Thunk, Linkage::Next, bound_special_forms);
     append_instruction_sequnce(
         thunk,
@@ -985,8 +986,7 @@ fn force_it(
                     op: Operation::NotThunk,
                     args: vec![Expr::Register(Register::Thunk)],
                 }),
-                Instruction::Branch(force_label.clone()),
-                Instruction::Assign(target, Expr::Register(Register::Thunk)),
+                Instruction::Branch(done.clone()),
                 Instruction::Label(force_label),
                 Instruction::Assign(
                     Register::Val,
@@ -997,6 +997,8 @@ fn force_it(
                 ),
                 Instruction::Assign(Register::Continue, Expr::Label(actual_value_label)),
                 Instruction::Goto(Goto::Register(Register::Val)),
+                Instruction::Label(done),
+                Instruction::Assign(target, Expr::Register(Register::Thunk)),
             ],
         ),
     )

@@ -433,6 +433,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let primitives = [
             ("newline", primitive_newline),
             ("not", primitive_not),
+            ("set_cdr!", primitive_set_cdr),
+            ("set_car!", primitive_set_car),
             ("cons", primitive_cons),
         ];
         let primitive_env = primitives
