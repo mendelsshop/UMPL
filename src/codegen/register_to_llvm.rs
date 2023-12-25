@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-
+use std::fmt;
 use inkwell::{
     basic_block::BasicBlock,
     builder::Builder,
-    context::Context,
+    context::{self, Context},
     module::Module,
     passes::PassManager,
     types::{FunctionType, PointerType, StructType},
@@ -364,6 +364,62 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         };
         this.init_primitives();
         this
+    }
+
+    fn make_print(&self, exp: StructValue<'ctx>) {
+        let ty = self.extract_type(exp).unwrap();
+        let empty_bb = self.context.append_basic_block(self.current, "print:empty");
+        let bool_bb = self.context.append_basic_block(self.current, "print:bool");
+        let number_bb = self
+            .context
+            .append_basic_block(self.current, "print:number");
+        let string_bb = self
+            .context
+            .append_basic_block(self.current, "print:string");
+        let symbol_bb = self
+            .context
+            .append_basic_block(self.current, "print:symbol");
+        let label_bb = self.context.append_basic_block(self.current, "print:label");
+        let cons_bb = self.context.append_basic_block(self.current, "print:cons");
+        let primitive_bb = self
+            .context
+            .append_basic_block(self.current, "print:primitive");
+        let thunk_bb = self.context.append_basic_block(self.current, "print:thunk");
+        let invalid_bb = self
+            .context
+            .append_basic_block(self.current, "print:invalid");
+        let done_bb = self.context.append_basic_block(self.current, "print:done");
+
+        let namer = |str: &str|format!("print:{str}");
+
+
+ 
+        //     let block = self.context.append_basic_block(self.current, &namer(name));
+        //     self.builder.position_at_end(block);
+        //     code(block);
+        //     self.builder.build_unconditional_branch(done_bb);
+        
+
+        // make_print_block("bool",|bb: BasicBlock<'ctx>| {
+
+        // }); 
+
+        let make_number = |n| self.context.i32_type().const_int(n, false);
+        self.builder.build_switch(
+            ty.into_int_value(),
+            invalid_bb,
+            &[
+                (make_number(0), empty_bb),
+                (make_number(1), bool_bb),
+                (make_number(2), number_bb),
+                (make_number(3), string_bb),
+                (make_number(4), symbol_bb),
+                (make_number(5), label_bb),
+                (make_number(6), cons_bb),
+                (make_number(7), primitive_bb),
+                (make_number(8), thunk_bb),
+            ],
+        );
     }
 
     fn make_primitive_pair(
