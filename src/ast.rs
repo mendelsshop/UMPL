@@ -1,4 +1,5 @@
-use std::fmt::Display;
+use std::fmt;
+use std::{fmt::Display, net};
 
 use inkwell::values::StructValue;
 
@@ -6,6 +7,7 @@ use crate::{
     codegen::Compiler,
     interior_mut::{MUTEX, RC},
 };
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tree {
@@ -116,4 +118,232 @@ pub enum Varidiac {
     /// denotes that besides the usual arg count function will take extra args
     /// in form of tree (requires at least 0 args)
     AtLeast0,
+}
+
+#[derive(Debug)]
+pub enum Arg {
+    Zero,
+    One,
+    /// denotes that besides the usual arg count function will take extra args
+    /// in form of tree (requires at least 1 arg)
+    AtLeast1,
+    /// denotes that besides the usual arg count function will take extra args
+    /// in form of tree (requires at least 0 args)
+    AtLeast0,
+}
+
+#[derive(Debug)]
+pub enum Ast2 {
+    Bool(Boolean),
+    Number(f64),
+    String(RC<str>),
+    Ident(RC<str>),
+    Application(Vec<Ast2>),
+    Label(RC<str>),
+    // should simlify to ident or the like ...
+    FnParam(usize),
+
+    // special forms
+    If(Box<Ast2>, Box<Ast2>, Box<Ast2>),
+    Define(RC<str>, Box<Ast2>),
+    Lambda(usize, Option<Varidiac>, Box<Ast2>),
+    Begin(Vec<Ast2>),
+    Set(RC<str>, Box<Ast2>),
+    Quote(Box<Ast2>),
+}
+#[derive(Debug)]
+pub enum Ast3 {
+    Bool(Boolean),
+    Number(f64),
+    String(RC<str>),
+    Ident(RC<str>),
+    Application(Vec<Ast2>),
+    Label(RC<str>),
+    // should simlify to ident or the like ...
+    FnParam(usize),
+
+    // special forms
+    If(Box<Ast2>, Box<Ast2>, Box<Ast2>),
+    Define(RC<str>, Box<Ast2>),
+    Lambda(Arg, Box<Ast2>),
+    Begin(Vec<Ast2>),
+    Set(RC<str>, Box<Ast2>),
+    Quote(Box<Ast2>),
+}
+
+type Error = String;
+
+fn immutable_add_to_vec<T>(mut v: Vec<T>, x: T) -> Vec<T> {
+    v.push(x);
+    v
+}
+
+/// 2 transformations happen during this phase:
+/// 1: all special forms are typified
+/// 2: lambdas are sngle parmaterfied curring
+fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
+    const SPECIAL_FORMS: [&str; 8] = [
+        "if", "define", "set!", "quote", "begin", "lambda", "cond", "let",
+    ];
+    fn extend_if_found(name: impl fmt::Display, env: Vec<&str>) -> Vec<&str> {
+        if let Some(i) = SPECIAL_FORMS.iter().position(|&x| x == name.to_string()) {
+            immutable_add_to_vec(env, SPECIAL_FORMS[i])
+        } else {
+            env
+        }
+    };
+    let env = value.1;
+
+    fn convert_begin(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
+        exps.into_iter()
+            .try_fold((vec![], env), |(exps, env), current| {
+                pass1((current, env))
+                    .map(|(current, env)| (immutable_add_to_vec(exps, current), env))
+            })
+            .map(|(app, env)| (Ast2::Begin(app), env))
+    }
+
+    fn convert_quoted(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
+        if exps.len() != 1 {
+            return Err("quoted expression can only contain single expression".to_string());
+        }
+        fn quote(exp: UMPL2Expr) -> Ast2 {
+            match exp {
+                UMPL2Expr::Bool(t) => Ast2::Bool(t),
+                UMPL2Expr::Number(t) => Ast2::Number(t),
+                UMPL2Expr::String(t) => Ast2::String(t),
+                UMPL2Expr::Ident(t) => Ast2::Ident(t),
+                UMPL2Expr::Application(t) => Ast2::Application(t.into_iter().map(quote).collect()),
+                UMPL2Expr::Label(t) => Ast2::Label(t),
+                UMPL2Expr::FnParam(t) => Ast2::FnParam(t),
+            }
+        }
+        Ok((quote(exps[1].clone()), env))
+    }
+
+    fn convert_set(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
+        // TODO: set should only be allowed to be able to set non special forms
+        if exps.len() != 2 {
+            return Err("the set! form must follow (set! [var] [value])".to_string());
+        }
+        let var = if let UMPL2Expr::Ident(i) = exps[0].clone() {
+            i
+        } else {
+            return Err("the set! [var] must be a symbol".to_string());
+        };
+        pass1((exps[1].clone(), env)).map(|(exp, env)| {
+            (
+                Ast2::Set(var.clone(), Box::new(exp)),
+                extend_if_found(var, env),
+            )
+        })
+    }
+    fn convert_define(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
+        if exps.len() < 2 {
+            return Err("the define form must follow (define [var] [value]) or (define ([var] [argc] <vararg>) exp+ )".to_string());
+        }
+        match exps[0].clone() {
+            UMPL2Expr::Application(a) => todo!(),
+            UMPL2Expr::Ident(i) => {
+                if exps.len() != 2 {
+                    return Err(
+                        "the define form (define [var] [value]) must follow not have anything else"
+                            .to_string(),
+                    );
+                }
+                let env = extend_if_found(i.clone(), env);
+                pass1((exps[1].clone(), env))
+                    .map(|(exp, env)| (Ast2::Define(i, Box::new(exp)), env))
+            }
+            _ => Err(
+                "the first part of a define must be [var] or ([var] [argc] <varags>)".to_string(),
+            ),
+        }
+    }
+    fn convert_lambda(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
+        if exps.len() < 2 {
+            return Err(
+                "the lambda form must follow (lambda ([argc] <vararg>) exp+ ) ".to_string(),
+            );
+        }
+        let (argc, vararg) = if let UMPL2Expr::Application(app) = &exps[0] {
+            match app.as_slice() {
+                [UMPL2Expr::Number(n), UMPL2Expr::Ident(s)]
+                    if ["+".into(), "*".into()].contains(s) =>
+                {
+                    (
+                        *n,
+                        if s.to_string().as_str() == "*" {
+                            Some(Varidiac::AtLeast0)
+                        } else {
+                            Some(Varidiac::AtLeast1)
+                        },
+                    )
+                }
+
+                [UMPL2Expr::Number(n)] => (*n, None),
+                _ => todo!("self function should return result so self can error"),
+            }
+        } else {
+            return Err("paramters in lambda does not take form ([argc] <varargs>) ".to_string());
+        };
+        let (body, _) = convert_begin(exps[1..].to_vec(), env.clone())?;
+        Ok((Ast2::Lambda(argc as usize, vararg, Box::new(body)), env))
+    }
+    fn convert_if(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
+        if exps.len() != 3 {
+            return Err(
+                "the if form must follow (if [condition] [consequent] [alternative])".to_string(),
+            );
+        }
+        pass1((exps[0].clone(), env)).and_then(|(cond, env)| {
+            pass1((exps[1].clone(), env)).and_then(|(cons, env)| {
+                pass1((exps[2].clone(), env)).map(|(alt, env)| {
+                    (Ast2::If(Box::new(cond), Box::new(cons), Box::new(alt)), env)
+                })
+            })
+        })
+    }
+
+    fn convert_application(
+        app: Vec<UMPL2Expr>,
+        env: Vec<&str>,
+    ) -> Result<(Ast2, Vec<&str>), Error> {
+        match app.first() {
+            Some(UMPL2Expr::Ident(i)) if env.contains(&i.to_string().as_str()) => {
+                // TODO: have constraints on where some special forms can be used/rededinfed to help with the approximation of where some special forms are redefined when using lazyness
+                let exps = app[1..].to_vec();
+                match i.to_string().as_str() {
+                    "lambda" => todo!(),
+                    "define" => convert_begin(exps, env),
+                    "set!" => convert_set(exps, env),
+                    "begin" => convert_begin(exps, env),
+                    "if" => convert_if(exps, env),
+                    "quote" => convert_quoted(exps, env),
+                    _ => unreachable!(),
+                }
+            }
+
+            Some(fst) => {
+                let fst = pass1((fst.clone(), env))?;
+                let fst = (vec![fst.0], fst.1);
+                app.into_iter()
+                    .try_fold(fst, |(app, env), current| {
+                        pass1((current, env))
+                            .map(|(current, env)| (immutable_add_to_vec(app, current), env))
+                    })
+                    .map(|(app, env)| (Ast2::Application(app), env))
+            }
+            None => Err("application must have at least one argument".to_string()),
+        }
+    }
+    match value.0 {
+        UMPL2Expr::Bool(b) => Ok((Ast2::Bool(b), env)),
+        UMPL2Expr::Number(n) => Ok((Ast2::Number(n), env)),
+        UMPL2Expr::String(s) => Ok((Ast2::String(s), env)),
+        UMPL2Expr::Ident(i) => Ok((Ast2::Ident(i), env)),
+        UMPL2Expr::Application(app) => convert_application(app, env),
+        UMPL2Expr::Label(l) => Ok((Ast2::Label(l), env)),
+        UMPL2Expr::FnParam(p) => Ok((Ast2::FnParam(p), env)),
+    }
 }

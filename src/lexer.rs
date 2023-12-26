@@ -476,7 +476,13 @@ fn fn_stmt() -> Box<Parser<UMPL2Expr>> {
                     .collect(),
                 )
             } else {
-                UMPL2Expr::Application(vec_splat(vec![fn_ident, param_count], scope).collect())
+                UMPL2Expr::Application(
+                    vec_splat(
+                        vec![fn_ident, UMPL2Expr::Application(vec![param_count])],
+                        scope,
+                    )
+                    .collect(),
+                )
             };
             if let Some(name) = name {
                 let fn_ident = "define".into();

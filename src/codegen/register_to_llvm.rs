@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::fmt;
 use inkwell::{
     basic_block::BasicBlock,
     builder::Builder,
@@ -15,6 +13,8 @@ use inkwell::{
 };
 use inkwell::{module::Linkage, types::BasicTypeEnum};
 use itertools::Itertools;
+use std::collections::HashMap;
+use std::fmt;
 
 use super::sicp::{Const, Expr, Goto, Instruction, Operation, Perform, Register};
 
@@ -390,19 +390,16 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .append_basic_block(self.current, "print:invalid");
         let done_bb = self.context.append_basic_block(self.current, "print:done");
 
-        let namer = |str: &str|format!("print:{str}");
+        let namer = |str: &str| format!("print:{str}");
 
-
- 
         //     let block = self.context.append_basic_block(self.current, &namer(name));
         //     self.builder.position_at_end(block);
         //     code(block);
         //     self.builder.build_unconditional_branch(done_bb);
-        
 
         // make_print_block("bool",|bb: BasicBlock<'ctx>| {
 
-        // }); 
+        // });
 
         let make_number = |n| self.context.i32_type().const_int(n, false);
         self.builder.build_switch(
