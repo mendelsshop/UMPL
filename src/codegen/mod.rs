@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, ptr::NonNull};
+use std::collections::HashMap;
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -37,7 +37,7 @@ mod multimap;
 mod object;
 mod quotation;
 pub mod register_to_llvm;
-pub mod register_to_llvm_more_opt;
+// pub mod register_to_llvm_more_opt;
 pub mod sicp;
 mod stdlib;
 
@@ -233,12 +233,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         let va_procces = module.add_function("va_procces", va_procces_type, None);
 
-        let functions = Functions {
-            exit,
-            printf,
-            rand,
-            va_procces,
-        };
+        let functions = Functions { exit, va_procces, printf, rand };
         kind.set_body(
             &[
                 types.ty.as_basic_type_enum(),              //type

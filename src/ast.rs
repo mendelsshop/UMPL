@@ -1,13 +1,13 @@
 use std::fmt;
-use std::{fmt::Display, net};
+use std::fmt::Display;
 
 use inkwell::values::StructValue;
+use itertools::Itertools;
 
 use crate::{
     codegen::Compiler,
     interior_mut::{MUTEX, RC},
 };
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tree {
@@ -71,14 +71,16 @@ impl<'a, 'ctx> FlattenAst<'a, 'ctx> for Vec<UMPL2Expr> {
     }
 }
 
-impl core::fmt::Display for UMPL2Expr {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Display for UMPL2Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Bool(f0) => write!(f, "{f0}"),
             Self::Number(f0) => write!(f, "{f0}"),
             Self::String(f0) => write!(f, "{f0}"),
             Self::Ident(f0) => write!(f, "{f0}"),
-            Self::Application(f0) => f.debug_tuple("Application").field(&f0).finish(),
+            Self::Application(f0) => {
+                write!(f, "({})", f0.iter().map(ToString::to_string).join(" "))
+            }
             Self::Label(f0) => write!(f, "@{f0}"),
             Self::FnParam(f0) => write!(f, "'{f0}"),
         }
@@ -132,7 +134,34 @@ pub enum Arg {
     AtLeast0,
 }
 
-#[derive(Debug)]
+impl fmt::Display for Varidiac {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::AtLeast1 => "+",
+                Self::AtLeast0 => "*",
+            }
+        )
+    }
+}
+impl fmt::Display for Arg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::AtLeast1 => "+",
+                Self::AtLeast0 => "*",
+                Self::Zero => "0",
+                Self::One => "1",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Ast2 {
     Bool(Boolean),
     Number(f64),
@@ -157,23 +186,56 @@ pub enum Ast3 {
     Number(f64),
     String(RC<str>),
     Ident(RC<str>),
-    Application(Vec<Ast2>),
+    Application(Vec<Ast3>),
     Label(RC<str>),
     // should simlify to ident or the like ...
     FnParam(usize),
 
     // special forms
-    If(Box<Ast2>, Box<Ast2>, Box<Ast2>),
-    Define(RC<str>, Box<Ast2>),
-    Lambda(Arg, Box<Ast2>),
-    Begin(Vec<Ast2>),
-    Set(RC<str>, Box<Ast2>),
-    Quote(Box<Ast2>),
+    If(Box<Ast3>, Box<Ast3>, Box<Ast3>),
+    Define(RC<str>, Box<Ast3>),
+    Lambda(Arg, Box<Ast3>),
+    Begin(Vec<Ast3>),
+    Set(RC<str>, Box<Ast3>),
+    Quote(Box<Ast3>),
+}
+
+impl fmt::Display for Ast2 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(f0) => write!(f, "{f0}"),
+            Self::Number(f0) => write!(f, "{f0}"),
+            Self::String(f0) => write!(f, "{f0}"),
+            Self::Ident(f0) => write!(f, "{f0}"),
+            Self::Application(f0) => {
+                write!(f, "({})", f0.iter().map(ToString::to_string).join(" "))
+            }
+            Self::Label(f0) => write!(f, "@{f0}"),
+            Self::FnParam(f0) => write!(f, "'{f0}"),
+
+            Self::If(cond, cons, alt) => write!(f, "(if {cond} {cons} {alt})"),
+            Self::Define(v, val) => write!(f, "(define {v} {val})"),
+            Self::Lambda(argc, vairdiac, body) => write!(
+                f,
+                "(lambda ({argc}{}) {body})",
+                vairdiac
+                    .as_ref()
+                    .map_or_else(String::new, |s| format!(" {s}"))
+            ),
+            Self::Begin(b) => write!(
+                f,
+                "(begin {})",
+                b.iter().map(ToString::to_string).join("\n")
+            ),
+            Self::Set(v, val) => write!(f, "(set! {v} {val})"),
+            Self::Quote(q) => write!(f, "'{q}"),
+        }
+    }
 }
 
 type Error = String;
 
-fn immutable_add_to_vec<T>(mut v: Vec<T>, x: T) -> Vec<T> {
+pub fn immutable_add_to_vec<T>(mut v: Vec<T>, x: T) -> Vec<T> {
     v.push(x);
     v
 }
@@ -181,7 +243,7 @@ fn immutable_add_to_vec<T>(mut v: Vec<T>, x: T) -> Vec<T> {
 /// 2 transformations happen during this phase:
 /// 1: all special forms are typified
 /// 2: lambdas are sngle parmaterfied curring
-fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
+pub fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
     const SPECIAL_FORMS: [&str; 8] = [
         "if", "define", "set!", "quote", "begin", "lambda", "cond", "let",
     ];
@@ -191,7 +253,7 @@ fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
         } else {
             env
         }
-    };
+    }
     let env = value.1;
 
     fn convert_begin(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
@@ -226,9 +288,8 @@ fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
         if exps.len() != 2 {
             return Err("the set! form must follow (set! [var] [value])".to_string());
         }
-        let var = if let UMPL2Expr::Ident(i) = exps[0].clone() {
-            i
-        } else {
+
+        let UMPL2Expr::Ident(var) = exps[0].clone() else {
             return Err("the set! [var] must be a symbol".to_string());
         };
         pass1((exps[1].clone(), env)).map(|(exp, env)| {
@@ -243,7 +304,25 @@ fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
             return Err("the define form must follow (define [var] [value]) or (define ([var] [argc] <vararg>) exp+ )".to_string());
         }
         match exps[0].clone() {
-            UMPL2Expr::Application(a) => todo!(),
+            UMPL2Expr::Application(a) => {
+                if a.len() < 2 || a.len() > 3 {
+                    return Err(
+                        "the define form signature must follow ([var] [argc] <vararg>)".to_string(),
+                    );
+                }
+                let UMPL2Expr::Ident(i) = a[0].clone() else {
+                    return Err("the define form [var] must be a symbol".to_string());
+                };
+                let env = extend_if_found(i.clone(), env);
+                convert_lambda(
+                    vec![UMPL2Expr::Application(a[1..].to_vec())]
+                        .into_iter()
+                        .chain(exps[1..].to_vec())
+                        .collect(),
+                    env,
+                )
+                .map(|(exp, env)| (Ast2::Define(i, Box::new(exp)), env))
+            }
             UMPL2Expr::Ident(i) => {
                 if exps.len() != 2 {
                     return Err(
@@ -310,12 +389,15 @@ fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
         env: Vec<&str>,
     ) -> Result<(Ast2, Vec<&str>), Error> {
         match app.first() {
-            Some(UMPL2Expr::Ident(i)) if env.contains(&i.to_string().as_str()) => {
+            Some(UMPL2Expr::Ident(i))
+                if !env.contains(&i.to_string().as_str())
+                    && SPECIAL_FORMS.contains(&i.to_string().as_str()) =>
+            {
                 // TODO: have constraints on where some special forms can be used/rededinfed to help with the approximation of where some special forms are redefined when using lazyness
                 let exps = app[1..].to_vec();
                 match i.to_string().as_str() {
-                    "lambda" => todo!(),
-                    "define" => convert_begin(exps, env),
+                    "lambda" => convert_lambda(exps, env),
+                    "define" => convert_define(exps, env),
                     "set!" => convert_set(exps, env),
                     "begin" => convert_begin(exps, env),
                     "if" => convert_if(exps, env),
@@ -327,7 +409,9 @@ fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
             Some(fst) => {
                 let fst = pass1((fst.clone(), env))?;
                 let fst = (vec![fst.0], fst.1);
-                app.into_iter()
+                app[1..]
+                    .iter()
+                    .cloned()
                     .try_fold(fst, |(app, env), current| {
                         pass1((current, env))
                             .map(|(current, env)| (immutable_add_to_vec(app, current), env))
@@ -346,4 +430,64 @@ fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> {
         UMPL2Expr::Label(l) => Ok((Ast2::Label(l), env)),
         UMPL2Expr::FnParam(p) => Ok((Ast2::FnParam(p), env)),
     }
+}
+
+impl From<Ast2> for Ast3 {
+    fn from(value: Ast2) -> Self {
+        fn quote(exp: Ast2) -> Ast3 {
+            match exp {
+                Ast2::Bool(t) => Ast3::Bool(t),
+                Ast2::Number(t) => Ast3::Number(t),
+                Ast2::String(t) => Ast3::String(t),
+                Ast2::Ident(t) => Ast3::Ident(t),
+                Ast2::Application(t) => Ast3::Application(t.into_iter().map(quote).collect()),
+                Ast2::Label(t) => Ast3::Label(t),
+                Ast2::FnParam(t) => Ast3::FnParam(t),
+                _ => unreachable!(),
+            }
+        }
+
+        fn curryify(argc: usize, varidiac: Option<Varidiac>, body: Box<Ast2>) -> Ast3 {
+            if argc == 0 {
+                let body = map_into(body);
+                match varidiac {
+                    Some(Varidiac::AtLeast0) => Ast3::Lambda(Arg::AtLeast0, body),
+                    Some(Varidiac::AtLeast1) => Ast3::Lambda(Arg::AtLeast1, body),
+                    None => *body,
+                }
+            } else {
+                Ast3::Lambda(Arg::One, Box::new(curryify(argc - 1, varidiac, body)))
+            }
+        }
+
+        match value {
+            Ast2::Bool(t) => Self::Bool(t),
+            Ast2::Number(t) => Self::Number(t),
+            Ast2::String(t) => Self::String(t),
+            Ast2::Ident(t) => Self::Ident(t),
+            Ast2::Application(t) => Self::Application(t.into_iter().map(Into::into).collect()),
+            Ast2::Label(t) => Self::Label(t),
+            Ast2::FnParam(t) => Self::FnParam(t),
+            Ast2::If(cond, cons, alt) => Self::If(map_into(cond), map_into(cons), map_into(alt)),
+            Ast2::Define(s, exp) => Self::Define(s, map_into(exp)),
+            Ast2::Lambda(argc, varidiac, body) => {
+                if argc == 0 && varidiac.is_none() {
+                    Self::Lambda(Arg::Zero, map_into(body))
+                } else {
+                    curryify(argc, varidiac, body)
+                }
+            }
+            Ast2::Begin(b) => Self::Begin(b.into_iter().map(Into::into).collect()),
+            Ast2::Set(s, exp) => Self::Set(s, map_into(exp)),
+            Ast2::Quote(q) => Self::Quote(map_box(q, quote)),
+        }
+    }
+}
+
+fn map_box<T, U>(b: Box<T>, f: impl FnOnce(T) -> U) -> Box<U> {
+    Box::new(f(*b))
+}
+
+fn map_into<T, U: From<T>>(b: Box<T>) -> Box<U> {
+    map_box(b, Into::into)
 }

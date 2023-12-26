@@ -112,7 +112,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.build_store(l, value);
                 Ok(())
             }
-            VarType::SpecialForm(_) => Err(format!("set: Could not mutate syntax identifier")),
+            VarType::SpecialForm(_) => Err("set: Could not mutate syntax identifier".to_string()),
         }
     }
 
