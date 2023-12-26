@@ -1,7 +1,7 @@
 use inkwell::{
     basic_block::BasicBlock,
     builder::Builder,
-    context::{self, Context},
+    context::Context,
     module::Module,
     passes::PassManager,
     types::{FunctionType, PointerType, StructType},
@@ -14,7 +14,6 @@ use inkwell::{
 use inkwell::{module::Linkage, types::BasicTypeEnum};
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::fmt;
 
 use super::sicp::{Const, Expr, Goto, Instruction, Operation, Perform, Register};
 
@@ -50,6 +49,7 @@ macro_rules! fixed_map {
 
 macro_rules! extract {
     ($fn_name:ident, $unchecked:ident, $type:ident, $name:literal) => {
+        #[allow(unused)]
         pub(super) fn $fn_name(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
             let current_fn = self.current;
             let prefix = |end| format!("extract-{}:{end}", $name);
@@ -74,7 +74,6 @@ macro_rules! extract {
             self.$unchecked(val)
         }
         pub(super) fn $unchecked(&self, val: StructValue<'ctx>) -> BasicValueEnum<'ctx> {
-            let current_fn = self.current;
             let prefix = |end| format!("extract-{}:{end}", $name);
             let pointer = self
                 .builder
@@ -213,14 +212,7 @@ impl<'ctx> Functions<'ctx> {
             ),
             Some(Linkage::External),
         );
-        Self {
-            exit,
-            printf,
-            rand,
-            strncmp,
-            srand,
-            time,
-        }
+        Self { exit, strncmp, printf, rand, srand, time }
     }
 }
 
@@ -234,6 +226,7 @@ macro_rules! make_accessors {
 
 macro_rules! is_type {
     ($name:ident,$type:literal,$typeindex:ident) => {
+        #[allow(dead_code)]
         fn $name(&self, obj: StructValue<'ctx>) -> IntValue<'ctx> {
             let arg_type = self.extract_type(obj).unwrap();
             self.builder.build_int_compare(
@@ -388,9 +381,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let invalid_bb = self
             .context
             .append_basic_block(self.current, "print:invalid");
-        let done_bb = self.context.append_basic_block(self.current, "print:done");
+        let _done_bb = self.context.append_basic_block(self.current, "print:done");
 
-        let namer = |str: &str| format!("print:{str}");
+        let _namer = |str: &str| format!("print:{str}");
 
         //     let block = self.context.append_basic_block(self.current, &namer(name));
         //     self.builder.position_at_end(block);
@@ -475,7 +468,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             this.builder.build_return(Some(&this.empty()));
         });
 
-        let primitive_not = self.create_primitive("not", |this, primitive_not, entry| {
+        let primitive_not = self.create_primitive("not", |this, primitive_not, _| {
             let args = primitive_not.get_first_param().unwrap().into_struct_value();
             let arg = this.make_car(args); // when we do arrity check we can make this unchecked car
             let truthy = this.truthy(arg);
@@ -492,7 +485,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         ];
         let primitive_env = primitives
             .into_iter()
-            .chain(accesors.into_iter())
+            .chain(accesors)
             .map(|(name, function)| self.make_primitive_pair(name, function))
             .fold(
                 (self.empty(), self.empty()),
@@ -520,8 +513,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             &self.types.error.const_named_struct(&[
                 self.builder
                     .build_global_string_ptr(reason, "error exit")
-                    .as_basic_value_enum()
-                    .into(),
+                    .as_basic_value_enum(),
                 self.context.i32_type().const_int(code as u64, false).into(),
             ]),
             self.builder.get_insert_block().unwrap(),
@@ -701,7 +693,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 // realy only needed b/c for label instruction we assume we should just br to the label, but if we digit goto followed by new label we would have double br
                 // note wwe mahe similiar problem with branch
                 let next_label = self.context.append_basic_block(self.current, "next-block");
-                self.builder.position_at_end(next_label)
+                self.builder.position_at_end(next_label);
             }
             Instruction::Save(reg) => {
                 let prev_stack =
@@ -927,8 +919,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         // TODO: each operation could be function or block(s) + phi so instead of compiling the following code each time we find a perform we would do it only once
         let args: Vec<_> = action
             .args()
-            .to_vec()
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|e| self.compile_expr(e))
             .collect();
         match action.op() {
@@ -1052,7 +1044,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let thunk = args[0];
                 let thunk = self.unchecked_get_thunk(thunk).into_struct_value();
                 self.builder
-                    .build_extract_value(thunk, 0, "thunk entry")
+                    .build_extract_value(thunk, 1, "thunk env")
                     .unwrap()
                     .into_struct_value()
             }
@@ -1071,11 +1063,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         things: &[BasicValueEnum<'ctx>],
     ) -> StructValue<'ctx> {
         things
-            .into_iter()
+            .iter()
             .enumerate()
             .fold(struct_ty.const_zero(), |strcut_val, (i, item)| {
                 self.builder
-                    .build_insert_value(strcut_val, item.clone(), i as u32, "insert into struct")
+                    .build_insert_value(strcut_val, *item, i as u32, "insert into struct")
                     .unwrap()
                     .into_struct_value()
             })
@@ -1294,10 +1286,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let strlen = s.chars().count();
         let global_str = self
             .builder
-            .build_global_string_ptr(&s, &s)
+            .build_global_string_ptr(s, s)
             .as_pointer_value();
         let obj = self.types.string.const_zero();
-        let mut add_to_string = |string_object, name, expr, index| {
+        let add_to_string = |string_object, name, expr, index| {
             self.builder
                 .build_insert_value(string_object, expr, index, &format!("insert {name}"))
                 .unwrap()
@@ -1321,7 +1313,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 }
 
-fn init_error_handler<'a, 'ctx>(
+fn init_error_handler<'ctx>(
     function: FunctionValue<'ctx>,
     context: &'ctx Context,
     builder: &Builder<'ctx>,
