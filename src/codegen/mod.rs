@@ -233,7 +233,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         let va_procces = module.add_function("va_procces", va_procces_type, None);
 
-        let functions = Functions { exit, va_procces, printf, rand };
+        let functions = Functions {
+            exit,
+            va_procces,
+            printf,
+            rand,
+        };
         kind.set_body(
             &[
                 types.ty.as_basic_type_enum(),              //type

@@ -212,7 +212,14 @@ impl<'ctx> Functions<'ctx> {
             ),
             Some(Linkage::External),
         );
-        Self { exit, strncmp, printf, rand, srand, time }
+        Self {
+            exit,
+            strncmp,
+            printf,
+            rand,
+            srand,
+            time,
+        }
     }
 }
 

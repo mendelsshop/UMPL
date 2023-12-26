@@ -18,9 +18,12 @@ use codegen::{
     sicp::{Linkage, Register},
 };
 use inkwell::{context::Context, passes::PassManager};
-use itertools::Itertools;
 
-use crate::{codegen::Compiler, macros::parse_and_expand};
+use crate::{
+    ast::{immutable_add_to_vec, pass1},
+    codegen::Compiler,
+    macros::parse_and_expand,
+};
 use clap::{Parser, Subcommand};
 
 pub mod ast;
@@ -221,13 +224,22 @@ fn expand(file: &str) {
 fn sicp(file: &str) {
     let contents = fs::read_to_string(file).unwrap();
     let program = parse_and_expand(&contents).unwrap();
-    // eprintln!("{}\n", program.0.iter().map(ToString::to_string).join("\n"));
-    let mut env = vec![];
-    let ir: Vec<_> = program
+    let typed_program = program
+        .0
+        .into_iter()
+        .try_fold((vec![], vec![]), |(exps, env), exp| {
+            pass1((exp, env)).map(|(exp, env)| (immutable_add_to_vec(exps, exp), env))
+        })
+        .unwrap();
+    // eprintln!(
+    //     "{}\n",
+    //     typed_program.0.iter().map(ToString::to_string).join("\n")
+    // );
+    let ir: Vec<_> = typed_program
         .0
         .into_iter()
         .flat_map(|expr| {
-            codegen::sicp::compile(expr, Register::Val, Linkage::Next, &mut env)
+            codegen::sicp::compile(expr, Register::Val, Linkage::Next)
                 .instructions()
                 .to_vec()
         })
