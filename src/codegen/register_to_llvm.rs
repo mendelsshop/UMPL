@@ -283,6 +283,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         "primitive"
     );
     extract!(get_label, unchecked_get_label, label, "label");
+    extract!(get_number, unchecked_get_number, number, "number");
+    extract!(get_bool, unchecked_get_bool, bool, "bool");
     extract!(get_cons, unchecked_get_cons, cons, "cons");
     extract!(get_symbol, unchecked_get_symbol, symbol, "symbol");
     extract!(get_thunk, unchecked_get_thunk, thunk, "thunk");
@@ -366,57 +368,112 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         this
     }
 
-    fn make_print(&self, exp: StructValue<'ctx>) {
-        let ty = self.extract_type(exp).unwrap();
-        let empty_bb = self.context.append_basic_block(self.current, "print:empty");
-        let bool_bb = self.context.append_basic_block(self.current, "print:bool");
-        let number_bb = self
-            .context
-            .append_basic_block(self.current, "print:number");
-        let string_bb = self
-            .context
-            .append_basic_block(self.current, "print:string");
-        let symbol_bb = self
-            .context
-            .append_basic_block(self.current, "print:symbol");
-        let label_bb = self.context.append_basic_block(self.current, "print:label");
-        let cons_bb = self.context.append_basic_block(self.current, "print:cons");
-        let primitive_bb = self
-            .context
-            .append_basic_block(self.current, "print:primitive");
-        let thunk_bb = self.context.append_basic_block(self.current, "print:thunk");
-        let invalid_bb = self
-            .context
-            .append_basic_block(self.current, "print:invalid");
-        let _done_bb = self.context.append_basic_block(self.current, "print:done");
+    fn make_print(&mut self) {
+        self.create_function(
+            "print-obj",
+            self.context
+                .void_type()
+                .fn_type(&[self.types.object.into()], false),
+            |this, print, entry| {
+                let exp = print.get_first_param().unwrap().into_struct_value();
+                let ty = this.extract_type(exp).unwrap();
+                let namer = |str: &str| format!("print:{str}");
+                let make_print_block =
+                    |name: &str, code: fn(&Self, BasicBlock<'ctx>, StructValue<'ctx>)| {
+                        let block = this.context.append_basic_block(this.current, &namer(name));
+                        this.builder.position_at_end(block);
+                        code(this, block, exp);
+                        this.builder.build_return(None);
+                        block
+                    };
 
-        let _namer = |str: &str| format!("print:{str}");
+                let empty_bb = make_print_block("empty", |this, _, _| {
+                    this.make_printf("()", vec![]);
+                });
+                let bool_bb = make_print_block("bool", |this, _, exp| {
+                    let value = this.unchecked_get_bool(exp);
+                    let true_str = this
+                        .builder
+                        .build_global_string_ptr("true", "true")
+                        .as_pointer_value();
+                    let false_str = this
+                        .builder
+                        .build_global_string_ptr("false", "false")
+                        .as_pointer_value();
+                    let value = this.builder.build_select(
+                        value.into_int_value(),
+                        true_str,
+                        false_str,
+                        "bool value",
+                    );
+                    this.builder
+                        .build_call(this.functions.printf, &[value.into()], "printf debug");
+                });
 
-        //     let block = self.context.append_basic_block(self.current, &namer(name));
-        //     self.builder.position_at_end(block);
-        //     code(block);
-        //     self.builder.build_unconditional_branch(done_bb);
-
-        // make_print_block("bool",|bb: BasicBlock<'ctx>| {
-
-        // });
-
-        let make_number = |n| self.context.i32_type().const_int(n, false);
-        self.builder.build_switch(
-            ty.into_int_value(),
-            invalid_bb,
-            &[
-                (make_number(0), empty_bb),
-                (make_number(1), bool_bb),
-                (make_number(2), number_bb),
-                (make_number(3), string_bb),
-                (make_number(4), symbol_bb),
-                (make_number(5), label_bb),
-                (make_number(6), cons_bb),
-                (make_number(7), primitive_bb),
-                (make_number(8), thunk_bb),
-            ],
+                let number_bb = make_print_block("number", |this, _, exp| {
+                    let value = this.unchecked_get_number(exp);
+                    this.make_printf("%.2f", vec![value]);
+                });
+                let string_bb = make_print_block("string", |this, _, exp| this.print_string(exp));
+                let symbol_bb = make_print_block("symbol", |this, _, exp| this.print_string(exp));
+                let label_bb = make_print_block("label", |this, _, _| {
+                    // TODO: labels should save their name
+                    this.make_printf("label", vec![]);
+                });
+                let cons_bb = {
+                    let block = this
+                        .context
+                        .append_basic_block(this.current, &namer("cons"));
+                    this.builder.position_at_end(block);
+                    let car = this.make_unchecked_car(exp);
+                    let cdr = this.make_unchecked_cdr(exp);
+                    this.make_printf("(", vec![]);
+                    this.builder.build_call(print, &[car.into()], "print car");
+                    this.make_printf(" ", vec![]);
+                    // TODO: dot notation and not printing () at end
+                    this.builder.build_call(print, &[cdr.into()], "print car");
+                    this.make_printf(")", vec![]);
+                    this.builder.build_return(None);
+                    block
+                };
+                let primitive_bb = make_print_block("primitive", |this, _, _| {
+                    // TODO: primitives should save their name
+                    this.make_printf("primitive", vec![]);
+                });
+                let thunk_bb = make_print_block("thunk", |this, _, _| {
+                    this.make_printf("thunk", vec![]);
+                });
+                this.builder.position_at_end(entry);
+                this.set_error("invalid type", 1);
+                let make_number = |n| this.context.i32_type().const_int(n, false);
+                this.builder.build_switch(
+                    ty.into_int_value(),
+                    this.error_block,
+                    &[
+                        (make_number(0), empty_bb),
+                        (make_number(1), bool_bb),
+                        (make_number(2), number_bb),
+                        (make_number(3), string_bb),
+                        (make_number(4), symbol_bb),
+                        (make_number(5), label_bb),
+                        (make_number(6), cons_bb),
+                        (make_number(7), primitive_bb),
+                        (make_number(8), thunk_bb),
+                    ],
+                );
+            },
         );
+    }
+
+    // takes an object (asssumed to be a string or symbol) amd prints at runtime
+    // the reason it can be an string or symbol is because besides for the type tag both are really the same
+    fn print_string(&self, str: StructValue<'ctx>) {
+        let str = self.unchecked_get_symbol(str).into_struct_value();
+        let len = self.builder.build_extract_value(str, 0, "strlen").unwrap();
+        let str = self.builder.build_extract_value(str, 1, "strlen").unwrap();
+        // https://stackoverflow.com/questions/256218/the-simplest-way-of-printing-a-portion-of-a-char-in-c
+        // for how to print fixed length strings
+        self.make_printf("%.*s", vec![len, str]);
     }
 
     fn make_primitive_pair(
@@ -442,6 +499,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
     fn init_primitives(&mut self) {
         let accesors = self.init_accessors();
+        self.make_print();
         let primitive_newline = self.create_primitive("newline", |this, _, _| {
             this.builder.build_call(
                 this.functions.printf,
@@ -457,7 +515,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let primitive_cons = self.create_primitive("cons", |this, cons, _| {
             let argl = cons.get_first_param().unwrap().into_struct_value();
             let car = this.make_car(argl);
-            let cdr = this.make_cadr(argl);
+            let cdr = this.make_cadr(argl); // doesnt do proper thing even though i have verified that argl is like (6 (6 ()))
+            // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
             this.builder.build_return(Some(&this.make_cons(car, cdr)));
         });
         let primitive_set_car = self.create_primitive("set-car!", |this, set_car, _| {
@@ -483,8 +542,15 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             this.builder
                 .build_return(Some(&this.make_object(&not_truthy, TypeIndex::bool)));
         });
+        let primitive_print = self.create_primitive("print", |this, set_car, _| {
+            let argl = set_car.get_first_param().unwrap().into_struct_value();
+            let val = this.make_car(argl);
+            this.print_object(val);
+            this.builder.build_return(Some(&this.empty()));
+        });
         let primitives = [
             ("newline", primitive_newline),
+            ("print", primitive_print),
             ("not", primitive_not),
             ("set_cdr!", primitive_set_cdr),
             ("set_car!", primitive_set_car),
@@ -535,12 +601,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         name: &str,
         code: impl FnOnce(&mut Self, FunctionValue<'ctx>, BasicBlock<'ctx>),
     ) -> FunctionValue<'ctx> {
-        self.create_functions(name, self.types.primitive, code)
+        self.create_function(name, self.types.primitive, code)
+    }
+
+    fn print_object(&self, obj: StructValue<'ctx>) {
+        let print = self.module.get_function("print-obj").unwrap();
+        self.builder
+            .build_call(print, &[obj.into()], "print object");
     }
 
     /// creates a function with entry and puts builder at entry
     /// then calls code
-    pub fn create_functions(
+    pub fn create_function(
         &mut self,
         name: &str,
         kind: FunctionType<'ctx>,

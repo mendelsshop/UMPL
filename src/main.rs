@@ -18,6 +18,7 @@ use codegen::{
     sicp::{Linkage, Register},
 };
 use inkwell::{context::Context, passes::PassManager};
+use itertools::Itertools;
 
 use crate::{
     ast::{immutable_add_to_vec, pass1},

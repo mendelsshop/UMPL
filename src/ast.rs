@@ -280,7 +280,7 @@ pub fn pass1(value: (UMPL2Expr, Vec<&str>)) -> Result<(Ast2, Vec<&str>), Error> 
                 UMPL2Expr::FnParam(t) => Ast2::FnParam(t),
             }
         }
-        Ok((quote(exps[1].clone()), env))
+        Ok((Ast2::Quote(Box::new(quote(exps[0].clone()))), env))
     }
 
     fn convert_set(exps: Vec<UMPL2Expr>, env: Vec<&str>) -> Result<(Ast2, Vec<&str>), Error> {
