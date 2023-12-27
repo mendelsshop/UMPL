@@ -497,6 +497,7 @@ fn compile_if(exp: (Ast2, Ast2, Ast2), target: Register, linkage: Linkage) -> In
     };
 
     let p_code = force_it(exp.0, Register::Val, Linkage::Next);
+    // let p_code = compile(exp.0, Register::Val, Linkage::Next);
 
     let a_code = compile(exp.2, target, consequent_linkage);
 
@@ -626,17 +627,20 @@ fn compile_lambda_body(
 
 fn compile_application(exp: Vec<Ast2>, target: Register, linkage: Linkage) -> InstructionSequnce {
     let proc_code = force_it(exp[0].clone(), Register::Proc, Linkage::Next);
+    // let proc_code = compile(exp[0].clone(), Register::Proc, Linkage::Next);
     // TODO: make it non strict by essentially turning each argument into zero parameter function and then when we need to unthunk the parameter we just call the function with the env
     let operand_codes_primitive = {
         exp[1..]
             .iter()
             .map(|exp| force_it(exp.clone(), Register::Val, Linkage::Next))
+            // .map(|exp| compile(exp.clone(), Register::Val, Linkage::Next))
             .collect()
     };
     let operand_codes_compiled = {
         exp[1..]
             .iter()
             .map(|exp| delay_it(exp.clone(), Register::Val, Linkage::Next))
+            // .map(|exp| compile(exp.clone(), Register::Val, Linkage::Next))
             .collect()
     };
     preserving(
@@ -678,7 +682,8 @@ fn compile_procedure_call(
     } else {
         linkage.clone()
     };
-    append_instruction_sequnce(
+    preserving(
+        hashset!(Register::Proc, Register::Continue),
         InstructionSequnce::new(
             hashset!(Register::Proc),
             hashset!(),
@@ -692,36 +697,38 @@ fn compile_procedure_call(
         ),
         parallel_instruction_sequnce(
             append_instruction_sequnce(
-                append_instruction_sequnce(
-                    make_label_instruction(compiled_branch),
+                make_label_instruction(compiled_branch),
+                preserving(
+                    hashset!(Register::Proc, Register::Continue),
                     construct_arg_list(operand_codes_compiled),
+                    compile_proc_appl(target, compiled_linkage),
                 ),
-                compile_proc_appl(target, compiled_linkage),
             ),
             append_instruction_sequnce(
-                append_instruction_sequnce(
-                    make_label_instruction(primitive_branch),
+                make_label_instruction(primitive_branch),
+                preserving(
+                    hashset!(Register::Proc, Register::Continue),
                     construct_arg_list(operand_codes_primitive),
-                ),
-                append_instruction_sequnce(
-                    end_with_linkage(
-                        linkage,
-                        make_intsruction_sequnce(
-                            hashset!(Register::Proc, Register::Argl),
-                            hashset!(target),
-                            vec![Instruction::Assign(
-                                target,
-                                Expr::Op(Perform {
-                                    op: Operation::ApplyPrimitiveProcedure,
-                                    args: vec![
-                                        Expr::Register(Register::Proc),
-                                        Expr::Register(Register::Argl),
-                                    ],
-                                }),
-                            )],
+                    append_instruction_sequnce(
+                        end_with_linkage(
+                            linkage,
+                            make_intsruction_sequnce(
+                                hashset!(Register::Proc, Register::Argl),
+                                hashset!(target),
+                                vec![Instruction::Assign(
+                                    target,
+                                    Expr::Op(Perform {
+                                        op: Operation::ApplyPrimitiveProcedure,
+                                        args: vec![
+                                            Expr::Register(Register::Proc),
+                                            Expr::Register(Register::Argl),
+                                        ],
+                                    }),
+                                )],
+                            ),
                         ),
+                        make_label_instruction(after_call),
                     ),
-                    make_label_instruction(after_call),
                 ),
             ),
         ),

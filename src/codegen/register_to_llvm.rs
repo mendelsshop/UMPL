@@ -516,7 +516,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             let argl = cons.get_first_param().unwrap().into_struct_value();
             let car = this.make_car(argl);
             let cdr = this.make_cadr(argl); // doesnt do proper thing even though i have verified that argl is like (6 (6 ()))
-            // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
+                                            // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
             this.builder.build_return(Some(&this.make_cons(car, cdr)));
         });
         let primitive_set_car = self.create_primitive("set-car!", |this, set_car, _| {
