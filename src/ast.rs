@@ -82,7 +82,7 @@ impl fmt::Display for UMPL2Expr {
                 write!(f, "({})", f0.iter().map(ToString::to_string).join(" "))
             }
             Self::Label(f0) => write!(f, "@{f0}"),
-            Self::FnParam(f0) => write!(f, "'{f0}"),
+            Self::FnParam(f0) => write!(f, "'{f0}'"),
         }
     }
 }
@@ -211,7 +211,7 @@ impl fmt::Display for Ast2 {
                 write!(f, "({})", f0.iter().map(ToString::to_string).join(" "))
             }
             Self::Label(f0) => write!(f, "@{f0}"),
-            Self::FnParam(f0) => write!(f, "'{f0}"),
+            Self::FnParam(f0) => write!(f, "'{f0}'"),
 
             Self::If(cond, cons, alt) => write!(f, "(if {cond} {cons} {alt})"),
             Self::Define(v, val) => write!(f, "(define {v} {val})"),
@@ -222,11 +222,7 @@ impl fmt::Display for Ast2 {
                     .as_ref()
                     .map_or_else(String::new, |s| format!(" {s}"))
             ),
-            Self::Begin(b) => write!(
-                f,
-                "(begin {})",
-                b.iter().map(ToString::to_string).join("\n")
-            ),
+            Self::Begin(b) => write!(f, "(begin {})", b.iter().map(ToString::to_string).join(" ")),
             Self::Set(v, val) => write!(f, "(set! {v} {val})"),
             Self::Quote(q) => write!(f, "'{q}"),
         }

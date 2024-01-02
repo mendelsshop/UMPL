@@ -88,7 +88,7 @@ macro_rules! extract {
     };
 }
 
-fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symbol label cons primitive thunk}
+fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symbol label cons primitive thunk lambda}
       fn new(
         empty: BasicTypeEnum<'ctx>,
         bool: BasicTypeEnum<'ctx>,
@@ -98,7 +98,8 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
         label: BasicTypeEnum<'ctx>,
         cons: BasicTypeEnum<'ctx>,
         primitive: BasicTypeEnum<'ctx>,
-        thunk: BasicTypeEnum<'ctx>
+        thunk: BasicTypeEnum<'ctx>,
+        lambda: BasicTypeEnum<'ctx>
     ) -> Self {
         Self {
             empty,
@@ -110,6 +111,7 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
             cons,
             primitive,
             thunk,
+            lambda,
         }
     }
 );
@@ -141,6 +143,7 @@ pub enum TypeIndex {
     cons = 6,
     primitive = 7,
     thunk = 8,
+    lambda = 9,
 }
 
 pub struct Types<'ctx> {
@@ -288,6 +291,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     extract!(get_cons, unchecked_get_cons, cons, "cons");
     extract!(get_symbol, unchecked_get_symbol, symbol, "symbol");
     extract!(get_thunk, unchecked_get_thunk, thunk, "thunk");
+    extract!(get_lambda, unchecked_get_lambda, lambda, "lambda");
     pub fn new(
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
@@ -318,6 +322,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 pointer.into(),
                 cons.into(),
                 pointer.into(),
+                context
+                    .struct_type(&[object.into(), object.into()], false)
+                    .into(),
                 context
                     .struct_type(&[object.into(), object.into()], false)
                     .into(),
@@ -443,6 +450,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let thunk_bb = make_print_block("thunk", |this, _, _| {
                     this.make_printf("thunk", vec![]);
                 });
+                let lambda_bb = make_print_block("lambda", |this, _, _| {
+                    this.make_printf("user define procedure", vec![]);
+                });
                 this.builder.position_at_end(entry);
                 this.set_error("invalid type", 1);
                 let make_number = |n| this.context.i32_type().const_int(n, false);
@@ -459,6 +469,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         (make_number(6), cons_bb),
                         (make_number(7), primitive_bb),
                         (make_number(8), thunk_bb),
+                        (make_number(9), lambda_bb),
                     ],
                 );
             },
@@ -775,6 +786,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.builder.position_at_end(next_label);
             }
             Instruction::Save(reg) => {
+                // self.make_printf(&format!("\nsave start {reg}\n"), vec![]);
+                let register = reg;
                 let prev_stack =
                     self.builder
                         .build_load(self.types.stack, self.stack, "load stack");
@@ -796,9 +809,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     .builder
                     .build_insert_value(new_stack, prev_stack_ptr, 1, "save previous stack")
                     .unwrap();
+                // self.make_printf(&format!("save {register}\n"), vec![]);
                 self.builder.build_store(self.stack, new_stack);
             }
             Instruction::Restore(reg) => {
+                // self.make_printf(&format!("\nrestore start {reg}\n"), vec![]);
                 let stack = self
                     .builder
                     .build_load(self.types.stack, self.stack, "stack");
@@ -816,6 +831,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     old_stack.into_pointer_value(),
                     "load previous stack",
                 );
+                // self.make_printf(&format!("restore {reg}\n"), vec![]);
                 self.builder.build_store(self.stack, old_stack);
             }
             Instruction::Perform(p) => {
@@ -1010,11 +1026,19 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             }
             Operation::CompiledProcedureEnv => {
                 let proc = args[0];
-                self.make_unchecked_caddr(proc)
+                let proc = self.unchecked_get_lambda(proc).into_struct_value();
+                self.builder
+                    .build_extract_value(proc, 1, "proc env")
+                    .unwrap()
+                    .into_struct_value()
             }
             Operation::CompiledProcedureEntry => {
                 let proc = args[0];
-                self.make_unchecked_cadr(proc)
+                let proc = self.unchecked_get_lambda(proc).into_struct_value();
+                self.builder
+                    .build_extract_value(proc, 0, "proc entry")
+                    .unwrap()
+                    .into_struct_value()
             }
             Operation::DefineVariable => {
                 let var = args[0];
@@ -1048,7 +1072,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     .unwrap_left()
                     .into_struct_value()
             }
-            Operation::ExtendEnvoirnment => {
+            Operation::ExtendEnvironment => {
                 let vars = args[0];
                 let vals = args[1];
                 let env = args[2];
@@ -1092,12 +1116,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let compiled_procedure_string = self.create_symbol("compiled-procedure");
                 let compiled_procedure_string =
                     self.make_object(&compiled_procedure_string, TypeIndex::symbol);
-                let compiled_procedure_entry = args.first().unwrap();
+                let compiled_procedure_entry = *args.first().unwrap();
                 let compiled_procedure_env = args.get(1).unwrap();
-                let tail = self.empty();
-                let tail = self.make_cons(*compiled_procedure_env, tail);
-                let tail = self.make_cons(*compiled_procedure_entry, tail);
-                self.make_cons(compiled_procedure_string, tail)
+                self.make_object(
+                    &self.list_to_struct(
+                        self.types.types.get(TypeIndex::lambda).into_struct_type(),
+                        &[
+                            compiled_procedure_entry.into(),
+                            (*compiled_procedure_env).into(),
+                        ],
+                    ),
+                    TypeIndex::lambda,
+                )
             }
             Operation::PrimitiveProcedure => {
                 self.make_object(&self.is_primitive(args[0]), TypeIndex::bool)
