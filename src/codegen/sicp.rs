@@ -65,7 +65,7 @@ pub enum Operation {
     CompiledProcedureEntry,
     DefineVariable,
     ApplyPrimitiveProcedure,
-    ExtendEnvoirnment,
+    ExtendEnvironment,
     Cons,
     SetVariableValue,
     False,
@@ -284,7 +284,7 @@ fn empty_instruction_seqeunce() -> InstructionSequnce {
 fn compile_linkage(linkage: Linkage) -> InstructionSequnce {
     match linkage {
         Linkage::Return => InstructionSequnce::new(
-            hashset![],
+            hashset![Register::Continue],
             hashset![],
             vec![Instruction::Goto(Goto::Register(Register::Continue))],
         ),
@@ -433,17 +433,14 @@ fn compile_assignment(
                 hashset![Register::Env, Register::Val],
                 hashset![target],
                 vec![
-                    Instruction::Assign(
-                        target,
-                        Expr::Op(Perform {
-                            op: Operation::SetVariableValue,
-                            args: vec![
-                                Expr::Const(Const::Symbol(var)),
-                                Expr::Register(Register::Val),
-                                Expr::Register(Register::Env),
-                            ],
-                        }),
-                    ),
+                    Instruction::Perform(Perform {
+                        op: Operation::SetVariableValue,
+                        args: vec![
+                            Expr::Const(Const::Symbol(var)),
+                            Expr::Register(Register::Val),
+                            Expr::Register(Register::Env),
+                        ],
+                    }),
                     Instruction::Assign(target, Expr::Const(Const::Symbol("ok".to_string()))),
                 ],
             ),
@@ -468,17 +465,14 @@ fn compile_defeninition(
                 hashset![Register::Env, Register::Val],
                 hashset![target],
                 vec![
-                    Instruction::Assign(
-                        target,
-                        Expr::Op(Perform {
-                            op: Operation::DefineVariable,
-                            args: vec![
-                                Expr::Const(Const::Symbol(var)),
-                                Expr::Register(Register::Val),
-                                Expr::Register(Register::Env),
-                            ],
-                        }),
-                    ),
+                    Instruction::Perform(Perform {
+                        op: Operation::DefineVariable,
+                        args: vec![
+                            Expr::Const(Const::Symbol(var)),
+                            Expr::Register(Register::Val),
+                            Expr::Register(Register::Env),
+                        ],
+                    }),
                     Instruction::Assign(target, Expr::Const(Const::Symbol("ok".to_string()))),
                 ],
             ),
@@ -499,16 +493,11 @@ fn compile_if(exp: (Ast2, Ast2, Ast2), target: Register, linkage: Linkage) -> In
     let p_code = force_it(exp.0, Register::Val, Linkage::Next);
     // let p_code = compile(exp.0, Register::Val, Linkage::Next);
 
+    let c_code = compile(exp.1, target, linkage);
     let a_code = compile(exp.2, target, consequent_linkage);
 
-    let c_code = {
-        let mut c = compile(exp.1, target, linkage);
-        c.instructions.insert(0, Instruction::Label(t_branch));
-        c.instructions.push(Instruction::Label(after_if));
-        c
-    };
     preserving(
-        hashset!(Register::Continue),
+        hashset!(Register::Env, Register::Continue),
         p_code,
         append_instruction_sequnce(
             InstructionSequnce::new(
@@ -519,10 +508,16 @@ fn compile_if(exp: (Ast2, Ast2, Ast2), target: Register, linkage: Linkage) -> In
                         op: Operation::False,
                         args: vec![Expr::Register(Register::Val)],
                     }),
-                    Instruction::Branch(f_branch),
+                    Instruction::Branch(f_branch.clone()),
                 ],
             ),
-            parallel_instruction_sequnce(a_code, c_code),
+            append_instruction_sequnce(
+                parallel_instruction_sequnce(
+                    append_instruction_sequnce(make_label_instruction(t_branch), c_code),
+                    append_instruction_sequnce(make_label_instruction(f_branch), a_code),
+                ),
+                make_label_instruction(after_if),
+            ),
         ),
     )
 }
@@ -538,8 +533,22 @@ fn compile_seq(seq: Vec<Ast2>, target: Register, linkage: Linkage) -> Instructio
                 compile(exp, target, Linkage::Next)
             }
         })
-        .reduce(|a, b| preserving(hashset!(), a, b))
+        .reduce(|a, b| preserving(hashset!(Register::Env, Register::Continue), a, b))
         .unwrap_or_else(empty_instruction_seqeunce)
+}
+
+fn tack_on_instruction_seq(
+    seq1: InstructionSequnce,
+    seq2: InstructionSequnce,
+) -> InstructionSequnce {
+    make_intsruction_sequnce(
+        seq1.needs,
+        seq1.modifiers,
+        seq1.instructions
+            .into_iter()
+            .chain(seq2.instructions)
+            .collect(),
+    )
 }
 
 fn compile_lambda(
@@ -548,35 +557,35 @@ fn compile_lambda(
     linkage: Linkage,
 ) -> InstructionSequnce {
     let proc_entry = make_label_name("entry".to_string());
-    let after_lambda = make_label_name("after_lambda".to_string());
+    let after_lambda = make_label_name("after-lambda".to_string());
     let lambda_linkage = if linkage == Linkage::Next {
         Linkage::Label(after_lambda.clone())
     } else {
         linkage
     };
-    let mut first_inst = end_with_linkage(
-        lambda_linkage,
-        InstructionSequnce::new(
-            hashset!(Register::Env),
-            hashset!(target),
-            vec![Instruction::Assign(
-                target,
-                Expr::Op(Perform {
-                    op: Operation::MakeCompiledProcedure,
-                    args: vec![
-                        Expr::Label(proc_entry.clone()),
-                        Expr::Register(Register::Env),
-                    ],
-                }),
-            )],
+    append_instruction_sequnce(
+        tack_on_instruction_seq(
+            end_with_linkage(
+                lambda_linkage,
+                InstructionSequnce::new(
+                    hashset!(Register::Env),
+                    hashset!(target),
+                    vec![Instruction::Assign(
+                        target,
+                        Expr::Op(Perform {
+                            op: Operation::MakeCompiledProcedure,
+                            args: vec![
+                                Expr::Label(proc_entry.clone()),
+                                Expr::Register(Register::Env),
+                            ],
+                        }),
+                    )],
+                ),
+            ),
+            compile_lambda_body(lambda, proc_entry),
         ),
-    );
-    let body = compile_lambda_body(lambda, proc_entry);
-    first_inst.instructions.extend(body.instructions);
-    first_inst
-        .instructions
-        .push(Instruction::Label(after_lambda));
-    first_inst
+        make_label_instruction(after_lambda),
+    )
 }
 
 fn compile_lambda_body(
@@ -611,7 +620,7 @@ fn compile_lambda_body(
                 Instruction::Assign(
                     Register::Env,
                     Expr::Op(Perform {
-                        op: Operation::ExtendEnvoirnment,
+                        op: Operation::ExtendEnvironment,
                         args: vec![
                             formals,
                             Expr::Register(Register::Argl),
@@ -682,8 +691,10 @@ fn compile_procedure_call(
     } else {
         linkage.clone()
     };
-    preserving(
-        hashset!(Register::Proc, Register::Continue),
+    // preserving(
+    // hashset!(Register::Proc, Register::Continue),
+    // construct_arg_list(operand_codes_compiled),
+    append_instruction_sequnce(
         InstructionSequnce::new(
             hashset!(Register::Proc),
             hashset!(),
@@ -694,6 +705,7 @@ fn compile_procedure_call(
                 }),
                 Instruction::Branch(primitive_branch.clone()),
             ],
+            // ),
         ),
         parallel_instruction_sequnce(
             append_instruction_sequnce(
@@ -701,7 +713,7 @@ fn compile_procedure_call(
                 preserving(
                     hashset!(Register::Proc, Register::Continue),
                     construct_arg_list(operand_codes_compiled),
-                    compile_proc_appl(target, compiled_linkage),
+                    compile_proc_appl::<Procedure>(target, compiled_linkage),
                 ),
             ),
             append_instruction_sequnce(
@@ -732,35 +744,84 @@ fn compile_procedure_call(
                 ),
             ),
         ),
+        // ),
     )
 }
 
-fn compile_proc_appl(target: Register, compiled_linkage: Linkage) -> InstructionSequnce {
+trait Application {
+    fn register() -> Register;
+    fn entry() -> Operation;
+    fn name() -> &'static str;
+    fn return_register() -> Register;
+}
+
+struct Thunk;
+impl Application for Thunk {
+    fn entry() -> Operation {
+        Operation::ThunkEntry
+    }
+
+    fn register() -> Register {
+        Register::Thunk
+    }
+
+    fn name() -> &'static str {
+        "thunk"
+    }
+
+    fn return_register() -> Register {
+        Register::Thunk
+    }
+}
+struct Procedure;
+impl Application for Procedure {
+    fn entry() -> Operation {
+        Operation::CompiledProcedureEntry
+    }
+
+    fn register() -> Register {
+        Register::Proc
+    }
+
+    fn name() -> &'static str {
+        "procedure"
+    }
+
+    fn return_register() -> Register {
+        Register::Val
+    }
+}
+
+// the way we differentiate between thunk and procedure is with the T generic we could also do this with const generics
+fn compile_proc_appl<T: Application>(
+    target: Register,
+    compiled_linkage: Linkage,
+) -> InstructionSequnce {
     match (target, compiled_linkage) {
         (Register::Val, Linkage::Return) => make_intsruction_sequnce(
-            hashset!(Register::Proc, Register::Continue),
+            hashset!(T::register(), Register::Continue),
             all_regs(),
             vec![
                 Instruction::Assign(
                     Register::Val,
                     Expr::Op(Perform {
-                        op: Operation::CompiledProcedureEntry,
-                        args: vec![Expr::Register(Register::Proc)],
+                        op: T::entry(),
+                        args: vec![Expr::Register(T::register())],
                     }),
                 ),
                 Instruction::Goto(Goto::Register(Register::Val)),
             ],
         ),
         (Register::Val, Linkage::Label(l)) => make_intsruction_sequnce(
-            hashset!(Register::Proc),
+            hashset!(T::register()),
             all_regs(),
             vec![
                 Instruction::Assign(Register::Continue, Expr::Label(l)),
                 Instruction::Assign(
                     Register::Val,
                     Expr::Op(Perform {
-                        op: Operation::CompiledProcedureEntry,
-                        args: vec![Expr::Register(Register::Proc)],
+                        op: T::entry(),
+                        args: vec![Expr::Register(T::register())],
                     }),
                 ),
                 Instruction::Goto(Goto::Register(Register::Val)),
@@ -769,21 +830,22 @@ fn compile_proc_appl(target: Register, compiled_linkage: Linkage) -> Instruction
         (_, Linkage::Next) => unreachable!(),
         (_, Linkage::Return) => panic!("return linkage, target not val -- COMPILE {target}"),
         (_, Linkage::Label(l)) => {
-            let proc_return = make_label_name("proc-return".to_string());
+            let proc_return = make_label_name(format!("{}-return", T::name()));
             make_intsruction_sequnce(
-                hashset!(Register::Proc),
+                hashset!(T::register()),
                 all_regs(),
                 vec![
                     Instruction::Assign(Register::Continue, Expr::Label(proc_return.clone())),
                     Instruction::Assign(
                         Register::Val,
                         Expr::Op(Perform {
-                            op: Operation::CompiledProcedureEntry,
-                            args: vec![Expr::Register(Register::Proc)],
+                            op: T::entry(),
+                            args: vec![Expr::Register(T::register())],
                         }),
                     ),
+                    Instruction::Goto(Goto::Register((Register::Val))),
                     Instruction::Label(proc_return),
-                    Instruction::Assign(target, Expr::Register(Register::Val)),
+                    Instruction::Assign(target, Expr::Register(T::return_register())),
                     Instruction::Goto(Goto::Label(l)),
                 ],
             )
@@ -797,7 +859,8 @@ fn all_regs() -> HashSet<Register> {
         Register::Argl,
         Register::Env,
         Register::Proc,
-        Register::Val
+        Register::Val,
+        Register::Thunk
     )
 }
 
@@ -822,87 +885,96 @@ fn add_to_argl(inst: InstructionSequnce) -> InstructionSequnce {
     )
 }
 
-fn force_it(exp: Ast2, target: Register, _linkage: Linkage) -> InstructionSequnce {
+fn force_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce {
     let actual_value_label = make_label_name("actual-value".to_string());
     let force_label = make_label_name("force".to_string());
     let done = make_label_name("done".to_string());
     let thunk = compile(exp, Register::Thunk, Linkage::Next);
-    append_instruction_sequnce(
-        thunk,
-        make_intsruction_sequnce(
-            hashset!(),
-            hashset!(),
-            vec![
-                Instruction::Label(actual_value_label.clone()),
-                Instruction::Test(Perform {
-                    op: Operation::NotThunk,
-                    args: vec![Expr::Register(Register::Thunk)],
-                }),
-                Instruction::Branch(done.clone()),
-                Instruction::Label(force_label),
-                Instruction::Assign(
-                    Register::Val,
-                    Expr::Op(Perform {
-                        op: Operation::ThunkEntry,
+    let thunk_linkage = if linkage == Linkage::Next {
+        Linkage::Label(actual_value_label.clone())
+    } else {
+        linkage.clone()
+    };
+    preserving(
+        hashset!(Register::Env, Register::Continue),
+        append_instruction_sequnce(
+            thunk,
+            make_intsruction_sequnce(
+                hashset!(Register::Thunk),
+                hashset!(),
+                vec![
+                    Instruction::Label(actual_value_label.clone()),
+                    Instruction::Test(Perform {
+                        op: Operation::NotThunk,
                         args: vec![Expr::Register(Register::Thunk)],
                     }),
-                ),
-                Instruction::Assign(Register::Continue, Expr::Label(actual_value_label)),
-                Instruction::Goto(Goto::Register(Register::Val)),
-                Instruction::Label(done),
-                Instruction::Assign(target, Expr::Register(Register::Thunk)),
-            ],
+                    Instruction::Branch(done.clone()),
+                    Instruction::Label(force_label),
+                ],
+            ),
+        ),
+        append_instruction_sequnce(
+            compile_proc_appl::<Thunk>(Register::Thunk, thunk_linkage),
+            make_intsruction_sequnce(
+                hashset!(),
+                hashset!(),
+                vec![
+                    Instruction::Label(done),
+                    Instruction::Assign(target, Expr::Register(Register::Thunk)),
+                ],
+            ),
         ),
     )
 }
 
-fn delay_it(exp: Ast2, target: Register, _linkage: Linkage) -> InstructionSequnce {
+fn delay_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce {
     let thunk_label = make_label_name("thunk".to_string());
     let after_thunk = make_label_name("after-label".to_string());
-    let inst = append_instruction_sequnce(
+    let thunk_linkage = if linkage == Linkage::Next {
+        Linkage::Label(after_thunk.clone())
+    } else {
+        linkage
+    };
+    let mut inst = end_with_linkage(
+        thunk_linkage,
         make_intsruction_sequnce(
-            hashset!(),
-            hashset!(),
-            vec![Instruction::Goto(Goto::Label(after_thunk.clone()))],
-        ),
-        append_instruction_sequnce(
-            {
-                InstructionSequnce::new(
-                    hashset!(),
-                    hashset!(),
-                    vec![
-                        Instruction::Label(thunk_label.clone()),
-                        Instruction::Assign(
-                            Register::Env,
-                            Expr::Op(Perform {
-                                op: Operation::ThunkEnv,
-                                args: vec![Expr::Register(Register::Thunk)],
-                            }),
-                        ),
+            hashset!(Register::Env),
+            hashset!(target),
+            vec![Instruction::Assign(
+                target,
+                Expr::Op(Perform {
+                    op: Operation::MakeThunk,
+                    args: vec![
+                        Expr::Label(thunk_label.clone()),
+                        Expr::Register(Register::Env),
                     ],
-                )
-            },
-            compile(exp, Register::Val, Linkage::Next),
+                }),
+            )],
         ),
     );
+    inst.instructions
+        .extend(compile_thunk_body(exp, thunk_label).instructions);
+    inst.instructions.push(Instruction::Label(after_thunk));
+    inst
+}
 
+fn compile_thunk_body(thunk: Ast2, thunk_entry: Label) -> InstructionSequnce {
     append_instruction_sequnce(
-        inst,
-        make_intsruction_sequnce(
-            hashset!(),
-            hashset!(),
+        InstructionSequnce::new(
+            hashset!(Register::Env, Register::Thunk),
+            hashset!(Register::Env),
             vec![
-                Instruction::Goto(Goto::Register(Register::Continue)),
-                Instruction::Label(after_thunk),
+                Instruction::Label(thunk_entry.clone()),
                 Instruction::Assign(
-                    target,
+                    Register::Env,
                     Expr::Op(Perform {
-                        op: Operation::MakeThunk,
-                        args: vec![Expr::Label(thunk_label), Expr::Register(Register::Env)],
+                        op: Operation::ThunkEnv,
+                        args: vec![Expr::Register(Register::Thunk)],
                     }),
                 ),
             ],
         ),
+        compile(thunk, Register::Thunk, Linkage::Return),
     )
 }
 
