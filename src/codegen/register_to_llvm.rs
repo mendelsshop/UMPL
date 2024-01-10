@@ -4,7 +4,7 @@ use inkwell::{
     context::Context,
     module::Module,
     passes::PassManager,
-    types::{FunctionType, PointerType, StructType},
+    types::{BasicType, FunctionType, PointerType, StructType},
     values::{
         AggregateValue, BasicValue, BasicValueEnum, FunctionValue, IntValue, PhiValue,
         PointerValue, StructValue,
@@ -290,6 +290,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     extract!(get_bool, unchecked_get_bool, bool, "bool");
     extract!(get_cons, unchecked_get_cons, cons, "cons");
     extract!(get_symbol, unchecked_get_symbol, symbol, "symbol");
+    extract!(get_string, unchecked_get_string, string, "string");
     extract!(get_thunk, unchecked_get_thunk, thunk, "thunk");
     extract!(get_lambda, unchecked_get_lambda, lambda, "lambda");
     pub fn new(
@@ -505,12 +506,124 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             }))),*]
         };
 
-    }
+        }
         accessors!(("car" make_car), ("cdr" make_cdr), ("caar" make_caar),("cadr" make_cadr),("cdar" make_cdar),("cddr" make_cddr),("caaar" make_caaar),("caadr" make_caadr),("cadar" make_cadar),("caddr" make_caddr),("cdaar" make_cdaar),("cdadr" make_cdadr),("cddar" make_cddar),("cdddr" make_cdddr),("caaaar" make_caaaar),("caaadr" make_caaadr),("caadar" make_caadar),("caaddr" make_caaddr),("cadaar" make_cadaar),("cadadr" make_cadadr),("caddar" make_caddar),("cadddr" make_cadddr),("cdaaar" make_cdaaar),("cdaadr" make_cdaadr),("cdadar" make_cdadar),("cdaddr" make_cdaddr),("cddaar" make_cddaar),("cddadr" make_cddadr),("cdddar" make_cdddar),("cddddr" make_cddddr))
     }
+
+    fn make_eq_obj(&mut self) {
+        self.create_function(
+            "eq-obj",
+            self.types
+                .types
+                .bool
+                .fn_type(&[self.types.object.into(), self.types.object.into()], false),
+            |this, eq_fn, _| {
+                let e1 = eq_fn.get_first_param().unwrap().into_struct_value();
+                let e2 = eq_fn.get_nth_param(1).unwrap().into_struct_value();
+                let t1 = this.extract_type(e1).unwrap().into_int_value();
+                let t2 = this.extract_type(e2).unwrap().into_int_value();
+
+                let is_same_type =
+                    this.builder
+                        .build_int_compare(IntPredicate::EQ, t1, t2, "same type?");
+                let same_bb = this.context.append_basic_block(this.current, "same type");
+                let not_same_bb = this
+                    .context
+                    .append_basic_block(this.current, "not same type");
+                this.builder
+                    .build_conditional_branch(is_same_type, same_bb, not_same_bb);
+                {
+                    this.builder.position_at_end(not_same_bb);
+                    this.builder
+                        .build_return(Some(&this.types.types.bool.const_zero()));
+                }
+                {
+                    this.builder.position_at_end(same_bb);
+                    let make_number = |n| this.context.i32_type().const_int(n as u64, false);
+                    this.set_error("invalid type", 1);
+                    let hempty_bb = this.context.append_basic_block(this.current, "hempty");
+                    {
+                        this.builder.position_at_end(hempty_bb);
+                        this.builder.build_return(Some(
+                            &this.types.types.bool.into_int_type().const_int(1, false),
+                        ));
+                    }
+                    let bool_bb = this.context.append_basic_block(this.current, "bool");
+                    {
+                        this.builder.position_at_end(bool_bb);
+                        let b1 = this.unchecked_get_bool(e1).into_int_value();
+                        let b2 = this.unchecked_get_bool(e2).into_int_value();
+                        this.builder
+                            .build_return(Some(&this.builder.build_int_compare(
+                                IntPredicate::EQ,
+                                b1,
+                                b2,
+                                "bool compare",
+                            )));
+                    }
+                    let number_bb = this.context.append_basic_block(this.current, "number");
+                    {
+                        this.builder.position_at_end(number_bb);
+                        let b1 = this.unchecked_get_number(e1).into_int_value();
+                        let b2 = this.unchecked_get_number(e2).into_int_value();
+                        this.builder
+                            .build_return(Some(&this.builder.build_int_compare(
+                                IntPredicate::EQ,
+                                b1,
+                                b2,
+                                "number compare",
+                            )));
+                    }
+                    let string_bb = this.context.append_basic_block(this.current, "string");
+                    {
+                        this.builder.position_at_end(string_bb);
+
+                        this.builder.build_return(Some(&this.compare_str(
+                            Self::unchecked_get_string,
+                            e1,
+                            e2,
+                        )));
+                    }
+                    let symbol_bb = this.context.append_basic_block(this.current, "symbol");
+                    {
+                        this.builder.position_at_end(symbol_bb);
+
+                        this.builder.build_return(Some(&this.compare_str(
+                            Self::unchecked_get_symbol,
+                            e1,
+                            e2,
+                        )));
+                    }
+                    let cons_bb = this.context.append_basic_block(this.current, "cons");
+                    let label_bb = this.context.append_basic_block(this.current, "label");
+                    let thunk_bb = this.context.append_basic_block(this.current, "thunk");
+                    let lambda_bb = this.context.append_basic_block(this.current, "lambda");
+                    let primitive_bb = this.context.append_basic_block(this.current, "primitive");
+                    this.builder.build_switch(
+                        t1,
+                        this.error_block,
+                        &[
+                            (make_number(TypeIndex::empty), hempty_bb),
+                            (make_number(TypeIndex::bool), bool_bb),
+                            (make_number(TypeIndex::number), number_bb),
+                            (make_number(TypeIndex::string), string_bb),
+                            (make_number(TypeIndex::symbol), symbol_bb),
+                            (make_number(TypeIndex::cons), cons_bb),
+                            (make_number(TypeIndex::lambda), lambda_bb),
+                            (make_number(TypeIndex::primitive), primitive_bb),
+                            (make_number(TypeIndex::label), label_bb),
+                            (make_number(TypeIndex::thunk), thunk_bb),
+                        ],
+                    );
+                }
+            },
+        );
+    }
+
     fn init_primitives(&mut self) {
         let accesors = self.init_accessors();
         self.make_print();
+        self.make_eq_obj();
         let primitive_newline = self.create_primitive("newline", |this, _, _| {
             this.builder.build_call(
                 this.functions.printf,
@@ -559,8 +672,16 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             this.print_object(val);
             this.builder.build_return(Some(&this.empty()));
         });
+        let primitive_eq = self.create_primitive("eq", |this, set_car, _| {
+            let argl = set_car.get_first_param().unwrap().into_struct_value();
+            let e1 = this.make_car(argl);
+            let e2 = this.make_cadr(argl);
+            this.builder
+                .build_return(Some(&this.compare_objects(e1, e2)));
+        });
         let primitives = [
             ("newline", primitive_newline),
+            ("=", primitive_eq),
             ("print", primitive_print),
             ("not", primitive_not),
             ("set_cdr!", primitive_set_cdr),
@@ -620,7 +741,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder
             .build_call(print, &[obj.into()], "print object");
     }
-
+    fn compare_objects(&self, obj1: StructValue<'ctx>, obj2: StructValue<'ctx>) -> IntValue<'ctx> {
+        let print = self.module.get_function("eq-obj").unwrap();
+        self.builder
+            .build_call(print, &[obj1.into(), obj2.into()], "compare objects")
+            .try_as_basic_value()
+            .unwrap_left()
+            .into_int_value()
+    }
     /// creates a function with entry and puts builder at entry
     /// then calls code
     pub fn create_function(
@@ -921,7 +1049,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .into_struct_value();
         let vars_car = self.make_unchecked_car(vars_load);
         self.builder.build_conditional_branch(
-            self.compare_symbol(var, vars_car),
+            self.compare_str(Self::unchecked_get_symbol, var, vars_car),
             found_bb,
             scan_next_bb,
         );
@@ -943,9 +1071,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .into_struct_value()
     }
 
-    fn compare_symbol(&self, s1: StructValue<'ctx>, s2: StructValue<'ctx>) -> IntValue<'ctx> {
-        let s1 = self.unchecked_get_symbol(s1).into_struct_value();
-        let s2 = self.unchecked_get_symbol(s2).into_struct_value();
+    fn compare_str(
+        &self,
+        extract_str: fn(&Self, StructValue<'ctx>) -> BasicValueEnum<'ctx>,
+        s1: StructValue<'ctx>,
+        s2: StructValue<'ctx>,
+    ) -> IntValue<'ctx> {
+        let s1 = extract_str(self, s1).into_struct_value();
+        let s2 = extract_str(self, s2).into_struct_value();
         let len1 = self
             .builder
             .build_extract_value(s1, 0, "get str length")
