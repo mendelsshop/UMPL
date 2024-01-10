@@ -328,15 +328,30 @@ fn preserving(
     if register.is_empty() {
         append_instruction_sequnce(instruction_seq1, instruction_seq2)
     } else {
+        // we collect used registers into vec instead of hashset b/c vec can be reversed so the saves and restores happen in the opposite order
+        // ie:
+        // save val
+        // save env
+        // ...
+        // restore env
+        // restore val
+        // instead:
+        // save val
+        // save env
+        // ...
+        // restore val
+        // restore env
         let used_registers = instruction_seq1
             .modifiers
-            .intersection(&instruction_seq2.needs);
+            .intersection(&instruction_seq2.needs)
+            .collect::<Vec<_>>()
+            .into_iter();
         let used_registers = used_registers.filter(|r| register.contains(r));
 
         let mut instructions = vec![];
         instructions.extend(used_registers.clone().map(|r| Instruction::Save(*r)));
         instructions.extend(instruction_seq1.instructions);
-        instructions.extend(used_registers.map(|r| Instruction::Restore(*r)));
+        instructions.extend(used_registers.rev().map(|r| Instruction::Restore(*r)));
         instructions.extend(instruction_seq2.instructions);
         let mut needs = instruction_seq1.needs;
         needs.extend(instruction_seq2.needs);
@@ -744,7 +759,6 @@ fn compile_procedure_call(
                 ),
             ),
         ),
-        // ),
     )
 }
 
@@ -797,8 +811,10 @@ fn compile_proc_appl<T: Application>(
     target: Register,
     compiled_linkage: Linkage,
 ) -> InstructionSequnce {
-    match (target, compiled_linkage) {
-        (Register::Val, Linkage::Return) => make_intsruction_sequnce(
+    match (compiled_linkage) {
+        (Linkage::Return)
+        // if target == T::return_register()
+         => make_intsruction_sequnce(
             hashset!(T::register(), Register::Continue),
             all_regs(),
             vec![
@@ -812,7 +828,7 @@ fn compile_proc_appl<T: Application>(
                 Instruction::Goto(Goto::Register(Register::Val)),
             ],
         ),
-        (Register::Val, Linkage::Label(l)) => make_intsruction_sequnce(
+        (Linkage::Label(l)) if target == T::return_register() => make_intsruction_sequnce(
             hashset!(T::register()),
             all_regs(),
             vec![
@@ -827,9 +843,9 @@ fn compile_proc_appl<T: Application>(
                 Instruction::Goto(Goto::Register(Register::Val)),
             ],
         ),
-        (_, Linkage::Next) => unreachable!(),
-        (_, Linkage::Return) => panic!("return linkage, target not val -- COMPILE {target}"),
-        (_, Linkage::Label(l)) => {
+        (Linkage::Next) => unreachable!(),
+        (Linkage::Return) => panic!("return linkage, target not {} -- COMPILE {target}", T::return_register()),
+        (Linkage::Label(l)) => {
             let proc_return = make_label_name(format!("{}-return", T::name()));
             make_intsruction_sequnce(
                 hashset!(T::register()),
