@@ -9,11 +9,11 @@ use inkwell::{
         AggregateValue, BasicValue, BasicValueEnum, FunctionValue, IntValue, PhiValue,
         PointerValue, StructValue,
     },
-    AddressSpace, IntPredicate,
+    AddressSpace, FloatPredicate, IntPredicate,
 };
 use inkwell::{module::Linkage, types::BasicTypeEnum};
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::{collections::HashMap, primitive};
 
 use super::sicp::{Const, Expr, Goto, Instruction, Operation, Perform, Register};
 
@@ -539,66 +539,17 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 }
                 {
                     this.builder.position_at_end(same_bb);
-                    let make_number = |n| this.context.i32_type().const_int(n as u64, false);
-                    this.set_error("invalid type", 1);
                     let hempty_bb = this.context.append_basic_block(this.current, "hempty");
-                    {
-                        this.builder.position_at_end(hempty_bb);
-                        this.builder.build_return(Some(
-                            &this.types.types.bool.into_int_type().const_int(1, false),
-                        ));
-                    }
-                    let bool_bb = this.context.append_basic_block(this.current, "bool");
-                    {
-                        this.builder.position_at_end(bool_bb);
-                        let b1 = this.unchecked_get_bool(e1).into_int_value();
-                        let b2 = this.unchecked_get_bool(e2).into_int_value();
-                        this.builder
-                            .build_return(Some(&this.builder.build_int_compare(
-                                IntPredicate::EQ,
-                                b1,
-                                b2,
-                                "bool compare",
-                            )));
-                    }
-                    let number_bb = this.context.append_basic_block(this.current, "number");
-                    {
-                        this.builder.position_at_end(number_bb);
-                        let b1 = this.unchecked_get_number(e1).into_int_value();
-                        let b2 = this.unchecked_get_number(e2).into_int_value();
-                        this.builder
-                            .build_return(Some(&this.builder.build_int_compare(
-                                IntPredicate::EQ,
-                                b1,
-                                b2,
-                                "number compare",
-                            )));
-                    }
                     let string_bb = this.context.append_basic_block(this.current, "string");
-                    {
-                        this.builder.position_at_end(string_bb);
-
-                        this.builder.build_return(Some(&this.compare_str(
-                            Self::unchecked_get_string,
-                            e1,
-                            e2,
-                        )));
-                    }
+                    let number_bb = this.context.append_basic_block(this.current, "number");
+                    let bool_bb = this.context.append_basic_block(this.current, "bool");
                     let symbol_bb = this.context.append_basic_block(this.current, "symbol");
-                    {
-                        this.builder.position_at_end(symbol_bb);
-
-                        this.builder.build_return(Some(&this.compare_str(
-                            Self::unchecked_get_symbol,
-                            e1,
-                            e2,
-                        )));
-                    }
                     let cons_bb = this.context.append_basic_block(this.current, "cons");
-                    let label_bb = this.context.append_basic_block(this.current, "label");
                     let thunk_bb = this.context.append_basic_block(this.current, "thunk");
-                    let lambda_bb = this.context.append_basic_block(this.current, "lambda");
                     let primitive_bb = this.context.append_basic_block(this.current, "primitive");
+                    let label_bb = this.context.append_basic_block(this.current, "label");
+                    let lambda_bb = this.context.append_basic_block(this.current, "lambda");
+                    let make_number = |n| this.context.i32_type().const_int(n as u64, false);
                     this.builder.build_switch(
                         t1,
                         this.error_block,
@@ -615,9 +566,123 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                             (make_number(TypeIndex::thunk), thunk_bb),
                         ],
                     );
+                    this.set_error("invalid type", 1);
+                    {
+                        this.builder.position_at_end(hempty_bb);
+                        this.make_printf("hempty", vec![]);
+
+                        let basic_value = this.types.types.bool.into_int_type().const_int(1, false);
+
+                        this.builder.build_return(Some(&basic_value));
+                    }
+                    {
+                        this.builder.position_at_end(bool_bb);
+                        let b1 = this.unchecked_get_bool(e1).into_int_value();
+                        let b2 = this.unchecked_get_bool(e2).into_int_value();
+                        let same = this.builder.build_int_compare(
+                            IntPredicate::EQ,
+                            b1,
+                            b2,
+                            "bool compare",
+                        );
+
+                        this.builder.build_return(Some(&same));
+                    }
+                    {
+                        this.builder.position_at_end(number_bb);
+                        let b1 = this.unchecked_get_number(e1).into_float_value();
+                        let b2 = this.unchecked_get_number(e2).into_float_value();
+                        this.builder
+                            .build_return(Some(&this.builder.build_float_compare(
+                                FloatPredicate::OEQ,
+                                b1,
+                                b2,
+                                "number compare",
+                            )));
+                    }
+                    {
+                        this.builder.position_at_end(string_bb);
+
+                        this.builder.build_return(Some(&this.compare_str(
+                            Self::unchecked_get_string,
+                            e1,
+                            e2,
+                        )));
+                    }
+                    {
+                        this.builder.position_at_end(symbol_bb);
+
+                        this.builder.build_return(Some(&this.compare_str(
+                            Self::unchecked_get_symbol,
+                            e1,
+                            e2,
+                        )));
+                    }
+                    {
+                        this.builder.position_at_end(cons_bb);
+                        let car1 = this.make_unchecked_car(e1);
+                        let car2 = this.make_unchecked_car(e2);
+                        let cdr1 = this.make_unchecked_cdr(e1);
+                        let cdr2 = this.make_unchecked_cdr(e2);
+                        let car = this
+                            .builder
+                            .build_call(eq_fn, &[car1.into(), car2.into()], "car eq")
+                            .try_as_basic_value()
+                            .unwrap_left()
+                            .into_int_value();
+                        let cdr = this
+                            .builder
+                            .build_call(eq_fn, &[cdr1.into(), cdr2.into()], "cdr eq")
+                            .try_as_basic_value()
+                            .unwrap_left()
+                            .into_int_value();
+                        this.builder
+                            .build_return(Some(&this.builder.build_and(car, cdr, "cons eq?")));
+                    }
+                    {
+                        self.builder.position_at_end(label_bb);
+                        // let l1 = this.unchecked_get_label(e1).into_pointer_value();
+                        // let l2 = this.unchecked_get_label(e2).into_pointer_value();
+                        // pointer equality is undefined on basic block addrsses
+
+                        // blockaddress(@function, %block)
+
+                        // The ‘blockaddress’ constant computes the address of the specified basic block in the specified function.
+
+                        // It always has an ptr addrspace(P) type, where P is the address space of the function containing %block (usually addrspace(0)).
+
+                        // Taking the address of the entry block is illegal.
+
+                        // This value only has defined behavior when used as an operand to the ‘indirectbr’ or for comparisons against null. Pointer equality tests between labels addresses results in undefined behavior — though, again, comparison against null is ok, and no label is equal to the null pointer. This may be passed around as an opaque pointer sized value as long as the bits are not inspected. This allows ptrtoint and arithmetic to be performed on these values so long as the original value is reconstituted before the indirectbr instruction.
+
+                        // Finally, some targets may provide defined semantics when using the value as the operand to an inline assembly, but that is target specific.
+
+                        // although it may be possible to use ptrtoint to compare the 2 pointers
+
+                        // let p_eq = self.builder.build_ptr_diff(l2.get_type()., lhs_ptr, rhs_ptr, name)
+                        this.builder.build_unconditional_branch(this.error_block);
+                        this.set_error("cannot compare labels", 1)
+                    }
+                    {
+                        self.builder.position_at_end(thunk_bb);
+                        this.builder.build_unconditional_branch(this.error_block);
+                        this.set_error("cannot compare thunks", 1)
+                    }
+                    {
+                        self.builder.position_at_end(lambda_bb);
+                        this.builder.build_unconditional_branch(this.error_block);
+                        this.set_error("cannot compare lambdas", 1)
+                    }
+                    {
+                        self.builder.position_at_end(primitive_bb);
+                        this.builder.build_unconditional_branch(this.error_block);
+                        this.set_error("cannot compare primitives", 1)
+                    }
                 }
             },
         );
+        // println!("{}", self.export_ir());
+        // panic!()
     }
 
     fn init_primitives(&mut self) {
@@ -642,6 +707,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             let cdr = this.make_cadr(argl); // doesnt do proper thing even though i have verified that argl is like (6 (6 ()))
                                             // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
             this.builder.build_return(Some(&this.make_cons(car, cdr)));
+        });
+        let primitive_eq = self.create_primitive("eq", |this, cons, _| {
+            let argl = cons.get_first_param().unwrap().into_struct_value();
+            let e1 = this.make_car(argl);
+            let e2 = this.make_cadr(argl); // doesnt do proper thing even though i have verified that argl is like (6 (6 ()))
+                                           // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
+            let eq = this.make_object(&this.compare_objects(e1, e2), TypeIndex::bool);
+            this.builder.build_return(Some(&eq));
         });
         let primitive_set_car = self.create_primitive("set-car!", |this, set_car, _| {
             let argl = set_car.get_first_param().unwrap().into_struct_value();
@@ -672,13 +745,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             this.print_object(val);
             this.builder.build_return(Some(&this.empty()));
         });
-        let primitive_eq = self.create_primitive("eq", |this, set_car, _| {
-            let argl = set_car.get_first_param().unwrap().into_struct_value();
-            let e1 = this.make_car(argl);
-            let e2 = this.make_cadr(argl);
-            this.builder
-                .build_return(Some(&this.compare_objects(e1, e2)));
-        });
+
         let primitives = [
             ("newline", primitive_newline),
             ("=", primitive_eq),
@@ -701,6 +768,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     )
                 },
             );
+
+        let primitive_env = (
+            self.make_cons(self.create_symbol("nil"), primitive_env.0),
+            self.make_cons(self.empty(), primitive_env.1),
+        );
         let primitive_env = self.make_cons(primitive_env.0, primitive_env.1);
         let env = self.make_cons(primitive_env, self.empty());
 
@@ -742,9 +814,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .build_call(print, &[obj.into()], "print object");
     }
     fn compare_objects(&self, obj1: StructValue<'ctx>, obj2: StructValue<'ctx>) -> IntValue<'ctx> {
-        let print = self.module.get_function("eq-obj").unwrap();
+        let compare = self.module.get_function("eq-obj").unwrap();
         self.builder
-            .build_call(print, &[obj1.into(), obj2.into()], "compare objects")
+            .build_call(compare, &[obj1.into(), obj2.into()], "compare objects")
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value()
