@@ -686,6 +686,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     }
 
     fn init_primitives(&mut self) {
+        // seems to problem with primitive that retunrn something meaningful not returning properly unless / possiblely some other action done on the in the primtive function
         let accesors = self.init_accessors();
         self.make_print();
         self.make_eq_obj();
@@ -746,6 +747,39 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             this.builder.build_return(Some(&this.empty()));
         });
 
+        let primitive_sub1 = self.create_primitive("-1", |this, sub1, _| {
+            let argl = sub1.get_first_param().unwrap().into_struct_value();
+            let val = this.make_car(argl);
+            let num = this.get_number(val).into_float_value();
+            let num1 = this.builder.build_float_sub(
+                num,
+                this.types
+                    .types
+                    .get(TypeIndex::number)
+                    .into_float_type()
+                    .const_float(1.0),
+                "sub 1",
+            );
+
+            this.builder
+                .build_return(Some(&this.make_object(&num, TypeIndex::number)));
+        });
+        let primitive_add1 = self.create_primitive("+1", |this, add1, _| {
+            let argl = add1.get_first_param().unwrap().into_struct_value();
+            let val = this.make_car(argl);
+            let num = this.get_number(val).into_float_value();
+            let num1 = this.builder.build_float_add(
+                num,
+                this.types
+                    .types
+                    .get(TypeIndex::number)
+                    .into_float_type()
+                    .const_float(1.0),
+                "add 1",
+            );
+            this.builder
+                .build_return(Some(&this.make_object(&num, TypeIndex::number)));
+        });
         let primitives = [
             ("newline", primitive_newline),
             ("=", primitive_eq),
@@ -754,6 +788,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ("set_cdr!", primitive_set_cdr),
             ("set_car!", primitive_set_car),
             ("cons", primitive_cons),
+            ("+1", primitive_add1),
+            ("-1", primitive_sub1),
         ];
         let primitive_env = primitives
             .into_iter()
