@@ -707,8 +707,8 @@ fn compile_procedure_call(
         linkage.clone()
     };
     // preserving(
-    // hashset!(Register::Proc, Register::Continue),
-    // construct_arg_list(operand_codes_compiled),
+    //     hashset!(Register::Proc, Register::Continue),
+    //     construct_arg_list(operand_codes_primitive),
     append_instruction_sequnce(
         InstructionSequnce::new(
             hashset!(Register::Proc),
@@ -759,6 +759,7 @@ fn compile_procedure_call(
                 ),
             ),
         ),
+        // ),
     )
 }
 

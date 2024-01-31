@@ -762,7 +762,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             );
 
             this.builder
-                .build_return(Some(&this.make_object(&num, TypeIndex::number)));
+                .build_return(Some(&this.make_object(&num1, TypeIndex::number)));
         });
         let primitive_add1 = self.create_primitive("+1", |this, add1, _| {
             let argl = add1.get_first_param().unwrap().into_struct_value();
@@ -778,7 +778,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 "add 1",
             );
             this.builder
-                .build_return(Some(&this.make_object(&num, TypeIndex::number)));
+                .build_return(Some(&this.make_object(&num1, TypeIndex::number)));
         });
         let primitives = [
             ("newline", primitive_newline),
