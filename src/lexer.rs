@@ -85,9 +85,7 @@ impl Lexer {
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
-                    self.add_unicode_token(TokenType::FunctionDefIdentifier {
-                        name: c,
-                    });
+                    self.add_unicode_token(TokenType::FunctionDefIdentifier { name: c });
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
                 }
@@ -283,10 +281,7 @@ impl Lexer {
             if emoji::is_emoji(self.peek()) {
                 let name = self.advance();
                 // maybe need to rework lexer so don't have to split after already done lexing
-                self.add_unicode_token(TokenType::FunctionIdentifier {
-                    name,
-                    path,
-                });
+                self.add_unicode_token(TokenType::FunctionIdentifier { name, path });
             } else {
                 // error out
                 error::error(

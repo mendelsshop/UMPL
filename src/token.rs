@@ -44,14 +44,25 @@ pub enum TokenType {
     And,
     Or,
     Not,
-    Identifier { name: String },
-    FunctionIdentifier { path: Vec<char>, name: char },
+    Identifier {
+        name: String,
+    },
+    FunctionIdentifier {
+        path: Vec<char>,
+        name: char,
+    },
     /// [FunctionIdentifier] is used to represent a function that is being refered to, while
     /// [FunctionDefIdentifier represents the name of a function as its being defined, so no need
     /// for modules path
-    FunctionDefIdentifier { name: char },
-    String { literal: String },
-    Number { literal: f64 },
+    FunctionDefIdentifier {
+        name: char,
+    },
+    String {
+        literal: String,
+    },
+    Number {
+        literal: f64,
+    },
     Create,
     With,
     Set,
@@ -62,7 +73,9 @@ pub enum TokenType {
     List,
     Car,
     Cdr,
-    Return { value: Option<Box<OtherStuff>> },
+    Return {
+        value: Option<Box<OtherStuff>>,
+    },
     Colon,
     Break,
     Continue,
@@ -71,11 +84,15 @@ pub enum TokenType {
     If,
     Else,
     Hempty,
-    Boolean { value: bool },
+    Boolean {
+        value: bool,
+    },
     Input,
     New,
     Function,
-    FunctionArgument { name: String },
+    FunctionArgument {
+        name: String,
+    },
     StrToNum,
     StrToBool,
     StrToHempty,
