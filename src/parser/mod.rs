@@ -167,7 +167,7 @@ impl Parser {
                         let start_line = self.token.line;
                         self.advance("parse_from_token after function looking for function name");
                         match self.token.token_type.clone() {
-                            TokenType::FunctionIdentifier { name } => {
+                            TokenType::FunctionDefIdentifier { name } => {
                                 info!("function identifier found");
                                 self.advance("parse_from_token after function name looking for function arguments");
                                 // check if the next token is a number and save it in a vairable num_args

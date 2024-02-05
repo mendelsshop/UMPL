@@ -45,7 +45,11 @@ pub enum TokenType {
     Or,
     Not,
     Identifier { name: String },
-    FunctionIdentifier { name: String },
+    FunctionIdentifier { path: Vec<char>, name: char },
+    /// [FunctionIdentifier] is used to represent a function that is being refered to, while
+    /// [FunctionDefIdentifier represents the name of a function as its being defined, so no need
+    /// for modules path
+    FunctionDefIdentifier { name: char },
     String { literal: String },
     Number { literal: f64 },
     Create,
@@ -438,7 +442,6 @@ impl TokenType {
                                     error::error(line, format!("Failed to read file: {err}"));
                                 }
                                 let mut lexer = Lexer::new(buf, filename.clone());
-                                lexer.set_module(module_name);
                                 let lexed = lexer.scan_tokens();
                                 let mut parsed = Parser::new(lexed, filename.clone());
                                 let body = parsed.parse();

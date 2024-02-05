@@ -302,7 +302,7 @@ impl Display for OtherStuff {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Function {
-    pub name: String,
+    pub name: char,
     pub num_arguments: f64,
     pub extra_arguments: bool,
     pub body: Vec<Thing>,
@@ -313,7 +313,7 @@ pub struct Function {
 
 impl Function {
     pub fn new(
-        name: String,
+        name: char,
         num_arguments: f64,
         body: &[Thing],
         line: i32,

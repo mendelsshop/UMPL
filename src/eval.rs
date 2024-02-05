@@ -204,7 +204,7 @@ impl NewIdentifierType {
 #[derive(Debug)]
 pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
-    pub function: HashMap<String, (Vec<Thing>, f64, bool)>,
+    pub function: HashMap<char, (Vec<Thing>, f64, bool)>,
     pub parent_scope: Option<Box<Scope>>,
     pub files: HashMap<String, File>,
 }
@@ -378,10 +378,10 @@ impl Scope {
             ),
         }
     }
-    pub fn set_function(&mut self, name: String, body: Vec<Thing>, args: f64, extra: bool) {
+    pub fn set_function(&mut self, name: char, body: Vec<Thing>, args: f64, extra: bool) {
         self.function.insert(name, (body, args, extra));
     }
-    pub fn get_function(&self, name: String) -> Option<(Vec<Thing>, f64, bool)> {
+    pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64, bool)> {
         match self.function.get(&name) {
             Some((body, args, extra)) => Some((body.clone(), *args, *extra)),
             None => self
@@ -423,8 +423,8 @@ impl Scope {
         swap(&mut temp_scope, self);
         *self = Self::new_with_parent(Box::new(temp_scope));
     }
-    pub fn has_function(&self, name: &str) -> bool {
-        self.function.contains_key(name)
+    pub fn has_function(&self, name: char) -> bool {
+        self.function.contains_key(&name)
     }
 }
 
@@ -726,8 +726,8 @@ impl Eval {
                 NewIdentifierType::Vairable(var) => var.value,
             },
             Stuff::Call(call) => match &call.keyword {
-                TokenType::FunctionIdentifier { name } => {
-                    if let Some(mut function) = self.scope.get_function(name.to_string()) {
+                TokenType::FunctionIdentifier { name, path } => {
+                    if let Some(mut function) = self.scope.get_function(*name) {
                         let new_stuff: Vec<LiteralOrFile> = call
                             .arguments
                             .iter()

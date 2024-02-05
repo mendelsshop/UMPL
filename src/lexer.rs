@@ -1,5 +1,5 @@
 use crate::{
-    error,
+    error::{self, error},
     token::{Token, TokenType},
 };
 use hexponent::FloatLiteral;
@@ -11,7 +11,6 @@ pub struct Lexer {
     start: usize,
     current: usize,
     line: i32,
-    module: Option<String>,
     name: String,
 }
 
@@ -23,13 +22,8 @@ impl Lexer {
             start: 0,   // bytes
             current: 0, // actual number of bytes in source
             line: 1,
-            module: None,
             name,
         }
-    }
-
-    pub fn set_module(&mut self, module: String) {
-        self.module = Some(module);
     }
 
     pub fn scan_tokens(mut self) -> Vec<Token> {
@@ -91,11 +85,9 @@ impl Lexer {
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
-                    let c = self
-                        .module
-                        .as_ref()
-                        .map_or_else(|| c.to_string(), |module| format!("{module}${c}"));
-                    self.add_unicode_token(TokenType::FunctionIdentifier { name: c });
+                    self.add_unicode_token(TokenType::FunctionDefIdentifier {
+                        name: c,
+                    });
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
                 }
@@ -275,22 +267,31 @@ impl Lexer {
             self.advance();
         }
         if self.peek() == '$' {
+            let first_path = self.get_text().pop();
+            // we can assume that the character is ascci and can use .len on string
+            if self.get_text().len() != 1 || !first_path.unwrap().is_alphabetic() {
+                error(self.line, format!("Module path has more than one character and or is non alphabetic, given module path: {}", self.get_text()));
+            };
+            let mut path = vec![first_path.unwrap()];
             self.advance();
+
             // see if the next character is an emoji
             while self.peek().is_lowercase() && self.peek_next() == '$' {
-                self.advance();
+                path.push(self.advance());
                 self.advance();
             }
             if emoji::is_emoji(self.peek()) {
-                self.advance();
+                let name = self.advance();
+                // maybe need to rework lexer so don't have to split after already done lexing
                 self.add_unicode_token(TokenType::FunctionIdentifier {
-                    name: self.get_text(),
+                    name,
+                    path,
                 });
             } else {
                 // error out
                 error::error(
                     self.line,
-                    format!("Unexpected character after . {}", self.peek()),
+                    format!("Unexpected character after $ {}", self.peek()),
                 );
             }
         } else {
