@@ -207,23 +207,60 @@ pub struct Scope {
     pub function: HashMap<char, (Vec<Thing>, f64, bool)>,
     pub parent_scope: Option<Box<Scope>>,
     pub files: HashMap<String, File>,
+    pub open_modules: [Option<Box<Module>>; 26],
+}
+
+#[derive(Debug)]
+pub struct Module {
+    /// parent scope will be empty unless its an inline module
+    pub scope: Scope,
+    pub missing_function_handler: Option<(Vec<Thing>, f64, bool)>,
+}
+
+impl Module {
+    pub fn new(scope: Scope) -> Self {
+        Self {
+            scope,
+            missing_function_handler: None,
+        }
+    }
+
+    pub fn set_missing_function_handler(
+        &mut self,
+        missing_function_handler: Option<(Vec<Thing>, f64, bool)>,
+    ) {
+        self.missing_function_handler = missing_function_handler;
+    }
+
+    pub fn get_function(&self, name: char, path: &[char]) -> (Vec<Thing>, f64, bool) {
+        self.scope.get_function(name, path).unwrap_or(
+            self.missing_function_handler
+                .clone()
+                .unwrap_or_else(|| todo!("defualt handler")),
+        )
+    }
 }
 
 impl Scope {
+    const EMPTY_MODULE: Option<Box<Module>> = None;
     pub fn new() -> Self {
+        let open_modules = [Self::EMPTY_MODULE; 26];
         Self {
             vars: HashMap::new(),
             function: HashMap::new(),
             parent_scope: None,
             files: HashMap::new(),
+            open_modules,
         }
     }
     pub fn new_with_parent(parent: Box<Self>) -> Self {
+        let open_modules = [Self::EMPTY_MODULE; 26];
         Self {
             vars: HashMap::new(),
             function: HashMap::new(),
             parent_scope: Some(parent),
             files: HashMap::new(),
+            open_modules,
         }
     }
     pub fn set_var(
@@ -250,7 +287,7 @@ impl Scope {
                 let new_name = name.trim_end_matches(".car").trim_end_matches(".cdr");
                 if recurse {
                     if self.has_var(new_name, false) {
-                        let mut new_var = match self.get_var(new_name, line) {
+                        let new_var = match self.get_var(new_name, line) {
                             NewIdentifierType::List(list) => list,
                             _ => error(line, "expected list"),
                         };
@@ -281,7 +318,7 @@ impl Scope {
                         );
                     }
                 } else {
-                    let mut new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
+                    let new_var: Rc<RefCell<NewList>> = match self.get_var(new_name, line) {
                         NewIdentifierType::List(list) => list,
                         _ => error(line, "expected list"),
                     };
@@ -381,13 +418,24 @@ impl Scope {
     pub fn set_function(&mut self, name: char, body: Vec<Thing>, args: f64, extra: bool) {
         self.function.insert(name, (body, args, extra));
     }
-    pub fn get_function(&self, name: char) -> Option<(Vec<Thing>, f64, bool)> {
-        match self.function.get(&name) {
-            Some((body, args, extra)) => Some((body.clone(), *args, *extra)),
-            None => self
-                .parent_scope
-                .as_ref()
-                .and_then(|parent| parent.get_function(name)),
+    pub fn get_function(&self, name: char, path: &[char]) -> Option<(Vec<Thing>, f64, bool)> {
+        if let Some(m) = path.first() {
+            // TODO: turn oprion into result b/c we could not find functions b/c module doesn't
+            // exist, not b/c function doesnt't exist needs differenent handler
+            Some(
+                self.open_modules[m.to_ascii_uppercase() as usize - 65]
+                    .as_ref()?
+                    .get_function(name, &path[1..])
+                    .clone(),
+            )
+        } else {
+            match self.function.get(&name) {
+                Some((body, args, extra)) => Some((body.clone(), *args, *extra)),
+                None => self
+                    .parent_scope
+                    .as_ref()
+                    .and_then(|parent| parent.get_function(name, path)),
+            }
         }
     }
     pub fn delete_var(&mut self, name: &str) -> Option<NewIdentifierType> {
@@ -727,7 +775,7 @@ impl Eval {
             },
             Stuff::Call(call) => match &call.keyword {
                 TokenType::FunctionIdentifier { name, path } => {
-                    if let Some(mut function) = self.scope.get_function(*name) {
+                    if let Some(mut function) = self.scope.get_function(*name, path) {
                         let new_stuff: Vec<LiteralOrFile> = call
                             .arguments
                             .iter()

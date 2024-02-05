@@ -434,14 +434,14 @@ impl TokenType {
                             } else {
                                 scope.module_name = scope.module_name.clone() + "$" + module_name;
                             }
-                            let module_name = scope.module_name.clone();
+                            let _module_name = scope.module_name.clone();
                             let file = File::open(filename);
                             if let Ok(mut file) = file {
                                 let mut buf = String::new();
                                 if let Err(err) = file.read_to_string(&mut buf) {
                                     error::error(line, format!("Failed to read file: {err}"));
                                 }
-                                let mut lexer = Lexer::new(buf, filename.clone());
+                                let lexer = Lexer::new(buf, filename.clone());
                                 let lexed = lexer.scan_tokens();
                                 let mut parsed = Parser::new(lexed, filename.clone());
                                 let body = parsed.parse();
