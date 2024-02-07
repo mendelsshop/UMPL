@@ -85,7 +85,10 @@ impl Lexer {
                     }
                     self.number();
                 } else if emoji::is_emoji(c) {
-                    self.add_unicode_token(TokenType::FunctionDefIdentifier { name: c });
+                    self.add_unicode_token(TokenType::FunctionIdentifier {
+                        name: c,
+                        path: vec![],
+                    });
                 } else {
                     error::error(self.line, format!("uknown character {c}"));
                 }

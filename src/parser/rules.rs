@@ -35,6 +35,39 @@ impl Display for Expression {
     }
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub struct Block {
+    pub body: Vec<Thing>,
+    pub line: i32,
+    pub end_line: i32,
+    pub filename: String,
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.body
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
+    }
+}
+
+impl Block {
+    pub fn new(body: Vec<Thing>, line: i32, end_line: i32, filename: String) -> Self {
+        Self {
+            body,
+            line,
+            end_line,
+            filename,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct IdentifierPointer {
     pub name: String,
@@ -63,6 +96,7 @@ pub enum Stuff {
     Literal(Literal),
     Identifier(IdentifierPointer),
     Call(Call),
+    Block(Block),
 }
 
 impl Display for Stuff {
@@ -71,6 +105,7 @@ impl Display for Stuff {
             Self::Literal(literal) => write!(f, "{literal}"),
             Self::Identifier(identifier) => write!(f, "{identifier}"),
             Self::Call(call) => write!(f, "{call}"),
+            Self::Block(block) => write!(f, "{block}"),
         }
     }
 }
@@ -305,7 +340,7 @@ pub struct Function {
     pub name: char,
     pub num_arguments: f64,
     pub extra_arguments: bool,
-    pub body: Vec<Thing>,
+    pub body: Block,
     pub line: i32,
     pub end_line: i32,
     pub filename: String,
@@ -315,7 +350,7 @@ impl Function {
     pub fn new(
         name: char,
         num_arguments: f64,
-        body: &[Thing],
+        body: Block,
         line: i32,
         filename: String,
         end_line: i32,
@@ -324,7 +359,7 @@ impl Function {
         Self {
             name,
             num_arguments,
-            body: body.to_vec(),
+            body,
             line,
             end_line,
             filename,
@@ -338,13 +373,7 @@ impl Display for Function {
         write!(
             f,
             "Function: {} with {} arguments and body: [\n\t{}\n]",
-            self.name,
-            self.num_arguments,
-            self.body
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n")
+            self.name, self.num_arguments, self.body
         )
     }
 }
@@ -390,8 +419,8 @@ impl Display for Vairable {
 #[derive(PartialEq, Clone, Debug)]
 pub struct IfStatement {
     pub condition: OtherStuff,
-    pub body_true: Vec<Thing>,
-    pub body_false: Vec<Thing>,
+    pub body_true: Block,
+    pub body_false: Block,
     pub line: i32,
     pub end_line: i32,
     pub filename: String,
@@ -400,11 +429,11 @@ pub struct IfStatement {
 impl IfStatement {
     pub fn new(
         condition: OtherStuff,
-        body_true: Vec<Thing>,
-        body_false: Vec<Thing>,
+        body_true: Block,
+        body_false: Block,
         line: i32,
-        filename: String,
         end_line: i32,
+        filename: String,
     ) -> Self {
         Self {
             condition,
@@ -422,33 +451,23 @@ impl Display for IfStatement {
         write!(
             f,
             "if statement: with condition: [{}] when true: [\n{}\n] and when false: [\n{}\n]",
-            self.condition,
-            self.body_true
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.body_false
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n"),
+            self.condition, self.body_true, self.body_false,
         )
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct LoopStatement {
-    pub body: Vec<Thing>,
+    pub body: Block,
     pub line: i32,
     pub end_line: i32,
     pub filename: String,
 }
 
 impl LoopStatement {
-    pub fn new(body: &[Thing], line: i32, filename: String, end_line: i32) -> Self {
+    pub fn new(body: Block, line: i32, filename: String, end_line: i32) -> Self {
         Self {
-            body: body.to_vec(),
+            body,
             line,
             end_line,
             filename,
@@ -458,14 +477,6 @@ impl LoopStatement {
 
 impl Display for LoopStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "loop statement: [\n{}\n]",
-            self.body
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n")
-        )
+        write!(f, "loop statement: [\n{}\n]", self.body)
     }
 }

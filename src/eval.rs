@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, info};
 
 use std::{
     cell::{RefCell, RefMut},
@@ -23,7 +23,6 @@ pub fn read_file(file_name: &str) -> Result<String, Box<dyn std::error::Error>> 
     let mut file = OpenOptions::new().read(true).open(file_name)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    drop(file);
     Ok(contents.clone())
 }
 
@@ -272,7 +271,7 @@ impl Scope {
     ) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
         // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
-        println!("setting var: {} to: {:?}", name, value);
+        debug!("setting var: {} to: {:?}", name, value);
         let new_val: NewIdentifierType = match value.len() {
             0 => error(line, "expected Identifier, got empty list"),
             1 => NewIdentifierType::Vairable(NewVairable::new(value.clone().remove(0))),
@@ -493,7 +492,6 @@ pub struct Eval {
     pub in_function: bool,
     pub in_loop: bool,
     pub files: HashMap<String, Rc<RefCell<File>>>,
-    pub module_name: String,
 }
 
 impl Eval {
@@ -503,10 +501,9 @@ impl Eval {
             in_function: false,
             in_loop: false,
             files: HashMap::new(),
-            module_name: String::new(),
         };
         body = self_.find_functions(body);
-        self_.find_variables(body);
+        self_.eval_expression(body);
         self_
     }
 
@@ -521,7 +518,7 @@ impl Eval {
                 if let Thing::Function(function) = thing {
                     self.scope.set_function(
                         function.name.clone(),
-                        function.body.clone(),
+                        function.body.body.clone(),
                         function.num_arguments,
                         function.extra_arguments,
                     );
@@ -534,15 +531,55 @@ impl Eval {
         self.find_imports(body)
     }
 
+    // fn eval_module(&mut self) {
+    //     if args.len() != 2 {
+    //         error::error(line, format!("Expected 2 arguments for {self:?} operator"));
+    //     }
+    //     let module_name = match &args[0] {
+    //         LiteralType::String(string) if string.is_ascii() && string.len() == 1 => string,
+    //         _ => error::error(line, format!("Expected string for {self:?} operator")),
+    //     };
+    //     match &args[1] {
+    //         LiteralType::String(filename) => {
+    //             let prev_module_name = scope.module_name.clone();
+    //             if scope.module_name.is_empty() {
+    //                 scope.module_name = module_name.clone();
+    //             } else {
+    //                 scope.module_name = scope.module_name.clone() + "$" + module_name;
+    //             }
+    //             let _module_name = scope.module_name.clone();
+    //             let file = File::open(filename);
+    //             if let Ok(mut file) = file {
+    //                 let mut buf = String::new();
+    //                 if let Err(err) = file.read_to_string(&mut buf) {
+    //                     error::error(line, format!("Failed to read file: {err}"));
+    //                 }
+    //                 let lexer = Lexer::new(buf, filename.clone());
+    //                 let lexed = lexer.scan_tokens();
+    //                 let mut parsed = Parser::new(lexed, filename.clone());
+    //                 let body = parsed.parse();
+    //                 scope.find_functions(body);
+    //                 scope.module_name = prev_module_name;
+    //             } else {
+    //                 error::error(line, format!("Could not open file {filename:?}"));
+    //             };
+    //         }
+    //         _ => error::error(line, format!("Expected string for {self:?} operator")),
+    //     };
+    //
+    //     // see if there is the second argument is a string
+    //     LiteralType::String(module_name.to_string())
+    // }
+
     #[allow(clippy::too_many_lines)]
-    pub fn find_variables(&mut self, body: Vec<Thing>) -> Option<Stopper> {
+    pub fn eval_expression(&mut self, body: Vec<Thing>) -> Option<Stopper> {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
-        println!("find variables in scope");
+        debug!("find variables in scope");
         // print variables in scope
         for (name, var) in &self.scope.vars {
-            println!("{}: {:?}", name, var);
+            debug!("{}: {:?}", name, var);
         }
         for thing in body {
             match thing {
@@ -639,9 +676,10 @@ impl Eval {
                     }
                     self.scope.from_parent();
                     if conditon == LiteralType::Boolean(true) {
-                        if_statement.body_true = self.find_functions(if_statement.body_true);
+                        if_statement.body_true.body =
+                            self.find_functions(if_statement.body_true.body);
                         let body_true: Option<Stopper> =
-                            self.find_variables(if_statement.body_true);
+                            self.eval_expression(if_statement.body_true.body);
                         self.scope.drop_scope();
                         if let Some(stop) = body_true {
                             match stop {
@@ -660,8 +698,9 @@ impl Eval {
                             }
                         }
                     } else {
-                        if_statement.body_false = self.find_functions(if_statement.body_false);
-                        let z = self.find_variables(if_statement.body_false);
+                        if_statement.body_false.body =
+                            self.find_functions(if_statement.body_false.body);
+                        let z = self.eval_expression(if_statement.body_false.body);
                         self.scope.drop_scope();
                         if let Some(stop) = z {
                             if let Stopper::Return(ret) = stop {
@@ -681,9 +720,9 @@ impl Eval {
                 Thing::LoopStatement(loop_statement) => {
                     'l: loop {
                         self.scope.from_parent();
-                        let loop_body = self.find_functions(loop_statement.body.clone());
+                        let loop_body = self.find_functions(loop_statement.body.body.clone());
                         self.in_loop = true;
-                        let z: Option<Stopper> = self.find_variables(loop_body.clone());
+                        let z: Option<Stopper> = self.eval_expression(loop_body.clone());
                         self.scope.drop_scope();
                         if let Some(stop) = z {
                             match stop {
@@ -736,7 +775,7 @@ impl Eval {
                                     }
                                 }
                             });
-                            TokenType::Module.r#do(&new_stuff, call.line, self);
+                            TokenType::Module.r#do(&new_stuff, call.line);
                             false
                         }
                         _ => true,
@@ -830,7 +869,7 @@ impl Eval {
                                 call.line,
                             );
                         }
-                        let z: Option<Stopper> = self.find_variables(function.0);
+                        let z: Option<Stopper> = self.eval_expression(function.0);
                         self.in_function = false;
                         self.scope.drop_scope();
                         z.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |v| {
@@ -883,7 +922,7 @@ impl Eval {
                 | TokenType::DivideWith
                 | TokenType::MultiplyWith
                 | TokenType::Set => {
-                    println!("{} {:?}", call.keyword, call.arguments);
+                    debug!("{} {:?}", call.keyword, call.arguments);
                     if let Stuff::Identifier(ident) = &call.arguments[0] {
                         if self.scope.has_var(&ident.name, true) {
                             let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
@@ -1495,10 +1534,17 @@ impl Eval {
                             }
                         }
                     });
-                    LiteralOrFile::Literal(t.r#do(&new_stuff, call.line, self))
+                    LiteralOrFile::Literal(t.r#do(&new_stuff, call.line))
                 }
             },
             Stuff::Literal(lit) => LiteralOrFile::Literal(lit.literal.clone()),
+            Stuff::Block(block) => {
+                let mut block = block.clone();
+                block.body = self.find_imports(block.body);
+                block.body = self.find_functions(block.body);
+                self.eval_expression(block.body);
+                LiteralOrFile::Literal(LiteralType::Hempty)
+            }
         }
     }
 }

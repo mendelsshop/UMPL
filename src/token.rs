@@ -1,18 +1,12 @@
 use crate::{
     error::{self, arg_error},
-    eval::Eval,
-    lexer::Lexer,
-    parser::{
-        rules::{LiteralType, OtherStuff},
-        Parser,
-    },
+    parser::rules::{LiteralType, OtherStuff},
 };
 use hexponent::FloatLiteral;
 use std::{
     env::consts::OS,
     fmt::{self, Debug, Display},
-    fs::File,
-    io::{self, Read, Write},
+    io::{self, Write},
     process::{exit, Command},
 };
 #[derive(PartialEq, Debug, Clone)]
@@ -49,12 +43,6 @@ pub enum TokenType {
     },
     FunctionIdentifier {
         path: Vec<char>,
-        name: char,
-    },
-    /// [FunctionIdentifier] is used to represent a function that is being refered to, while
-    /// [FunctionDefIdentifier represents the name of a function as its being defined, so no need
-    /// for modules path
-    FunctionDefIdentifier {
         name: char,
     },
     String {
@@ -117,7 +105,7 @@ pub enum TokenType {
 
 impl TokenType {
     #[allow(clippy::too_many_lines)]
-    pub fn r#do(&self, args: &[LiteralType], line: i32, scope: &mut Eval) -> LiteralType {
+    pub fn r#do(&self, args: &[LiteralType], line: i32) -> LiteralType {
         if crate::KEYWORDS.is_keyword(self) {
             match self {
                 Self::Not => {
@@ -435,45 +423,7 @@ impl TokenType {
                         },
                     )
                 }
-                Self::Module => {
-                    if args.len() != 2 {
-                        error::error(line, format!("Expected 2 arguments for {self:?} operator"));
-                    }
-                    let module_name = match &args[0] {
-                        LiteralType::String(string) => string,
-                        _ => error::error(line, format!("Expected string for {self:?} operator")),
-                    };
-                    match &args[1] {
-                        LiteralType::String(filename) => {
-                            let prev_module_name = scope.module_name.clone();
-                            if scope.module_name.is_empty() {
-                                scope.module_name = module_name.clone();
-                            } else {
-                                scope.module_name = scope.module_name.clone() + "$" + module_name;
-                            }
-                            let _module_name = scope.module_name.clone();
-                            let file = File::open(filename);
-                            if let Ok(mut file) = file {
-                                let mut buf = String::new();
-                                if let Err(err) = file.read_to_string(&mut buf) {
-                                    error::error(line, format!("Failed to read file: {err}"));
-                                }
-                                let lexer = Lexer::new(buf, filename.clone());
-                                let lexed = lexer.scan_tokens();
-                                let mut parsed = Parser::new(lexed, filename.clone());
-                                let body = parsed.parse();
-                                scope.find_functions(body);
-                                scope.module_name = prev_module_name;
-                            } else {
-                                error::error(line, format!("Could not open file {filename:?}"));
-                            };
-                        }
-                        _ => error::error(line, format!("Expected string for {self:?} operator")),
-                    };
 
-                    // see if there is the second argument is a string
-                    LiteralType::String(module_name.to_string())
-                }
                 keyword if crate::KEYWORDS.is_keyword(keyword) => {
                     error::error(line, format!("Keyword not found {self}"));
                 }
