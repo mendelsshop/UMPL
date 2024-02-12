@@ -1,6 +1,6 @@
 use crate::{
     error::{self, arg_error},
-    parser::rules::{LiteralType, OtherStuff},
+    parser::rules::{Ast, LiteralNode},
 };
 use hexponent::FloatLiteral;
 use std::{
@@ -52,7 +52,7 @@ pub enum TokenType {
     List,
     Car,
     Cdr,
-    Return { value: Option<Box<OtherStuff>> },
+    Return { value: Option<Box<Ast>> },
     Colon,
     Break,
     Continue,
@@ -61,7 +61,7 @@ pub enum TokenType {
     If,
     Else,
     Hempty,
-    Boolean { value: bool },
+    Boolean { literal: bool },
     Input,
     New,
     Function,
@@ -90,7 +90,7 @@ pub enum TokenType {
 
 impl TokenType {
     #[allow(clippy::too_many_lines)]
-    pub fn r#do(&self, args: &[LiteralType], line: i32) -> LiteralType {
+    pub fn r#do(&self, args: &[LiteralNode], line: i32) -> LiteralNode {
         if crate::KEYWORDS.is_keyword(self) {
             match self {
                 Self::Not => {
@@ -98,13 +98,13 @@ impl TokenType {
                         error::error(line, "Expected 1 argument for not operator");
                     }
                     match &args[0] {
-                        LiteralType::Boolean(b) => LiteralType::Boolean(!b),
+                        LiteralNode::Boolean(b) => LiteralNode::Boolean(!b),
                         _ => error::error(line, "Expected boolean for not operator"),
                     }
                 }
                 Self::Plus | Self::Minus | Self::Divide | Self::Multiply => {
                     match &args[0] {
-                        LiteralType::Number(number) => {
+                        LiteralNode::Number(number) => {
                             // check if minus and only one argument
                             let mut total: f64 = if self == &Self::Minus && args.len() == 1 {
                                 -number
@@ -112,7 +112,7 @@ impl TokenType {
                                 *number
                             };
                             for thing in args.iter().skip(1) {
-                                if let LiteralType::Number(number) = thing {
+                                if let LiteralNode::Number(number) = thing {
                                     {
                                         // convert the self to an operator
                                         match self {
@@ -133,24 +133,24 @@ impl TokenType {
                                     }
                                 }
                             }
-                            LiteralType::Number(total)
+                            LiteralNode::Number(total)
                         }
-                        LiteralType::String(string) => {
+                        LiteralNode::String(string) => {
                             let mut new_string = string.to_string();
                             for (index, thing) in args.iter().skip(1).enumerate() {
                                 match self {
                                     Self::Plus => {
                                         match thing {
-                                            LiteralType::String(ref string) => {
+                                            LiteralNode::String(ref string) => {
                                                 new_string.push_str(string);
                                             }
-                                            LiteralType::Number(number) => {
+                                            LiteralNode::Number(number) => {
                                                 new_string.push_str(&number.to_string());
                                             }
-                                            LiteralType::Boolean(boolean) => {
+                                            LiteralNode::Boolean(boolean) => {
                                                 new_string.push_str(&boolean.to_string());
                                             }
-                                            LiteralType::Hempty => {
+                                            LiteralNode::Hempty => {
                                                 new_string.push_str("HEMPTY");
                                             }
                                         };
@@ -163,7 +163,7 @@ impl TokenType {
                                             );
                                         }
                                         match thing {
-                                            LiteralType::Number(number) => {
+                                            LiteralNode::Number(number) => {
                                                 let mut new_new_string = String::new();
                                                 for _ in 0..*number as i32 - 1 {
                                                     new_new_string.push_str(&new_string);
@@ -187,7 +187,7 @@ impl TokenType {
                                     _ => {}
                                 };
                             }
-                            LiteralType::String(new_string)
+                            LiteralNode::String(new_string)
                         }
                         _ => error::error(line, "Invalid literal arguments"),
                     }
@@ -200,7 +200,7 @@ impl TokenType {
                 | Self::RunCommand => {
                     arg_error(1, args.len() as u32, self, false, line);
                     match &args[0] {
-                        LiteralType::String(ref string) => match self {
+                        LiteralNode::String(ref string) => match self {
                             Self::Error => exit(1),
                             Self::Input => {
                                 let mut input = String::new();
@@ -212,20 +212,20 @@ impl TokenType {
                                 io::stdin().read_line(&mut input).unwrap_or_else(|_| {
                                     error::error(line, "Failed to read input");
                                 });
-                                LiteralType::String(input.trim().to_string())
+                                LiteralNode::String(input.trim().to_string())
                             }
                             Self::StrToBool => {
                                 if string == "true" {
-                                    LiteralType::Boolean(true)
+                                    LiteralNode::Boolean(true)
                                 } else if string == "false" {
-                                    LiteralType::Boolean(false)
+                                    LiteralNode::Boolean(false)
                                 } else {
                                     error::error(line, "Expected true or false");
                                 }
                             }
                             Self::StrToHempty => {
                                 if string == "HEMPTY" {
-                                    LiteralType::Hempty
+                                    LiteralNode::Hempty
                                 } else {
                                     error::error(line, "Expected HEMPTY");
                                 }
@@ -249,7 +249,7 @@ impl TokenType {
                                     },
                                     |value: FloatLiteral| value,
                                 );
-                                LiteralType::Number(number.convert::<f64>().inner())
+                                LiteralNode::Number(number.convert::<f64>().inner())
                             }
                             Self::RunCommand => {
                                 let cmd = if OS == "windows" {
@@ -272,7 +272,7 @@ impl TokenType {
                                         format!("Error running command {}", string.trim()),
                                     ),
                                 };
-                                LiteralType::String(cmd)
+                                LiteralNode::String(cmd)
                             }
                             _ => {
                                 error::error(line, "command not found");
@@ -297,9 +297,9 @@ impl TokenType {
                         );
                     }
                     if self == &Self::Equal {
-                        LiteralType::Boolean(type_ == type_1)
+                        LiteralNode::Boolean(type_ == type_1)
                     } else {
-                        LiteralType::Boolean(!(type_ == type_1))
+                        LiteralNode::Boolean(!(type_ == type_1))
                     }
                 }
                 Self::Or | Self::And => {
@@ -307,21 +307,21 @@ impl TokenType {
                         error::error(line, format!("Expected 2 arguments for {self:?} operator"));
                     }
                     let bool_1 = match &args[0] {
-                        LiteralType::Boolean(boolean) => boolean,
+                        LiteralNode::Boolean(boolean) => boolean,
                         _ => error::error(line, format!("Expected boolean for {self:?} operator")),
                     };
                     let bool_2 = match &args[1] {
-                        LiteralType::Boolean(boolean) => boolean,
+                        LiteralNode::Boolean(boolean) => boolean,
                         _ => error::error(line, format!("Expected boolean for {self:?} operator")),
                     };
                     if bool_1 == bool_2 {
                         if bool_1 == &true {
-                            LiteralType::Boolean(true)
+                            LiteralNode::Boolean(true)
                         } else {
-                            LiteralType::Boolean(false)
+                            LiteralNode::Boolean(false)
                         }
                     } else {
-                        LiteralType::Boolean(false)
+                        LiteralNode::Boolean(false)
                     }
                 }
                 Self::GreaterThan | Self::LessThan | Self::GreaterEqual | Self::LessEqual => {
@@ -329,27 +329,27 @@ impl TokenType {
                         error::error(line, format!("Expected 2 arguments for {self:?} operator"));
                     }
                     let type_ = match &args[0] {
-                        LiteralType::Number(number) => number,
+                        LiteralNode::Number(number) => number,
                         _ => error::error(line, format!("Expected number for {self:?} operator")),
                     };
                     let type_1 = match &args[1] {
-                        LiteralType::Number(number) => number,
+                        LiteralNode::Number(number) => number,
                         _ => error::error(line, format!("Expected number for {self:?} operator")),
                     };
                     if self == &Self::GreaterThan {
-                        LiteralType::Boolean(type_ > type_1)
+                        LiteralNode::Boolean(type_ > type_1)
                     } else if self == &Self::LessThan {
-                        LiteralType::Boolean(type_ < type_1)
+                        LiteralNode::Boolean(type_ < type_1)
                     } else if self == &Self::GreaterEqual {
-                        LiteralType::Boolean(type_ >= type_1)
+                        LiteralNode::Boolean(type_ >= type_1)
                     } else {
-                        LiteralType::Boolean(type_ <= type_1)
+                        LiteralNode::Boolean(type_ <= type_1)
                     }
                 }
                 Self::Exit => {
                     if args.len() == 1 {
                         match &args[0] {
-                            LiteralType::Number(number) => exit(*number as i32),
+                            LiteralNode::Number(number) => exit(*number as i32),
                             _ => {
                                 error::error(line, format!("Expected number for {self:?} operator"))
                             }
@@ -366,23 +366,23 @@ impl TokenType {
                         );
                     }
                     let og_string = match &args[0] {
-                        LiteralType::String(string) => string,
+                        LiteralNode::String(string) => string,
                         _ => error::error(line, format!("Expected string for {self:?} operator")),
                     };
                     let split_on = match &args[1] {
-                        LiteralType::String(string) => string,
+                        LiteralNode::String(string) => string,
                         _ => error::error(line, format!("Expected string for {self:?} operator")),
                     };
                     // check if there is a third argument (number)
                     args.get(2).map_or_else(
                         || {
                             og_string.split_once(split_on).map_or_else(
-                                || LiteralType::String(og_string.to_string()),
-                                |v| LiteralType::String(v.0.to_string()),
+                                || LiteralNode::String(og_string.to_string()),
+                                |v| LiteralNode::String(v.0.to_string()),
                             )
                         },
-                        |number| -> LiteralType {
-                            if let LiteralType::Number(number) = number {
+                        |number| -> LiteralNode {
+                            if let LiteralNode::Number(number) = number {
                                 let number = *number as usize;
                                 // return the string until the nth time split_on is found
                                 let string: Vec<&str> =
@@ -401,7 +401,7 @@ impl TokenType {
                                 let ret_string = ret_string
                                     .rsplit_once(split_on)
                                     .map_or(og_string.to_string(), |string| string.0.to_string());
-                                LiteralType::String(ret_string)
+                                LiteralNode::String(ret_string)
                             } else {
                                 error::error(line, format!("Expected number for {self:?} operator"))
                             }

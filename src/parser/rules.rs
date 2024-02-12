@@ -1,54 +1,164 @@
 use crate::{error, token::TokenType};
 use std::fmt::{self, Debug, Display, Write};
 
-use super::Thing;
 #[derive(PartialEq, Clone, Debug)]
-pub struct Expression {
-    pub inside: Stuff,
-    pub print: bool,
-    pub line: i32,
-    pub new_line: bool,
-    pub filename: String,
+pub enum Ast {
+    Identifier(Identifier),
+    Function(Function),
+    If(If),
+    Loop(Loop),
+    Break(Break),
+    Continue(Continue),
+    Return(Return),
+    Literal(Literal),
+    Call(Call),
+    Declaration(Declaration),
+    Block(Block),
 }
-
-impl Expression {
-    pub const fn new(
-        inside: Stuff,
-        print: bool,
-        line: i32,
-        filename: String,
-        new_line: bool,
-    ) -> Self {
-        Self {
-            inside,
-            print,
-            line,
-            new_line,
-            filename,
+impl Ast {
+    pub(crate) fn set_print(&mut self, prints: PrintType) {
+        match self {
+            Ast::Identifier(node) => node.print = prints,
+            Ast::Function(node) => node.print = prints,
+            Ast::If(node) => node.print = prints,
+            Ast::Loop(node) => node.print = prints,
+            Ast::Break(node) => node.print = prints,
+            Ast::Continue(node) => node.print = prints,
+            Ast::Return(node) => node.print = prints,
+            Ast::Literal(node) => node.print = prints,
+            Ast::Call(node) => node.print = prints,
+            Ast::Declaration(node) => node.print = prints,
+            Ast::Block(node) => node.print = prints,
         }
     }
 }
 
-impl Display for Expression {
+impl Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "expr({})", self.inside)
+        match self {
+            Ast::Identifier(node) => write!(f, "{node}"),
+            Ast::Function(node) => write!(f, "{node}"),
+            Ast::If(node) => write!(f, "{node}"),
+            Ast::Loop(node) => write!(f, "{node}"),
+            Ast::Break(node) => write!(f, "{node}"),
+            Ast::Continue(node) => write!(f, "{node}"),
+            Ast::Return(node) => write!(f, "{node}"),
+            Ast::Literal(node) => write!(f, "{node}"),
+            Ast::Call(node) => write!(f, "{node}"),
+            Ast::Declaration(node) => write!(f, "{node}"),
+            Ast::Block(node) => write!(f, "{node}"),
+        }
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Block {
-    pub body: Vec<Thing>,
-    pub line: i32,
-    pub end_line: i32,
-    pub filename: String,
+pub struct BreakNode();
+impl Display for BreakNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "break")
+    }
+}
+impl BreakNode {
+    pub fn new() -> Self {
+        Self()
+    }
+}
+pub type Break = Located<BreakNode>;
+#[derive(PartialEq, Clone, Debug)]
+pub struct ContinueNode();
+
+impl Display for ContinueNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "continue")
+    }
+}
+impl ContinueNode {
+    pub fn new() -> Self {
+        Self()
+    }
+}
+pub type Continue = Located<ContinueNode>;
+#[derive(PartialEq, Clone, Debug)]
+pub struct ReturnNode(pub Option<Box<Ast>>);
+
+impl Display for ReturnNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(ref val) => write!(f, "return [{val}]"),
+            None => write!(f, "return"),
+        }
+    }
 }
 
-impl fmt::Display for Block {
+impl ReturnNode {
+    pub fn new(value: Ast) -> Self {
+        Self(Some(Box::new(value)))
+    }
+
+    pub fn new_empty() -> Self {
+        Self(None)
+    }
+}
+pub type Return = Located<ReturnNode>;
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum PrintType {
+    Print,
+    PrintLn,
+    None,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Located<T: Clone + Debug + Display> {
+    pub node: T,
+    pub start_line: i32,
+    pub end_line: Option<i32>,
+    pub filename: String,
+    pub print: PrintType,
+}
+
+impl<T: Clone + Debug + Display> Display for Located<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.node)
+    }
+}
+
+impl<T: Clone + Debug + Display> Located<T> {
+    pub fn new(node: T, start_line: i32, end_line: i32, filename: String) -> Self {
+        Self {
+            node,
+            start_line,
+            end_line: Some(end_line),
+            filename,
+            print: PrintType::None,
+        }
+    }
+    pub fn new_single_line(node: T, start_line: i32, filename: String) -> Self {
+        Self {
+            node,
+            start_line,
+            end_line: None,
+            filename,
+            print: PrintType::None,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct BlockNode(pub Vec<Ast>);
+impl BlockNode {
+    pub fn new(block: Vec<Ast>) -> Self {
+        Self(block)
+    }
+}
+pub type Block = Located<BlockNode>;
+
+impl Display for BlockNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
-            self.body
+            self.0
                 .iter()
                 .map(std::string::ToString::to_string)
                 .collect::<Vec<String>>()
@@ -57,126 +167,49 @@ impl fmt::Display for Block {
     }
 }
 
-impl Block {
-    pub fn new(body: Vec<Thing>, line: i32, end_line: i32, filename: String) -> Self {
-        Self {
-            body,
-            line,
-            end_line,
-            filename,
-        }
+#[derive(PartialEq, Clone, Debug)]
+pub struct IdentifierNode(pub String);
+pub type Identifier = Located<IdentifierNode>;
+
+impl IdentifierNode {
+    pub const fn new(name: String) -> Self {
+        Self(name)
     }
 }
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct IdentifierPointer {
-    pub name: String,
-    pub line: i32,
-    pub filename: String,
-}
-
-impl IdentifierPointer {
-    pub const fn new(name: String, line: i32, filename: String) -> Self {
-        Self {
-            name,
-            line,
-            filename,
-        }
-    }
-}
-
-impl Display for IdentifierPointer {
+impl Display for IdentifierNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
+        write!(f, "{}", self.0)
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Stuff {
-    Literal(Literal),
-    Identifier(IdentifierPointer),
-    Call(Call),
-    Block(Block),
-}
-
-impl Display for Stuff {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Literal(literal) => write!(f, "{literal}"),
-            Self::Identifier(identifier) => write!(f, "{identifier}"),
-            Self::Call(call) => write!(f, "{call}"),
-            Self::Block(block) => write!(f, "{block}"),
-        }
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Literal {
-    pub literal: LiteralType,
-    pub line: i32,
-    pub filename: String,
-}
-
-impl Literal {
-    pub const fn new_string(string: String, line: i32, filename: String) -> Self {
-        Self {
-            literal: LiteralType::String(string),
-            line,
-            filename,
-        }
-    }
-
-    pub const fn new_number(number: f64, line: i32, filename: String) -> Self {
-        Self {
-            literal: LiteralType::Number(number),
-            line,
-            filename,
-        }
-    }
-
-    pub const fn new_boolean(boolean: bool, line: i32, filename: String) -> Self {
-        Self {
-            literal: LiteralType::Boolean(boolean),
-            line,
-            filename,
-        }
-    }
-
-    pub const fn new_hempty(line: i32, filename: String) -> Self {
-        Self {
-            literal: LiteralType::Hempty,
-            line,
-            filename,
-        }
-    }
-}
-
-impl Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.literal)
-    }
-}
-#[derive(PartialEq, Clone, Debug)]
-pub enum LiteralType {
+pub enum LiteralNode {
     Number(f64),
     String(String),
     Boolean(bool),
     Hempty,
 }
 
-impl LiteralType {
-    pub fn from_other_stuff(thing: &OtherStuff, line: i32) -> Self {
-        match thing {
-            OtherStuff::Literal(literal) => literal.literal.clone(),
+pub type Literal = Located<LiteralNode>;
+impl LiteralNode {
+    pub fn get_from_ast(ast: &Ast, line: i32) -> Self {
+        match ast {
+            Ast::Literal(l) => l.node.clone(),
             _ => error::error(line, "not a literal"),
         }
     }
-    pub fn from_stuff(thing: &Stuff, line: i32) -> Self {
-        match thing {
-            Stuff::Literal(literal) => literal.literal.clone(),
-            _ => error::error(line, "not a literal"),
-        }
-    }
+    // pub fn from_other_stuff(thing: &OtherStuff, line: i32) -> Self {
+    //     match thing {
+    //         OtherStuff::Literal(literal) => literal.literal.clone(),
+    //         _ => error::error(line, "not a literal"),
+    //     }
+    // }
+    // pub fn from_stuff(thing: &Stuff, line: i32) -> Self {
+    //     match thing {
+    //         Stuff::Literal(literal) => literal.literal.clone(),
+    //         _ => error::error(line, "not a literal"),
+    //     }
+    // }
     pub const fn new_string(string: String) -> Self {
         Self::String(string)
     }
@@ -211,7 +244,7 @@ impl LiteralType {
     }
 }
 
-impl Display for LiteralType {
+impl Display for LiteralNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(num) => write!(f, "{num}"),
@@ -221,19 +254,18 @@ impl Display for LiteralType {
         }
     }
 }
-
 #[derive(PartialEq, Clone, Debug)]
-pub enum IdentifierType {
-    List(Box<List>),
-    Vairable(Box<Vairable>),
+pub enum DeclarationType {
+    Cons(Box<List>),
+    Variable(Box<Ast>),
 }
 
-impl IdentifierType {
-    pub fn new(thing: &[OtherStuff], line: i32) -> Self {
+impl DeclarationType {
+    pub fn new(thing: &[Ast], line: i32) -> Self {
         match thing.len() {
             0 => error::error(line, "expected Identifier, got empty list"),
-            1 => Self::Vairable(Box::new(Vairable::new(thing[0].clone()))),
-            2 => Self::List(Box::new(List::new(thing))),
+            1 => Self::Variable(Box::new(thing[0].clone())),
+            2 => Self::Cons(Box::new(List::new(thing))),
             _ => error::error(
                 line,
                 "expected Identifier, got list with more than 2 elements",
@@ -243,66 +275,48 @@ impl IdentifierType {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Identifier {
+pub struct DeclarationNode {
     pub name: String,
-    pub value: IdentifierType,
-    pub line: i32,
-    pub filename: String,
+    pub value: DeclarationType,
 }
 
-impl Identifier {
-    pub fn new(name: String, value: &[OtherStuff], line: i32, filename: String) -> Self {
+pub type Declaration = Located<DeclarationNode>;
+impl DeclarationNode {
+    pub fn new(name: String, value: &[Ast], line: i32) -> Self {
         Self {
+            value: DeclarationType::new(value, line),
             name,
-            value: IdentifierType::new(value, line),
-            line,
-            filename,
         }
     }
 }
-
-impl Display for Identifier {
+impl Display for DeclarationNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{} {}",
             self.name,
             match &self.value {
-                IdentifierType::List(list) => format!("list: {list}"),
-                IdentifierType::Vairable(vairable) => format!("variable: {vairable}"),
+                DeclarationType::Cons(list) => format!("cons: {list}"),
+                DeclarationType::Variable(vairable) => format!("variable: {vairable}"),
             }
         )
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Call {
+pub struct CallNode {
     pub keyword: TokenType,
-    pub arguments: Vec<Stuff>,
-    pub line: i32,
-    pub end_line: i32,
-    pub filename: String,
+    pub arguments: Vec<Ast>,
 }
 
-impl Call {
-    pub fn new(
-        arguments: &[Stuff],
-        line: i32,
-        filename: String,
-        end_line: i32,
-        keyword: TokenType,
-    ) -> Self {
-        Self {
-            arguments: arguments.to_vec(),
-            line,
-            keyword,
-            end_line,
-            filename,
-        }
+impl CallNode {
+    pub fn new(keyword: TokenType, arguments: Vec<Ast>) -> Self {
+        Self { keyword, arguments }
     }
 }
 
-impl Display for Call {
+pub type Call = Located<CallNode>;
+impl Display for CallNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut c = String::new();
         for arg in self.arguments.iter().enumerate() {
@@ -319,56 +333,27 @@ impl Display for Call {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum OtherStuff {
-    Literal(Literal),
-    Identifier(IdentifierPointer),
-    Expression(Expression),
-}
-
-impl Display for OtherStuff {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Literal(literal) => write!(f, "{literal}"),
-            Self::Identifier(identifier) => write!(f, "{identifier}"),
-            Self::Expression(expression) => write!(f, "{expression}"),
-        }
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Function {
+pub struct FunctionNode {
     pub name: char,
     pub num_arguments: f64,
     pub extra_arguments: bool,
     pub body: Block,
-    pub line: i32,
-    pub end_line: i32,
-    pub filename: String,
 }
 
-impl Function {
-    pub fn new(
-        name: char,
-        num_arguments: f64,
-        body: Block,
-        line: i32,
-        filename: String,
-        end_line: i32,
-        extra_arguments: bool,
-    ) -> Self {
+impl FunctionNode {
+    pub fn new(name: char, num_arguments: f64, extra_arguments: bool, body: Block) -> Self {
         Self {
             name,
             num_arguments,
-            body,
-            line,
-            end_line,
-            filename,
             extra_arguments,
+            body,
         }
     }
 }
 
-impl Display for Function {
+pub type Function = Located<FunctionNode>;
+
+impl Display for FunctionNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -380,19 +365,18 @@ impl Display for Function {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct List {
-    pub car: OtherStuff,
-    pub cdr: OtherStuff,
+    pub car: Ast,
+    pub cdr: Ast,
 }
 
 impl List {
-    pub fn new(thing: &[OtherStuff]) -> Self {
+    pub fn new(thing: &[Ast]) -> Self {
         Self {
             car: thing[0].clone(),
             cdr: thing[1].clone(),
         }
     }
 }
-
 impl Display for List {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "with: [{}, {}]", self.car, self.cdr)
@@ -400,53 +384,25 @@ impl Display for List {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Vairable {
-    pub value: OtherStuff,
-}
-
-impl Vairable {
-    const fn new(value: OtherStuff) -> Self {
-        Self { value }
-    }
-}
-
-impl Display for Vairable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "with: {}", self.value)
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct IfStatement {
-    pub condition: OtherStuff,
+pub struct IfNode {
+    pub condition: Box<Ast>,
     pub body_true: Block,
     pub body_false: Block,
-    pub line: i32,
-    pub end_line: i32,
-    pub filename: String,
 }
 
-impl IfStatement {
-    pub fn new(
-        condition: OtherStuff,
-        body_true: Block,
-        body_false: Block,
-        line: i32,
-        end_line: i32,
-        filename: String,
-    ) -> Self {
+impl IfNode {
+    pub fn new(condition: Box<Ast>, body_true: Block, body_false: Block) -> Self {
         Self {
             condition,
             body_true,
             body_false,
-            line,
-            end_line,
-            filename,
         }
     }
 }
 
-impl Display for IfStatement {
+pub type If = Located<IfNode>;
+
+impl Display for IfNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -457,26 +413,18 @@ impl Display for IfStatement {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct LoopStatement {
-    pub body: Block,
-    pub line: i32,
-    pub end_line: i32,
-    pub filename: String,
-}
+pub struct LoopNode(pub Block);
 
-impl LoopStatement {
-    pub fn new(body: Block, line: i32, filename: String, end_line: i32) -> Self {
-        Self {
-            body,
-            line,
-            end_line,
-            filename,
-        }
+impl LoopNode {
+    pub fn new(block: Block) -> Self {
+        Self(block)
     }
 }
 
-impl Display for LoopStatement {
+impl Display for LoopNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "loop statement: [\n{}\n]", self.body)
+        write!(f, "{}", self.0)
     }
 }
+
+pub type Loop = Located<LoopNode>;

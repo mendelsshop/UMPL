@@ -89,5 +89,5 @@ fn run(line: String, name: &str) {
     let lexed = lexer.scan_tokens();
     let mut parsed: Parser = Parser::new(lexed, name.to_string());
     let parsed = parsed.parse();
-    Eval::new(parsed);
+    Eval::new().eval_scope(parsed);
 }

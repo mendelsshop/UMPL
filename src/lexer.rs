@@ -101,10 +101,10 @@ impl Lexer {
             self.advance();
         }
         if self.get_text() == "true" {
-            self.add_token(TokenType::Boolean { value: true });
+            self.add_token(TokenType::Boolean { literal: true });
             return true;
         } else if self.get_text() == "false" {
-            self.add_token(TokenType::Boolean { value: false });
+            self.add_token(TokenType::Boolean { literal: false });
             return true;
         }
         false

@@ -1,16 +1,16 @@
 pub(crate) mod rules;
 use crate::{
     error::error,
+    parser::rules::{
+        BlockNode, Break, BreakNode, CallNode, Continue, ContinueNode, Declaration,
+        DeclarationNode, Function, FunctionNode, If, IfNode, Loop, LoopNode, PrintType, Return,
+        ReturnNode,
+    },
     token::{Token, TokenType},
 };
 use log::{debug, info, warn};
-use rules::{
-    Call, Expression, Function, Identifier, IdentifierPointer, IfStatement, Literal, LoopStatement,
-    OtherStuff, Stuff,
-};
-use std::fmt::{self, Display};
 
-use self::rules::Block;
+use self::rules::{Ast, Block, Call, Identifier, IdentifierNode, Literal, LiteralNode};
 
 pub struct Parser {
     paren_count: usize,
@@ -126,14 +126,14 @@ impl Parser {
         self.current_position += 1;
     }
 
-    pub fn parse(&mut self) -> Vec<Thing> {
-        let mut program: Vec<Thing> = Vec::new();
+    pub fn parse(&mut self) -> Vec<Ast> {
+        let mut program = Vec::new();
         // loop until we have no more self.tokens
         // in the loop, we use parse_from_tokens to parse the next expression
         // and add it to the program tree
         info!("{:?}", self.tokens);
         while !self.done {
-            let expr: Option<Thing> = self.parse_from_token();
+            let expr = self.parse_from_token();
             if let Some(t) = expr {
                 debug!("{:?}", t);
                 program.push(t);
@@ -143,7 +143,7 @@ impl Parser {
         program
     }
     #[allow(clippy::too_many_lines)]
-    fn parse_from_token(&mut self) -> Option<Thing> {
+    fn parse_from_token(&mut self) -> Option<Ast> {
         self.advance("parse_from_token");
         info!("new iteration");
         if self.tokens.is_empty() {
@@ -155,19 +155,13 @@ impl Parser {
         info!("PARSEfromTOKEN {}", self.token);
         match self.token.token_type.clone() {
             TokenType::LeftParen => match self.after_left_paren() {
-                Callorexpression::Expression(e) => Some(Thing::Expression(e)),
+                Callorexpression::Expression(e) => Some(e),
                 _ => error(self.token.line, "expected expression"),
             },
             TokenType::CodeBlockEnd => None,
             TokenType::CodeBlockBegin => {
                 let block = self.parse_block_without_begin(BlockType::None);
-                return Some(Thing::Expression(Expression::new(
-                    Stuff::Block(block.clone()),
-                    false,
-                    block.line,
-                    block.filename,
-                    false,
-                )));
+                return Some(Ast::Block(block.clone()));
             }
             TokenType::Identifier { .. } => {
                 error(self.token.line, "variable not allowed in this context");
@@ -218,14 +212,16 @@ impl Parser {
                                 let function = self.parse_block_without_begin(BlockType::Function);
                                 info!("int function declaration before code block");
                                 debug!("new function {:?}", function);
-                                Some(Thing::Function(Function::new(
-                                    name,
-                                    num_of_args_and_extra.0,
-                                    function,
+                                Some(Ast::Function(Function::new(
+                                    FunctionNode::new(
+                                        name,
+                                        num_of_args_and_extra.0,
+                                        num_of_args_and_extra.1,
+                                        function,
+                                    ),
                                     start_line,
-                                    self.filename.clone(),
                                     self.token.line,
-                                    num_of_args_and_extra.1,
+                                    self.filename.clone(),
                                 )))
                             }
                             tokentype => {
@@ -247,15 +243,21 @@ impl Parser {
                                     if self.token.token_type == TokenType::LeftBracket {
                                         self.advance("parse_from_token");
                                         info!("list with");
-                                        let thing: OtherStuff = self.parse_to_other_stuff();
+                                        let thing: Ast = self.parse_to_other_stuff();
                                         self.advance("parse_from_token");
-                                        let thing1: OtherStuff = self.parse_to_other_stuff();
+                                        let thing1: Ast = self.parse_to_other_stuff();
                                         self.advance("  ");
                                         if self.token.token_type == TokenType::RightBracket {
                                             self.variables.push(name.clone());
-                                            Some(Thing::Identifier(Identifier::new(
-                                                name,
-                                                &[thing, thing1],
+                                            Some(Ast::Declaration(Declaration::new(
+                                                DeclarationNode::new(
+                                                    name,
+                                                    &[thing, thing1],
+                                                    self.token.line,
+                                                ),
+                                                self.token.line,
+                                                // TODO: use constructer for located without
+                                                // endline
                                                 self.token.line,
                                                 self.filename.clone(),
                                             )))
@@ -312,9 +314,11 @@ impl Parser {
                                     info!("create identifier with {}", self.token.token_type);
                                     let thing = self.get_value();
                                     self.variables.push(name.clone());
-                                    Some(Thing::Identifier(Identifier::new(
-                                        name,
-                                        &[thing],
+                                    Some(Ast::Declaration(Declaration::new(
+                                        DeclarationNode::new(name, &[thing], self.token.line),
+                                        self.token.line,
+                                        // TODO: use constructer for located without
+                                        // endline
                                         self.token.line,
                                         self.filename.clone(),
                                     )))
@@ -346,11 +350,11 @@ impl Parser {
                         let loop_body = self.parse_block(BlockType::Loop);
                         info!("Done parsing loop body");
                         self.advance("parse_from_token after loop body looking for loop end");
-                        Some(Thing::LoopStatement(LoopStatement::new(
-                            loop_body,
+                        Some(Ast::Loop(Loop::new(
+                            LoopNode::new(loop_body),
                             start_line,
-                            self.filename.clone(),
                             self.token.line,
+                            self.filename.clone(),
                         )))
                     }
                     TokenType::If => {
@@ -359,25 +363,15 @@ impl Parser {
                         if self.token.token_type == TokenType::LeftBrace {
                             info!("if statement");
                             self.advance("parse_from_token finding condition");
-                            let thing: OtherStuff = match self.token.clone().token_type {
-                                TokenType::Boolean { value } => {
-                                    OtherStuff::Literal(Literal::new_boolean(
-                                        value,
-                                        self.token.line,
-                                        self.filename.clone(),
-                                    ))
-                                }
+                            let thing: Ast = match self.token.clone().token_type {
+                                TokenType::Boolean { literal } => self.boolean(literal),
                                 TokenType::LeftParen => match self.after_left_paren() {
-                                    Callorexpression::Expression(thing) => {
-                                        OtherStuff::Expression(thing)
-                                    }
+                                    Callorexpression::Expression(thing) => thing,
                                     _ => {
                                         error(self.token.line, "call found expected expression");
                                     }
                                 },
-                                TokenType::Identifier { name } => {
-                                    OtherStuff::Identifier(self.var(name))
-                                }
+                                TokenType::Identifier { name } => Ast::Identifier(self.var(name)),
                                 tokentype => {
                                     error(
                                         self.token.line,
@@ -395,10 +389,8 @@ impl Parser {
                                 self.advance("parse_from_token before else");
                                 if self.token.token_type == TokenType::Else {
                                     let else_body = self.parse_block(BlockType::None);
-                                    Some(Thing::IfStatement(IfStatement::new(
-                                        thing,
-                                        if_body,
-                                        else_body,
+                                    Some(Ast::If(If::new(
+                                        IfNode::new(Box::new(thing), if_body, else_body),
                                         start_line,
                                         self.token.line,
                                         self.filename.clone(),
@@ -426,27 +418,39 @@ impl Parser {
                     TokenType::Return { .. } => {
                         if self.tokens[self.current_position].token_type == TokenType::Colon {
                             self.advance("parse_from_token return expecting expression");
-                            return Some(Thing::Return(
-                                None,
+                            return Some(Ast::Return(Return::new(
+                                ReturnNode::new_empty(),
+                                self.token.line,
+                                // TODO: empty end line constructor
                                 self.token.line,
                                 self.filename.clone(),
-                            ));
+                            )));
                         }
                         self.advance("parse_from_token return expecting expression");
                         let thing = self.parse_to_other_stuff();
-                        Some(Thing::Return(
-                            Some(thing),
+                        Some(Ast::Return(Return::new(
+                            ReturnNode::new(thing),
+                            self.token.line,
+                            // TODO: empty end line constructor
                             self.token.line,
                             self.filename.clone(),
-                        ))
+                        )))
                     }
                     TokenType::Break => {
                         info!("break statement");
-                        Some(Thing::Break(self.token.line, self.filename.clone()))
+                        Some(Ast::Break(Break::new_single_line(
+                            BreakNode::new(),
+                            self.token.line,
+                            self.filename.clone(),
+                        )))
                     }
                     TokenType::Continue => {
                         info!("continue statement");
-                        Some(Thing::Continue(self.token.line, self.filename.clone()))
+                        Some(Ast::Continue(Continue::new_single_line(
+                            ContinueNode::new(),
+                            self.token.line,
+                            self.filename.clone(),
+                        )))
                     }
                     _ => {
                         error(
@@ -485,7 +489,7 @@ impl Parser {
             _ => (),
         };
         let start_line = self.token.line;
-        let mut block: Vec<Thing> = Vec::new();
+        let mut block: Vec<Ast> = Vec::new();
         while self.tokens[self.current_position].token_type != TokenType::CodeBlockEnd {
             set_value(self, true);
             if let Some(t) = self.parse_from_token() {
@@ -496,7 +500,7 @@ impl Parser {
         set_value(self, false);
         debug!("new block {:?}", block);
         Block::new(
-            block,
+            BlockNode::new(block),
             start_line,
             self.token.line,
             self.token.filename.clone(),
@@ -508,7 +512,7 @@ impl Parser {
         if self.paren_count == 1 {
             info!("found expresssion");
             self.advance("after_left_paren expression");
-            let stuff: Stuff = self.parse_to_stuff();
+            let mut stuff = self.parse_to_stuff();
             info!("done parsing expression {}", stuff);
             self.advance("after left paren expr");
             if self.token.token_type == TokenType::RightParen {
@@ -518,9 +522,9 @@ impl Parser {
             }
             self.advance("after left paren expr");
             info!("found express");
-            let prints: bool = match self.token.token_type {
-                TokenType::GreaterThanSymbol => true,
-                TokenType::LessThanSymbol => false,
+            let prints = match self.token.token_type {
+                TokenType::GreaterThanSymbol => PrintType::PrintLn,
+                TokenType::LessThanSymbol => PrintType::None,
                 _ => {
                     error(
                         self.token.line,
@@ -528,25 +532,20 @@ impl Parser {
                     );
                 }
             };
-            let new_line = if prints {
+            let prints = if prints == PrintType::PrintLn {
                 match self.tokens[self.current_position].token_type {
                     TokenType::GreaterThanSymbol => {
                         self.advance("after left paren expr");
-                        false
+                        PrintType::Print
                     }
-                    _ => true,
+                    _ => prints,
                 }
             } else {
-                false
+                prints
             };
             warn!("{:?}", prints);
-            Callorexpression::Expression(Expression {
-                inside: stuff,
-                print: prints,
-                line: self.token.line,
-                filename: self.filename.clone(),
-                new_line,
-            })
+            stuff.set_print(prints);
+            Callorexpression::Expression(stuff)
         } else {
             self.advance("after left paren");
             if self.token.token_type == TokenType::New {
@@ -572,17 +571,16 @@ impl Parser {
                 args.push(self.parse_to_stuff());
                 self.advance("after left paren");
             }
-            Callorexpression::Call(Call {
-                keyword,
-                arguments: args,
-                line: start_line,
-                end_line: line,
-                filename: self.filename.clone(),
-            })
+            Callorexpression::Call(Call::new(
+                CallNode::new(keyword, args),
+                start_line,
+                line,
+                self.filename.clone(),
+            ))
         }
     }
 
-    fn var(&mut self, name: String) -> IdentifierPointer {
+    fn var(&mut self, name: String) -> Identifier {
         if name.starts_with('$') && self.in_function {
             if self.tokens[self.current_position].token_type == TokenType::With {
                 error(
@@ -590,7 +588,7 @@ impl Parser {
                     "function arguments are immutable",
                 );
             } else {
-                IdentifierPointer::new(name, self.token.line, self.filename.clone())
+                self.ident(name)
             }
         } else if self.tokens[self.current_position].token_type == TokenType::Dot {
             self.advance("Var");
@@ -600,42 +598,28 @@ impl Parser {
                 info!("found dot {}", self.token.token_type);
                 let name: String =
                     name + "." + &format!("{:?}", self.token.token_type).to_lowercase();
-                IdentifierPointer::new(name, self.token.line, self.filename.clone())
+                self.ident(name)
             } else {
                 error(self.token.line, "car or Cdr expected after dot");
             }
         } else {
-            IdentifierPointer::new(name, self.token.line, self.filename.clone())
+            self.ident(name)
         }
     }
-    fn get_value(&mut self) -> OtherStuff {
+    fn get_value(&mut self) -> Ast {
         match self.token.token_type.clone() {
-            TokenType::Number { literal } => OtherStuff::Literal(Literal::new_number(
-                literal,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::String { literal } => OtherStuff::Literal(Literal::new_string(
-                literal,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::Hempty => {
-                OtherStuff::Literal(Literal::new_hempty(self.token.line, self.filename.clone()))
-            }
-            TokenType::Boolean { value } => OtherStuff::Literal(Literal::new_boolean(
-                value,
-                self.token.line,
-                self.filename.clone(),
-            )),
+            TokenType::Number { literal } => self.number(literal),
+            TokenType::String { literal } => self.string(literal),
+            TokenType::Hempty => self.hempty(),
+            TokenType::Boolean { literal } => self.boolean(literal),
             TokenType::LeftParen => match self.after_left_paren() {
-                Callorexpression::Expression(expression) => OtherStuff::Expression(expression),
+                Callorexpression::Expression(expression) => expression,
                 _ => error(
                     self.token.line,
                     "expression expected after left parenthesis, found call",
                 ),
             },
-            TokenType::Identifier { name } => OtherStuff::Identifier(self.var(name)),
+            TokenType::Identifier { name } => Ast::Identifier(self.var(name)),
             tokentype => {
                 error(
                     self.token.line,
@@ -646,39 +630,25 @@ impl Parser {
         }
     }
 
-    fn parse_to_stuff(&mut self) -> Stuff {
+    fn parse_to_stuff(&mut self) -> Ast {
         info!("parsing stuff");
         match self.token.token_type.clone() {
             TokenType::LeftParen => {
                 info!("found left paren");
                 // self.advance("parse to stuff");
                 match self.after_left_paren() {
-                    Callorexpression::Call(call) => Stuff::Call(call),
+                    Callorexpression::Call(call) => Ast::Call(call),
                     Callorexpression::Expression(a) => error(
                         self.token.line,
                         format!("call expected after left parenthesis found {a:?}"),
                     ),
                 }
             }
-            TokenType::Number { literal } => Stuff::Literal(Literal::new_number(
-                literal,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::String { literal } => Stuff::Literal(Literal::new_string(
-                literal,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::Hempty => {
-                Stuff::Literal(Literal::new_hempty(self.token.line, self.filename.clone()))
-            }
-            TokenType::Boolean { value } => Stuff::Literal(Literal::new_boolean(
-                value,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::Identifier { name } => Stuff::Identifier(self.var(name)),
+            TokenType::Number { literal } => self.number(literal),
+            TokenType::String { literal } => self.string(literal),
+            TokenType::Hempty => self.hempty(),
+            TokenType::Boolean { literal } => self.boolean(literal),
+            TokenType::Identifier { name } => Ast::Identifier(self.var(name)),
             TokenType::Create => {
                 todo!("variables created in an expression");
             }
@@ -703,37 +673,59 @@ impl Parser {
         }
     }
 
-    fn parse_to_other_stuff(&mut self) -> OtherStuff {
+    fn number(&self, literal: f64) -> Ast {
+        Ast::Literal(Literal::new_single_line(
+            LiteralNode::new_number(literal),
+            self.token.line,
+            self.filename.clone(),
+        ))
+    }
+
+    fn string(&self, literal: String) -> Ast {
+        Ast::Literal(Literal::new_single_line(
+            LiteralNode::new_string(literal),
+            self.token.line,
+            self.filename.clone(),
+        ))
+    }
+    fn boolean(&self, literal: bool) -> Ast {
+        Ast::Literal(Literal::new_single_line(
+            LiteralNode::new_boolean(literal),
+            self.token.line,
+            self.filename.clone(),
+        ))
+    }
+    fn hempty(&self) -> Ast {
+        Ast::Literal(Literal::new_single_line(
+            LiteralNode::new_hempty(),
+            self.token.line,
+            self.filename.clone(),
+        ))
+    }
+    fn ident(&self, ident: String) -> Identifier {
+        Identifier::new_single_line(
+            IdentifierNode::new(ident),
+            self.token.line,
+            self.filename.clone(),
+        )
+    }
+    fn parse_to_other_stuff(&mut self) -> Ast {
         match self.token.token_type.clone() {
             TokenType::LeftParen => {
                 // self.advance("parse to other stuff");
                 match self.after_left_paren() {
-                    Callorexpression::Expression(expression) => OtherStuff::Expression(expression),
+                    Callorexpression::Expression(expression) => expression,
                     _ => error(
                         self.token.line,
                         "expression expected after left parenthesis, found call",
                     ),
                 }
             }
-            TokenType::Number { literal } => OtherStuff::Literal(Literal::new_number(
-                literal,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::String { literal } => OtherStuff::Literal(Literal::new_string(
-                literal,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::Hempty => {
-                OtherStuff::Literal(Literal::new_hempty(self.token.line, self.filename.clone()))
-            }
-            TokenType::Boolean { value } => OtherStuff::Literal(Literal::new_boolean(
-                value,
-                self.token.line,
-                self.filename.clone(),
-            )),
-            TokenType::Identifier { name } => OtherStuff::Identifier(self.var(name)),
+            TokenType::Number { literal } => self.number(literal),
+            TokenType::String { literal } => self.string(literal),
+            TokenType::Hempty => self.hempty(),
+            TokenType::Boolean { literal } => self.boolean(literal),
+            TokenType::Identifier { name } => Ast::Identifier(self.var(name)),
             _ => {
                 error(
                     self.token.line,
@@ -750,43 +742,8 @@ pub enum BlockType {
     Loop,
     Function,
 }
-
 #[derive(PartialEq, Clone)]
 pub enum Callorexpression {
     Call(Call),
-    Expression(Expression),
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum Thing {
-    // we have vairants for each type of token that has a value ie number or the name of an identifier
-    Identifier(Identifier),
-    Expression(Expression),
-    Function(Function),
-    IfStatement(IfStatement),
-    LoopStatement(LoopStatement),
-    Break(i32, String),
-    Continue(i32, String),
-    Return(Option<OtherStuff>, i32, String),
-}
-
-impl Display for Thing {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Expression(expression) => write!(f, "{expression}"),
-            Self::Identifier(s) => write!(f, "Identifier({s})"),
-            Self::Function(function) => write!(f, "{function}"),
-            Self::IfStatement(if_statement) => write!(f, "{if_statement}"),
-            Self::LoopStatement(loop_statement) => write!(f, "{loop_statement}"),
-            Self::Break(..) => write!(f, "Break"),
-            Self::Continue(..) => write!(f, "Continue"),
-            Self::Return(stuff, _, _) => write!(
-                f,
-                "Return{}",
-                stuff
-                    .as_ref()
-                    .map_or_else(String::new, |stuff| format!("({stuff})")),
-            ),
-        }
-    }
+    Expression(Ast),
 }

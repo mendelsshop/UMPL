@@ -12,9 +12,8 @@ use std::{
 
 use crate::{
     error::{arg_error, error},
-    parser::{
-        rules::{IdentifierType, LiteralType, OtherStuff, Stuff},
-        Thing,
+    parser::rules::{
+        Ast, Call, Declaration, DeclarationType, Function, Identifier, If, LiteralNode, Return,
     },
     token::TokenType,
 };
@@ -105,7 +104,7 @@ impl NewList {
             LitOrList::Identifier(i) => i.borrow_mut().set_last(new_item),
             LitOrList::Literal(i) => {
                 // check if cdr is hempty
-                if i == &LiteralOrFile::Literal(LiteralType::Hempty) {
+                if i == &LiteralOrFile::Literal(LiteralNode::Hempty) {
                     self.cdr = new_item;
                 }
             }
@@ -121,7 +120,7 @@ impl Display for NewList {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralOrFile {
-    Literal(LiteralType),
+    Literal(LiteralNode),
     File(String),
 }
 
@@ -136,7 +135,7 @@ impl LiteralOrFile {
     }
     pub fn get_string(self, line: i32, keyword: &TokenType) -> String {
         match self {
-            Self::Literal(LiteralType::String(lit)) => lit,
+            Self::Literal(LiteralNode::String(lit)) => lit,
             _ => {
                 error(line, format!("{keyword} requires a string"));
             }
@@ -144,7 +143,7 @@ impl LiteralOrFile {
     }
     pub fn get_number(self, line: i32, keyword: &TokenType) -> f64 {
         match self {
-            Self::Literal(LiteralType::Number(lit)) => lit,
+            Self::Literal(LiteralNode::Number(lit)) => lit,
             _ => {
                 error(line, format!("{keyword} requires a number"));
             }
@@ -152,7 +151,7 @@ impl LiteralOrFile {
     }
     pub fn get_bool(self, line: i32, keyword: &TokenType) -> bool {
         match self {
-            Self::Literal(LiteralType::Boolean(lit)) => lit,
+            Self::Literal(LiteralNode::Boolean(lit)) => lit,
             _ => {
                 error(line, format!("{keyword} requires a boolean"));
             }
@@ -192,7 +191,7 @@ pub enum NewIdentifierType {
 }
 
 impl NewIdentifierType {
-    pub fn to_vec_literaltype(self, line: i32) -> Vec<LiteralOrFile> {
+    pub fn to_vec_literal(self, line: i32) -> Vec<LiteralOrFile> {
         match self {
             Self::Vairable(v) => vec![v.value],
             _ => error(line, "cannot convert to vec"),
@@ -203,7 +202,7 @@ impl NewIdentifierType {
 #[derive(Debug)]
 pub struct Scope {
     pub vars: HashMap<String, NewIdentifierType>,
-    pub function: HashMap<char, (Vec<Thing>, f64, bool)>,
+    pub function: HashMap<char, (Vec<Ast>, f64, bool)>,
     pub parent_scope: Option<Box<Scope>>,
     pub files: HashMap<String, File>,
     pub open_modules: [Option<Box<Module>>; 26],
@@ -213,7 +212,7 @@ pub struct Scope {
 pub struct Module {
     /// parent scope will be empty unless its an inline module
     pub scope: Scope,
-    pub missing_function_handler: Option<(Vec<Thing>, f64, bool)>,
+    pub missing_function_handler: Option<(Vec<Ast>, f64, bool)>,
 }
 
 impl Module {
@@ -226,12 +225,12 @@ impl Module {
 
     pub fn set_missing_function_handler(
         &mut self,
-        missing_function_handler: Option<(Vec<Thing>, f64, bool)>,
+        missing_function_handler: Option<(Vec<Ast>, f64, bool)>,
     ) {
         self.missing_function_handler = missing_function_handler;
     }
 
-    pub fn get_function(&self, name: char, path: &[char]) -> (Vec<Thing>, f64, bool) {
+    pub fn get_function(&self, name: char, path: &[char]) -> (Vec<Ast>, f64, bool) {
         self.scope.get_function(name, path).unwrap_or(
             self.missing_function_handler
                 .clone()
@@ -270,7 +269,7 @@ impl Scope {
         line: i32,
     ) {
         // the reason for this being its own method vs using the set method is because it will be easier to use/implemnet getting variable from different scopes
-        // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralType
+        // and also less typing instead of creating a NewIdentifierType you just pass in a vector of LiteralNode
         debug!("setting var: {} to: {:?}", name, value);
         let new_val: NewIdentifierType = match value.len() {
             0 => error(line, "expected Identifier, got empty list"),
@@ -309,7 +308,7 @@ impl Scope {
                             |parent| {
                                 parent.set_var(
                                     name,
-                                    &mut new_val.to_vec_literaltype(line),
+                                    &mut new_val.to_vec_literal(line),
                                     recurse,
                                     line,
                                 );
@@ -414,10 +413,10 @@ impl Scope {
             ),
         }
     }
-    pub fn set_function(&mut self, name: char, body: Vec<Thing>, args: f64, extra: bool) {
+    pub fn set_function(&mut self, name: char, body: Vec<Ast>, args: f64, extra: bool) {
         self.function.insert(name, (body, args, extra));
     }
-    pub fn get_function(&self, name: char, path: &[char]) -> Option<(Vec<Thing>, f64, bool)> {
+    pub fn get_function(&self, name: char, path: &[char]) -> Option<(Vec<Ast>, f64, bool)> {
         if let Some(m) = path.first() {
             // TODO: turn oprion into result b/c we could not find functions b/c module doesn't
             // exist, not b/c function doesnt't exist needs differenent handler
@@ -495,30 +494,32 @@ pub struct Eval {
 }
 
 impl Eval {
-    pub fn new(mut body: Vec<Thing>) -> Self {
-        let mut self_ = Self {
+    pub fn new() -> Self {
+        Self {
             scope: Scope::new(),
             in_function: false,
             in_loop: false,
             files: HashMap::new(),
-        };
-        body = self_.find_functions(body);
-        self_.eval_expression(body);
-        self_
+        }
+    }
+
+    pub fn eval_scope(&mut self, body: Vec<Ast>) -> Option<Stopper> {
+        let body = self.find_functions(body);
+        self.eval_expression(body)
     }
 
     pub fn get_file(&self, name: &str) -> Option<RefMut<'_, File>> {
         self.files.get(name).map(|file| file.borrow_mut())
     }
 
-    pub fn find_functions(&mut self, body: Vec<Thing>) -> Vec<Thing> {
+    pub fn find_functions(&mut self, body: Vec<Ast>) -> Vec<Ast> {
         let body = body
             .into_iter()
             .filter(|thing| -> bool {
-                if let Thing::Function(function) = thing {
+                if let Ast::Function(Function { node: function, .. }) = thing {
                     self.scope.set_function(
                         function.name.clone(),
-                        function.body.body.clone(),
+                        function.body.node.0.clone(),
                         function.num_arguments,
                         function.extra_arguments,
                     );
@@ -536,11 +537,11 @@ impl Eval {
     //         error::error(line, format!("Expected 2 arguments for {self:?} operator"));
     //     }
     //     let module_name = match &args[0] {
-    //         LiteralType::String(string) if string.is_ascii() && string.len() == 1 => string,
+    //         LiteralNode::String(string) if string.is_ascii() && string.len() == 1 => string,
     //         _ => error::error(line, format!("Expected string for {self:?} operator")),
     //     };
     //     match &args[1] {
-    //         LiteralType::String(filename) => {
+    //         LiteralNode::String(filename) => {
     //             let prev_module_name = scope.module_name.clone();
     //             if scope.module_name.is_empty() {
     //                 scope.module_name = module_name.clone();
@@ -568,11 +569,11 @@ impl Eval {
     //     };
     //
     //     // see if there is the second argument is a string
-    //     LiteralType::String(module_name.to_string())
+    //     LiteralNode::String(module_name.to_string())
     // }
 
     #[allow(clippy::too_many_lines)]
-    pub fn eval_expression(&mut self, body: Vec<Thing>) -> Option<Stopper> {
+    pub fn eval_expression(&mut self, body: Vec<Ast>) -> Option<Stopper> {
         // create a vector to return instead of inplace modification
         // well have globa/local scope when we check for variables we check for variables in the current scope and then check the parent scope and so on until we find a variable or we reach the top of the scope stack (same for functions)
         // we can have two different variables with the same name in different scopes, the scope of a variable is determined by where it is declared in the code
@@ -583,34 +584,32 @@ impl Eval {
         }
         for thing in body {
             match thing {
-                Thing::Identifier(ref variable) => match variable.value {
-                    IdentifierType::Vairable(ref name) => {
-                        if let Some(pointer) = self.find_pointer_in_other_stuff(&name.value) {
-                            self.scope.set_var(
-                                &variable.name,
-                                &mut vec![pointer],
-                                false,
-                                variable.line,
-                            );
+                Ast::Declaration(Declaration {
+                    node: ref variable,
+                    start_line: line,
+                    ..
+                }) => match variable.value {
+                    DeclarationType::Variable(ref name) => {
+                        if let Some(pointer) = self.find_pointer_in_other_stuff(&name) {
+                            self.scope
+                                .set_var(&variable.name, &mut vec![pointer], false, line);
                         } else {
                             self.scope.set_var(
                                 &variable.name,
-                                &mut vec![LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                    &name.value,
-                                    variable.line,
+                                &mut vec![LiteralOrFile::Literal(LiteralNode::get_from_ast(
+                                    &name, line,
                                 ))],
                                 false,
-                                variable.line,
+                                line,
                             );
                         }
                     }
-                    IdentifierType::List(ref list) => {
+                    DeclarationType::Cons(ref list) => {
                         let car: LiteralOrFile =
                             self.find_pointer_in_other_stuff(&list.car).map_or_else(
                                 || {
-                                    LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                        &list.car,
-                                        variable.line,
+                                    LiteralOrFile::Literal(LiteralNode::get_from_ast(
+                                        &list.car, line,
                                     ))
                                 },
                                 |pointer| pointer,
@@ -618,68 +617,70 @@ impl Eval {
                         let cdr: LiteralOrFile =
                             self.find_pointer_in_other_stuff(&list.cdr).map_or_else(
                                 || {
-                                    LiteralOrFile::Literal(LiteralType::from_other_stuff(
-                                        &list.cdr,
-                                        variable.line,
+                                    LiteralOrFile::Literal(LiteralNode::get_from_ast(
+                                        &list.cdr, line,
                                     ))
                                 },
                                 |pointer| pointer,
                             );
-                        self.scope.set_var(
-                            &variable.name,
-                            &mut vec![car, cdr],
-                            false,
-                            variable.line,
-                        );
+                        self.scope
+                            .set_var(&variable.name, &mut vec![car, cdr], false, line);
                     }
                 },
-                Thing::Return(os, line, _) => {
+                Ast::Return(Return {
+                    node,
+                    start_line: line,
+                    ..
+                }) => {
                     let ret: LiteralOrFile =
-                        os.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |os| {
-                            self.find_pointer_in_other_stuff(&os).map_or_else(
-                                || LiteralOrFile::Literal(LiteralType::from_other_stuff(&os, line)),
-                                |identifier| identifier,
-                            )
-                        });
+                        node.0
+                            .map_or(LiteralOrFile::Literal(LiteralNode::Hempty), |os| {
+                                self.find_pointer_in_other_stuff(&os).map_or_else(
+                                    || LiteralOrFile::Literal(LiteralNode::get_from_ast(&os, line)),
+                                    |identifier| identifier,
+                                )
+                            });
                     return Some(Stopper::Return(ret));
                 }
-                Thing::Expression(expr) => {
-                    let exprs = self.find_pointer_in_stuff(&expr.inside);
-                    print!(
-                        "{}",
-                        NewExpression {
-                            inside: exprs,
-                            print: expr.print,
-                            line: expr.line,
-                            new_line: expr.new_line,
-                        }
-                    );
-                }
-                Thing::IfStatement(mut if_statement) => {
-                    let conditon: LiteralType =
+                // TODO: print exrpessions
+                // Ast::Expression(expr) => {
+                //     let exprs = self.find_pointer_in_stuff(&expr.inside);
+                //     print!(
+                //         "{}",
+                //         NewExpression {
+                //             inside: exprs,
+                //             print: expr.print,
+                //             line: expr.start_line,
+                //             new_line: expr.new_line,
+                //         }
+                //     );
+                // }
+                Ast::If(If {
+                    node: mut if_statement,
+                    start_line,
+                    ..
+                }) => {
+                    let conditon: LiteralNode =
                         match self.find_pointer_in_other_stuff(&if_statement.condition) {
                             Some(pointer) => {
                                 info!("if {:?}", pointer);
                                 match pointer {
                                     LiteralOrFile::Literal(literal) => literal,
-                                    _ => error(if_statement.line, "cannot compare files"),
+                                    _ => error(start_line, "cannot compare files"),
                                 }
                             }
-                            None => LiteralType::from_other_stuff(
-                                &if_statement.condition,
-                                if_statement.line,
-                            ),
+                            None => LiteralNode::get_from_ast(&if_statement.condition, start_line),
                         };
-                    if conditon.type_eq(&LiteralType::Boolean(true)) {
+                    if conditon.type_eq(&LiteralNode::Boolean(true)) {
                     } else {
-                        error(if_statement.line, "expected boolean, got something else");
+                        error(start_line, "expected boolean, got something else");
                     }
                     self.scope.from_parent();
-                    if conditon == LiteralType::Boolean(true) {
-                        if_statement.body_true.body =
-                            self.find_functions(if_statement.body_true.body);
+                    if conditon == LiteralNode::Boolean(true) {
+                        if_statement.body_true.node.0 =
+                            self.find_functions(if_statement.body_true.node.0);
                         let body_true: Option<Stopper> =
-                            self.eval_expression(if_statement.body_true.body);
+                            self.eval_expression(if_statement.body_true.node.0);
                         self.scope.drop_scope();
                         if let Some(stop) = body_true {
                             match stop {
@@ -687,40 +688,40 @@ impl Eval {
                                     if self.in_loop {
                                         return Some(stop);
                                     }
-                                    error(if_statement.line, "break or continue outside of loop");
+                                    error(start_line, "break or continue outside of loop");
                                 }
                                 Stopper::Return(ret) => {
                                     if self.in_function {
                                         return Some(Stopper::Return(ret));
                                     }
-                                    error(if_statement.line, "return outside of function");
+                                    error(start_line, "return outside of function");
                                 }
                             }
                         }
                     } else {
-                        if_statement.body_false.body =
-                            self.find_functions(if_statement.body_false.body);
-                        let z = self.eval_expression(if_statement.body_false.body);
+                        if_statement.body_false.node.0 =
+                            self.find_functions(if_statement.body_false.node.0);
+                        let z = self.eval_expression(if_statement.body_false.node.0);
                         self.scope.drop_scope();
                         if let Some(stop) = z {
                             if let Stopper::Return(ret) = stop {
                                 if self.in_function {
                                     return Some(Stopper::Return(ret));
                                 }
-                                error(if_statement.line, "return outside of function");
+                                error(start_line, "return outside of function");
                             } else {
                                 if self.in_loop {
                                     return Some(stop);
                                 }
-                                error(if_statement.line, "break or continue outside of loop");
+                                error(start_line, "break or continue outside of loop");
                             }
                         }
                     }
                 }
-                Thing::LoopStatement(loop_statement) => {
+                Ast::Loop(loop_statement) => {
                     'l: loop {
                         self.scope.from_parent();
-                        let loop_body = self.find_functions(loop_statement.body.body.clone());
+                        let loop_body = self.find_functions(loop_statement.node.0.node.0.clone());
                         self.in_loop = true;
                         let z: Option<Stopper> = self.eval_expression(loop_body.clone());
                         self.scope.drop_scope();
@@ -732,17 +733,17 @@ impl Eval {
                                     if self.in_function {
                                         return Some(Stopper::Return(ret));
                                     }
-                                    error(loop_statement.line, "return outside of function");
+                                    error(loop_statement.start_line, "return outside of function");
                                 }
                             }
                         }
                     }
                     self.in_loop = false;
                 }
-                Thing::Break(..) => {
+                Ast::Break(..) => {
                     return Some(Stopper::Break);
                 }
-                Thing::Continue(..) => {
+                Ast::Continue(..) => {
                     return Some(Stopper::Continue);
                 }
                 _ => {}
@@ -751,800 +752,827 @@ impl Eval {
         None
     }
 
-    pub fn find_imports(&mut self, body: Vec<Thing>) -> Vec<Thing> {
+    pub fn find_imports(&mut self, body: Vec<Ast>) -> Vec<Ast> {
         body.into_iter()
             .filter(|thing| match thing {
-                Thing::Expression(e) => match &e.inside {
-                    Stuff::Call(call) => match call.keyword {
-                        TokenType::Module => {
-                            let mut new_stuff: Vec<LiteralType> = Vec::new();
-                            call.arguments.iter().for_each(|thing| {
-                                match self.find_pointer_in_stuff(thing) {
-                                    LiteralOrFile::Literal(literal) => {
-                                        new_stuff.push(literal);
-                                    }
-                                    LiteralOrFile::File(_) => {
-                                        error(
-                                            call.line,
-                                            format!(
-                                                "Cannot use file as argument for function {}",
-                                                call.keyword
-                                            )
-                                            .as_str(),
-                                        );
-                                    }
+                // Ast::Expression(e) => match &e.inside {
+                Ast::Call(call) => match call.node.keyword {
+                    TokenType::Module => {
+                        let mut new_stuff: Vec<LiteralNode> = Vec::new();
+                        call.node.arguments.iter().for_each(|thing| {
+                            match self.find_pointer_in_stuff(thing) {
+                                LiteralOrFile::Literal(literal) => {
+                                    new_stuff.push(literal);
                                 }
-                            });
-                            TokenType::Module.r#do(&new_stuff, call.line);
-                            false
-                        }
-                        _ => true,
-                    },
+                                LiteralOrFile::File(_) => {
+                                    error(
+                                        call.start_line,
+                                        format!(
+                                            "Cannot use file as argument for function {}",
+                                            call.node.keyword
+                                        )
+                                        .as_str(),
+                                    );
+                                }
+                            }
+                        });
+                        TokenType::Module.r#do(&new_stuff, call.start_line);
+                        false
+                    }
                     _ => true,
                 },
                 _ => true,
+                // },
+                // _ => true,
             })
             .collect()
     }
 
-    fn find_pointer_in_other_stuff(&mut self, other_stuff: &OtherStuff) -> Option<LiteralOrFile> {
+    fn find_pointer_in_other_stuff(&mut self, other_stuff: &Ast) -> Option<LiteralOrFile> {
         match other_stuff {
-            OtherStuff::Identifier(ident) => match self.scope.get_var(&ident.name, ident.line) {
+            Ast::Identifier(ident) => match self.scope.get_var(&ident.node.0, ident.start_line) {
                 NewIdentifierType::List(..) => {
-                    error(ident.line, "whole list not supported in call")
+                    error(ident.start_line, "whole list not supported in call")
                 }
                 NewIdentifierType::Vairable(var) => match var.value {
                     LiteralOrFile::Literal(_) => Some(var.value),
-                    _ => error(ident.line, "variable is not a literal"),
+                    _ => error(ident.start_line, "variable is not a literal"),
                 },
             },
-            OtherStuff::Expression(expr) => Some(self.find_pointer_in_stuff(&expr.inside)),
-            _ => None,
+            expr => Some(self.find_pointer_in_stuff(&expr)),
+            // _ => None,
         }
     }
     #[allow(clippy::too_many_lines)]
-    fn find_pointer_in_stuff(&mut self, stuff: &Stuff) -> LiteralOrFile {
+    fn find_pointer_in_stuff(&mut self, stuff: &Ast) -> LiteralOrFile {
         // need to make ways to extract values from literaltypes/literal/vars easy with function
         match stuff {
-            Stuff::Identifier(ident) => match self.scope.get_var(&ident.name, ident.line) {
+            Ast::Identifier(ident) => match self.scope.get_var(&ident.node.0, ident.start_line) {
                 NewIdentifierType::List(..) => {
-                    error(ident.line, "whole list not supported in call")
+                    error(ident.start_line, "whole list not supported in call")
                 }
                 NewIdentifierType::Vairable(var) => var.value,
             },
-            Stuff::Call(call) => match &call.keyword {
-                TokenType::FunctionIdentifier { name, path } => {
-                    if let Some(mut function) = self.scope.get_function(*name, path) {
-                        let new_stuff: Vec<LiteralOrFile> = call
-                            .arguments
-                            .iter()
-                            .map(|thing| self.find_pointer_in_stuff(thing))
-                            .collect();
-                        arg_error(
-                            function.1 as u32,
-                            new_stuff.len() as u32,
-                            &call.keyword,
-                            function.2,
-                            call.line,
-                        );
-                        self.scope.from_parent();
-                        function.0 = self.find_functions(function.0);
-                        self.in_function = true;
-                        let mut extra_args: Option<NewList> = None;
+            Ast::Call(Call {
+                node: call,
+                start_line,
+                ..
+            }) => {
+                let start_line = *start_line;
+                match &call.keyword {
+                    TokenType::FunctionIdentifier { name, path } => {
+                        if let Some(mut function) = self.scope.get_function(*name, path) {
+                            let new_stuff: Vec<LiteralOrFile> = call
+                                .arguments
+                                .iter()
+                                .map(|thing| self.find_pointer_in_stuff(thing))
+                                .collect();
+                            arg_error(
+                                function.1 as u32,
+                                new_stuff.len() as u32,
+                                &call.keyword,
+                                function.2,
+                                start_line,
+                            );
+                            self.scope.from_parent();
+                            function.0 = self.find_functions(function.0);
+                            self.in_function = true;
+                            let mut extra_args: Option<NewList> = None;
 
-                        // TODO: once we have more than ammount of arguments specified in function we should label the rest as under one variable $n which is a list
-                        new_stuff.into_iter().enumerate().for_each(|(i, l)| {
-                            if i as f64 >= function.1 {
-                                if let Some(ref mut list) = extra_args {
-                                    list.set_last(LitOrList::Identifier(Rc::new(RefCell::new(
-                                        NewList {
+                            // TODO: once we have more than ammount of arguments specified in function we should label the rest as under one variable $n which is a list
+                            new_stuff.into_iter().enumerate().for_each(|(i, l)| {
+                                if i as f64 >= function.1 {
+                                    if let Some(ref mut list) = extra_args {
+                                        list.set_last(LitOrList::Identifier(Rc::new(
+                                            RefCell::new(NewList {
+                                                car: LitOrList::Literal(l),
+                                                cdr: LitOrList::Literal(LiteralOrFile::Literal(
+                                                    LiteralNode::Hempty,
+                                                )),
+                                            }),
+                                        )));
+                                    } else {
+                                        extra_args = Some(NewList {
                                             car: LitOrList::Literal(l),
                                             cdr: LitOrList::Literal(LiteralOrFile::Literal(
-                                                LiteralType::Hempty,
+                                                LiteralNode::Hempty,
                                             )),
-                                        },
-                                    ))));
+                                        });
+                                    }
                                 } else {
-                                    extra_args = Some(NewList {
-                                        car: LitOrList::Literal(l),
-                                        cdr: LitOrList::Literal(LiteralOrFile::Literal(
-                                            LiteralType::Hempty,
-                                        )),
-                                    });
+                                    self.scope.set_var(
+                                        format!("${}", i + 1).as_str(),
+                                        &mut vec![(l)],
+                                        false,
+                                        start_line,
+                                    );
                                 }
-                            } else {
-                                self.scope.set_var(
-                                    format!("${}", i + 1).as_str(),
-                                    &mut vec![(l)],
+                            });
+                            if let Some(list) = extra_args {
+                                self.scope.set_list(
+                                    format!("${}", function.1 as usize + 1).as_str(),
+                                    list,
                                     false,
-                                    call.line,
+                                    start_line,
                                 );
                             }
-                        });
-                        if let Some(list) = extra_args {
-                            self.scope.set_list(
-                                format!("${}", function.1 as usize + 1).as_str(),
-                                list,
-                                false,
-                                call.line,
-                            );
-                        }
-                        let z: Option<Stopper> = self.eval_expression(function.0);
-                        self.in_function = false;
-                        self.scope.drop_scope();
-                        z.map_or(LiteralOrFile::Literal(LiteralType::Hempty), |v| {
-                            if let Stopper::Return(a) = v {
-                                a
-                            } else {
-                                error(call.line, "cannot call break/continue at end of function");
-                            }
-                        })
-                    } else {
-                        error(call.line, format!("Function {name} is not defined"));
-                    }
-                }
-                TokenType::Type => {
-                    arg_error(
-                        1,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    match self.find_pointer_in_stuff(&call.arguments[0]) {
-                        LiteralOrFile::Literal(a) => {
-                            LiteralOrFile::Literal(LiteralType::String(a.get_type()))
-                        }
-                        LiteralOrFile::File(_) => {
-                            LiteralOrFile::Literal(LiteralType::String("file".to_string()))
-                        }
-                    }
-                }
-                TokenType::Delete => {
-                    if call.arguments.len() != 1 {
-                        error(call.line, "delete takes one argument");
-                    }
-                    if let Stuff::Identifier(ident) = &call.arguments[0] {
-                        if self.scope.delete_var(&ident.name).is_some() {
-                            LiteralOrFile::Literal(LiteralType::Hempty)
+                            let z: Option<Stopper> = self.eval_expression(function.0);
+                            self.in_function = false;
+                            self.scope.drop_scope();
+                            z.map_or(LiteralOrFile::Literal(LiteralNode::Hempty), |v| {
+                                if let Stopper::Return(a) = v {
+                                    a
+                                } else {
+                                    error(
+                                        start_line,
+                                        "cannot call break/continue at end of function",
+                                    );
+                                }
+                            })
                         } else {
-                            error(
-                                ident.line,
-                                format!("Variable {} is not defined", ident.name),
-                            );
+                            error(start_line, format!("Function {name} is not defined"));
                         }
-                    } else {
-                        error(call.line, "delete only takes a variable name")
                     }
-                }
-                TokenType::AddWith
-                | TokenType::SubtractWith
-                | TokenType::DivideWith
-                | TokenType::MultiplyWith
-                | TokenType::Set => {
-                    debug!("{} {:?}", call.keyword, call.arguments);
-                    if let Stuff::Identifier(ident) = &call.arguments[0] {
-                        if self.scope.has_var(&ident.name, true) {
-                            let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
-                            call.arguments.iter().skip(1).for_each(|thing| {
-                                new_stuff.push(self.find_pointer_in_stuff(thing));
-                            });
-                            match new_stuff.len() {
-                                1 => {
-                                    let literal: LiteralOrFile = new_stuff.remove(0);
-                                    let var: LiteralOrFile =
-                                        match self.scope.get_var(&ident.name, call.line) {
-                                            NewIdentifierType::Vairable(v) => v.value,
-                                            NewIdentifierType::List(..) => {
-                                                error(ident.line, "Cannot change entire list");
-                                            }
-                                        };
-                                    match call.keyword {
-                                        TokenType::Set => {
-                                            self.scope.set_var(
-                                                &ident.name,
-                                                &mut vec![literal.clone()],
-                                                true,
-                                                call.line,
-                                            );
-                                            literal
-                                        }
-                                        TokenType::AddWith => match var {
-                                            LiteralOrFile::Literal(LiteralType::Number(num)) => {
-                                                if let LiteralOrFile::Literal(
-                                                    LiteralType::Number(num2),
-                                                ) = literal
-                                                {
-                                                    let new_val = num + num2;
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &mut vec![LiteralOrFile::Literal(
-                                                            LiteralType::Number(new_val),
-                                                        )],
-                                                        true,
-                                                        call.line,
-                                                    );
-                                                    LiteralOrFile::Literal(LiteralType::Number(
-                                                        new_val,
-                                                    ))
-                                                } else {
-                                                    error(
-                                                        call.line,
-                                                        format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
-                                                        ),
-                                                    );
+                    TokenType::Type => {
+                        arg_error(
+                            1,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        match self.find_pointer_in_stuff(&call.arguments[0]) {
+                            LiteralOrFile::Literal(a) => {
+                                LiteralOrFile::Literal(LiteralNode::String(a.get_type()))
+                            }
+                            LiteralOrFile::File(_) => {
+                                LiteralOrFile::Literal(LiteralNode::String("file".to_string()))
+                            }
+                        }
+                    }
+                    TokenType::Delete => {
+                        if call.arguments.len() != 1 {
+                            error(start_line, "delete takes one argument");
+                        }
+                        if let Ast::Identifier(Identifier {
+                            node: ident,
+                            start_line,
+                            ..
+                        }) = &call.arguments[0]
+                        {
+                            if self.scope.delete_var(&ident.0).is_some() {
+                                LiteralOrFile::Literal(LiteralNode::Hempty)
+                            } else {
+                                error(*start_line, format!("Variable {} is not defined", ident.0));
+                            }
+                        } else {
+                            error(start_line, "delete only takes a variable name")
+                        }
+                    }
+                    TokenType::AddWith
+                    | TokenType::SubtractWith
+                    | TokenType::DivideWith
+                    | TokenType::MultiplyWith
+                    | TokenType::Set => {
+                        debug!("{} {:?}", call.keyword, call.arguments);
+                        if let Ast::Identifier(Identifier {
+                            node: ident,
+                            start_line: ident_line,
+                            ..
+                        }) = &call.arguments[0]
+                        {
+                            if self.scope.has_var(&ident.0, true) {
+                                let mut new_stuff: Vec<LiteralOrFile> = Vec::new();
+                                call.arguments.iter().skip(1).for_each(|thing| {
+                                    new_stuff.push(self.find_pointer_in_stuff(thing));
+                                });
+                                match new_stuff.len() {
+                                    1 => {
+                                        let literal: LiteralOrFile = new_stuff.remove(0);
+                                        let var: LiteralOrFile =
+                                            match self.scope.get_var(&ident.0, start_line) {
+                                                NewIdentifierType::Vairable(v) => v.value,
+                                                NewIdentifierType::List(..) => {
+                                                    error(*ident_line, "Cannot change entire list");
                                                 }
+                                            };
+                                        match call.keyword {
+                                            TokenType::Set => {
+                                                self.scope.set_var(
+                                                    &ident.0,
+                                                    &mut vec![literal.clone()],
+                                                    true,
+                                                    start_line,
+                                                );
+                                                literal
                                             }
-                                            LiteralOrFile::Literal(LiteralType::String(mut s)) => {
-                                                match literal {
+                                            TokenType::AddWith => match var {
+                                                LiteralOrFile::Literal(LiteralNode::Number(
+                                                    num,
+                                                )) => {
+                                                    if let LiteralOrFile::Literal(
+                                                        LiteralNode::Number(num2),
+                                                    ) = literal
+                                                    {
+                                                        let new_val = num + num2;
+                                                        self.scope.set_var(
+                                                            &ident.0,
+                                                            &mut vec![LiteralOrFile::Literal(
+                                                                LiteralNode::Number(new_val),
+                                                            )],
+                                                            true,
+                                                            start_line,
+                                                        );
+                                                        LiteralOrFile::Literal(LiteralNode::Number(
+                                                            new_val,
+                                                        ))
+                                                    } else {
+                                                        error(
+                                                            start_line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.0
+                                                            ),
+                                                        );
+                                                    }
+                                                }
+                                                LiteralOrFile::Literal(LiteralNode::String(
+                                                    mut s,
+                                                )) => match literal {
                                                     LiteralOrFile::Literal(
-                                                        LiteralType::String(s2),
+                                                        LiteralNode::String(s2),
                                                     ) => {
                                                         s.push_str(s2.as_str());
                                                         self.scope.set_var(
-                                                            &ident.name,
+                                                            &ident.0,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s.clone()),
+                                                                LiteralNode::String(s.clone()),
                                                             )],
                                                             true,
-                                                            call.line,
+                                                            start_line,
                                                         );
-                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                        LiteralOrFile::Literal(LiteralNode::String(
                                                             s,
                                                         ))
                                                     }
                                                     LiteralOrFile::Literal(
-                                                        LiteralType::Number(n),
+                                                        LiteralNode::Number(n),
                                                     ) => {
                                                         s.push_str(&n.to_string());
                                                         self.scope.set_var(
-                                                            &ident.name,
+                                                            &ident.0,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s.clone()),
+                                                                LiteralNode::String(s.clone()),
                                                             )],
                                                             true,
-                                                            call.line,
+                                                            start_line,
                                                         );
-                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                        LiteralOrFile::Literal(LiteralNode::String(
                                                             s,
                                                         ))
                                                     }
                                                     LiteralOrFile::Literal(
-                                                        LiteralType::Boolean(boolean),
+                                                        LiteralNode::Boolean(boolean),
                                                     ) => {
                                                         s.push_str(&boolean.to_string());
                                                         self.scope.set_var(
-                                                            &ident.name,
+                                                            &ident.0,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s.clone()),
+                                                                LiteralNode::String(s.clone()),
                                                             )],
                                                             true,
-                                                            call.line,
+                                                            start_line,
                                                         );
-                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                        LiteralOrFile::Literal(LiteralNode::String(
                                                             s,
                                                         ))
                                                     }
-                                                    LiteralOrFile::Literal(LiteralType::Hempty) => {
+                                                    LiteralOrFile::Literal(LiteralNode::Hempty) => {
                                                         s.push_str("hempty");
                                                         self.scope.set_var(
-                                                            &ident.name,
+                                                            &ident.0,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::String(s.clone()),
+                                                                LiteralNode::String(s.clone()),
                                                             )],
                                                             true,
-                                                            call.line,
+                                                            start_line,
                                                         );
-                                                        LiteralOrFile::Literal(LiteralType::String(
+                                                        LiteralOrFile::Literal(LiteralNode::String(
                                                             s,
                                                         ))
                                                     }
                                                     _ => {
                                                         error(
-                                                            call.line,
+                                                            start_line,
                                                             format!(
                                                                 "Variable {} is not a string",
-                                                                ident.name
+                                                                ident.0
+                                                            ),
+                                                        );
+                                                    }
+                                                },
+                                                _ => {
+                                                    error(
+                                                        start_line,
+                                                        format!(
+                                                            "Variable {} is not a number/string",
+                                                            ident.0
+                                                        ),
+                                                    );
+                                                }
+                                            },
+                                            TokenType::MultiplyWith => match var {
+                                                LiteralOrFile::Literal(LiteralNode::Number(
+                                                    num,
+                                                )) => {
+                                                    if let LiteralOrFile::Literal(
+                                                        LiteralNode::Number(num2),
+                                                    ) = literal
+                                                    {
+                                                        let new_val: f64 = num * num2;
+                                                        self.scope.set_var(
+                                                            &ident.0,
+                                                            &mut vec![LiteralOrFile::Literal(
+                                                                LiteralNode::Number(new_val),
+                                                            )],
+                                                            true,
+                                                            start_line,
+                                                        );
+                                                        LiteralOrFile::Literal(LiteralNode::Number(
+                                                            new_val,
+                                                        ))
+                                                    } else {
+                                                        error(
+                                                            start_line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.0
                                                             ),
                                                         );
                                                     }
                                                 }
-                                            }
-                                            _ => {
-                                                error(
-                                                    call.line,
-                                                    format!(
-                                                        "Variable {} is not a number/string",
-                                                        ident.name
-                                                    ),
-                                                );
-                                            }
-                                        },
-                                        TokenType::MultiplyWith => match var {
-                                            LiteralOrFile::Literal(LiteralType::Number(num)) => {
-                                                if let LiteralOrFile::Literal(
-                                                    LiteralType::Number(num2),
-                                                ) = literal
-                                                {
-                                                    let new_val: f64 = num * num2;
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &mut vec![LiteralOrFile::Literal(
-                                                            LiteralType::Number(new_val),
-                                                        )],
-                                                        true,
-                                                        call.line,
-                                                    );
-                                                    LiteralOrFile::Literal(LiteralType::Number(
-                                                        new_val,
-                                                    ))
-                                                } else {
-                                                    error(
-                                                        call.line,
-                                                        format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
-                                                        ),
-                                                    );
-                                                }
-                                            }
-                                            LiteralOrFile::Literal(LiteralType::String(ref s)) => {
-                                                if let LiteralOrFile::Literal(
-                                                    LiteralType::Number(num),
-                                                ) = literal
-                                                {
-                                                    let new_string: String = (0..num as i32)
-                                                        .map(|_| s.to_string())
-                                                        .collect();
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &mut vec![LiteralOrFile::Literal(
-                                                            LiteralType::String(new_string.clone()),
-                                                        )],
-                                                        true,
-                                                        call.line,
-                                                    );
-                                                    LiteralOrFile::Literal(LiteralType::String(
-                                                        new_string,
-                                                    ))
-                                                } else {
-                                                    error(
-                                                        call.line,
-                                                        format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
-                                                        ),
-                                                    );
-                                                }
-                                            }
-                                            _ => {
-                                                error(
-                                                    call.line,
-                                                    format!(
-                                                        "Variable {} is not a number/string",
-                                                        ident.name
-                                                    ),
-                                                );
-                                            }
-                                        },
-                                        TokenType::SubtractWith | TokenType::DivideWith => {
-                                            if let LiteralOrFile::Literal(LiteralType::Number(
-                                                nums,
-                                            )) = var
-                                            {
-                                                if let LiteralOrFile::Literal(
-                                                    LiteralType::Number(num),
-                                                ) = literal
-                                                {
-                                                    if call.keyword == TokenType::SubtractWith {
-                                                        let new_val = nums - num;
+                                                LiteralOrFile::Literal(LiteralNode::String(
+                                                    ref s,
+                                                )) => {
+                                                    if let LiteralOrFile::Literal(
+                                                        LiteralNode::Number(num),
+                                                    ) = literal
+                                                    {
+                                                        let new_string: String = (0..num as i32)
+                                                            .map(|_| s.to_string())
+                                                            .collect();
                                                         self.scope.set_var(
-                                                            &ident.name,
+                                                            &ident.0,
                                                             &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::Number(new_val),
+                                                                LiteralNode::String(
+                                                                    new_string.clone(),
+                                                                ),
                                                             )],
                                                             true,
-                                                            call.line,
+                                                            start_line,
                                                         );
-                                                        LiteralOrFile::Literal(LiteralType::Number(
-                                                            new_val,
+                                                        LiteralOrFile::Literal(LiteralNode::String(
+                                                            new_string,
                                                         ))
                                                     } else {
-                                                        let new_val = nums / num;
-                                                        self.scope.set_var(
-                                                            &ident.name,
-                                                            &mut vec![LiteralOrFile::Literal(
-                                                                LiteralType::Number(new_val),
-                                                            )],
-                                                            true,
-                                                            call.line,
+                                                        error(
+                                                            start_line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.0
+                                                            ),
                                                         );
-                                                        LiteralOrFile::Literal(LiteralType::Number(
-                                                            new_val,
-                                                        ))
+                                                    }
+                                                }
+                                                _ => {
+                                                    error(
+                                                        start_line,
+                                                        format!(
+                                                            "Variable {} is not a number/string",
+                                                            ident.0
+                                                        ),
+                                                    );
+                                                }
+                                            },
+                                            TokenType::SubtractWith | TokenType::DivideWith => {
+                                                if let LiteralOrFile::Literal(
+                                                    LiteralNode::Number(nums),
+                                                ) = var
+                                                {
+                                                    if let LiteralOrFile::Literal(
+                                                        LiteralNode::Number(num),
+                                                    ) = literal
+                                                    {
+                                                        if call.keyword == TokenType::SubtractWith {
+                                                            let new_val = nums - num;
+                                                            self.scope.set_var(
+                                                                &ident.0,
+                                                                &mut vec![LiteralOrFile::Literal(
+                                                                    LiteralNode::Number(new_val),
+                                                                )],
+                                                                true,
+                                                                start_line,
+                                                            );
+                                                            LiteralOrFile::Literal(
+                                                                LiteralNode::Number(new_val),
+                                                            )
+                                                        } else {
+                                                            let new_val = nums / num;
+                                                            self.scope.set_var(
+                                                                &ident.0,
+                                                                &mut vec![LiteralOrFile::Literal(
+                                                                    LiteralNode::Number(new_val),
+                                                                )],
+                                                                true,
+                                                                start_line,
+                                                            );
+                                                            LiteralOrFile::Literal(
+                                                                LiteralNode::Number(new_val),
+                                                            )
+                                                        }
+                                                    } else {
+                                                        error(
+                                                            start_line,
+                                                            format!(
+                                                                "Variable {} is not a number",
+                                                                ident.0
+                                                            ),
+                                                        );
                                                     }
                                                 } else {
                                                     error(
-                                                        call.line,
+                                                        start_line,
                                                         format!(
-                                                            "Variable {} is not a number",
-                                                            ident.name
+                                                            "Variable {} is not a number/string",
+                                                            ident.0
                                                         ),
                                                     );
                                                 }
-                                            } else {
+                                            }
+                                            _ => {
                                                 error(
-                                                    call.line,
+                                                    start_line,
                                                     format!(
-                                                        "Variable {} is not a number/string",
-                                                        ident.name
+                                                        "Invalid operator for literal {}",
+                                                        call.keyword
                                                     ),
                                                 );
                                             }
                                         }
-                                        _ => {
+                                    }
+                                    2 => {
+                                        if call.keyword == TokenType::Set {
+                                            self.scope.set_var(
+                                                &ident.0,
+                                                &mut new_stuff,
+                                                true,
+                                                start_line,
+                                            );
+                                            LiteralOrFile::Literal(LiteralNode::String(
+                                                new_stuff
+                                                    .iter()
+                                                    .map(std::string::ToString::to_string)
+                                                    .collect(),
+                                            ))
+                                        } else {
                                             error(
-                                                call.line,
+                                                start_line,
                                                 format!(
-                                                    "Invalid operator for literal {}",
+                                                    "Too many arguments for function {}",
                                                     call.keyword
-                                                ),
+                                                )
+                                                .as_str(),
                                             );
                                         }
                                     }
+                                    _ => error(
+                                        start_line,
+                                        format!("Too many arguments for function {}", call.keyword)
+                                            .as_str(),
+                                    ),
                                 }
-                                2 => {
-                                    if call.keyword == TokenType::Set {
-                                        self.scope.set_var(
-                                            &ident.name,
-                                            &mut new_stuff,
-                                            true,
-                                            call.line,
-                                        );
-                                        LiteralOrFile::Literal(LiteralType::String(
-                                            new_stuff
-                                                .iter()
-                                                .map(std::string::ToString::to_string)
-                                                .collect(),
-                                        ))
-                                    } else {
+                            } else {
+                                error(*ident_line, format!("Variable {} is not defined", ident.0));
+                            }
+                        } else {
+                            error(
+                                start_line,
+                                format!("First argument of {} must be an identifier", call.keyword)
+                                    .as_str(),
+                            );
+                        }
+                    }
+                    TokenType::Open => {
+                        arg_error(
+                            1,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        // check if the first argument is a string
+                        let arg = self
+                            .find_pointer_in_stuff(&call.arguments[0])
+                            .get_string(start_line, &call.keyword);
+                        if std::path::Path::new(&arg).exists() {
+                            LiteralOrFile::File(arg)
+                        } else {
+                            error(
+                                start_line,
+                                format!("Could not open file {arg}: does not exist").as_str(),
+                            );
+                        }
+                    }
+                    TokenType::Close | TokenType::Read => {
+                        arg_error(
+                            1,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        // evalute args[0] and check if it is a file
+                        match &call.arguments[0] {
+                            Ast::Identifier(Identifier { node: ident, .. }) => {
+                                let files = self.scope.get_var(&ident.0, start_line);
+                                match files {
+                                    NewIdentifierType::Vairable(var) => {
+                                        match var.value {
+                                            LiteralOrFile::File(file) => {
+                                                // set idnetifier to nothing
+                                                match call.keyword {
+                                                    TokenType::Close => {
+                                                        self.scope.set_var(
+                                                            &ident.0,
+                                                            &mut vec![LiteralOrFile::Literal(
+                                                                LiteralNode::Hempty,
+                                                            )],
+                                                            true,
+                                                            start_line,
+                                                        );
+                                                    }
+                                                    TokenType::Read => {
+                                                        let contents = // create a string to hold the contents of the file
+                                                                match read_file(&file) {
+                                                                    Ok(contents) => contents,
+                                                                    Err(err) => {
+                                                                        error(start_line, format!("{err}"));
+                                                                    }
+                                                                }; // read the file into the string
+                                                        return LiteralOrFile::Literal(
+                                                            LiteralNode::String(contents),
+                                                        ); // return the string
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            _ => error(
+                                                start_line,
+                                                format!("{} is not a file", ident.0).as_str(),
+                                            ),
+                                        }
+                                    }
+                                    NewIdentifierType::List(_) => error(
+                                        start_line,
+                                        format!("Variable {} is not a file", ident.0).as_str(),
+                                    ),
+                                }
+                            }
+                            other => {
+                                match self.find_pointer_in_stuff(other) {
+                                    LiteralOrFile::File(file) => {
+                                        match call.keyword {
+                                            TokenType::Close => {
+                                                self.scope.files.remove(&file);
+                                            }
+                                            TokenType::Read => {
+                                                let contents: String = String::new(); // create a string to hold the contents of the file
+                                                match read_file(&file) {
+                                                    Ok(contents) => contents,
+                                                    Err(err) => {
+                                                        error(start_line, format!("{err}"));
+                                                    }
+                                                }; // read the file into the string
+                                                return LiteralOrFile::Literal(
+                                                    LiteralNode::String(contents),
+                                                ); // return the string
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    _ => {
                                         error(
-                                            call.line,
+                                            start_line,
                                             format!(
-                                                "Too many arguments for function {}",
+                                                "First argument of {} must be a file",
                                                 call.keyword
                                             )
                                             .as_str(),
                                         );
                                     }
-                                }
-                                _ => error(
-                                    call.line,
-                                    format!("Too many arguments for function {}", call.keyword)
-                                        .as_str(),
-                                ),
-                            }
-                        } else {
-                            error(
-                                ident.line,
-                                format!("Variable {} is not defined", ident.name),
-                            );
-                        }
-                    } else {
-                        error(
-                            call.line,
-                            format!("First argument of {} must be an identifier", call.keyword)
-                                .as_str(),
-                        );
-                    }
-                }
-                TokenType::Open => {
-                    arg_error(
-                        1,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    // check if the first argument is a string
-                    let arg = self
-                        .find_pointer_in_stuff(&call.arguments[0])
-                        .get_string(call.line, &call.keyword);
-                    if std::path::Path::new(&arg).exists() {
-                        LiteralOrFile::File(arg)
-                    } else {
-                        error(
-                            call.line,
-                            format!("Could not open file {arg}: does not exist").as_str(),
-                        );
-                    }
-                }
-                TokenType::Close | TokenType::Read => {
-                    arg_error(
-                        1,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    // evalute args[0] and check if it is a file
-                    match &call.arguments[0] {
-                        Stuff::Identifier(ident) => {
-                            let files = self.scope.get_var(&ident.name, call.line);
-                            match files {
-                                NewIdentifierType::Vairable(var) => {
-                                    match var.value {
-                                        LiteralOrFile::File(file) => {
-                                            // set idnetifier to nothing
-                                            match call.keyword {
-                                                TokenType::Close => {
-                                                    self.scope.set_var(
-                                                        &ident.name,
-                                                        &mut vec![LiteralOrFile::Literal(
-                                                            LiteralType::Hempty,
-                                                        )],
-                                                        true,
-                                                        call.line,
-                                                    );
-                                                }
-                                                TokenType::Read => {
-                                                    let contents = // create a string to hold the contents of the file
-                                                    match read_file(&file) {
-                                                        Ok(contents) => contents,
-                                                        Err(err) => {
-                                                            error(call.line, format!("{err}"));
-                                                        }
-                                                    }; // read the file into the string
-                                                    return LiteralOrFile::Literal(
-                                                        LiteralType::String(contents),
-                                                    ); // return the string
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                        _ => error(
-                                            call.line,
-                                            format!("{} is not a file", ident.name).as_str(),
-                                        ),
-                                    }
-                                }
-                                NewIdentifierType::List(_) => error(
-                                    call.line,
-                                    format!("Variable {} is not a file", ident.name).as_str(),
-                                ),
+                                };
                             }
                         }
-                        other => {
-                            match self.find_pointer_in_stuff(other) {
-                                LiteralOrFile::File(file) => {
-                                    match call.keyword {
-                                        TokenType::Close => {
-                                            self.scope.files.remove(&file);
-                                        }
-                                        TokenType::Read => {
-                                            let contents: String = String::new(); // create a string to hold the contents of the file
-                                            match read_file(&file) {
-                                                Ok(contents) => contents,
-                                                Err(err) => {
-                                                    error(call.line, format!("{err}"));
-                                                }
-                                            }; // read the file into the string
-                                            return LiteralOrFile::Literal(LiteralType::String(
-                                                contents,
-                                            )); // return the string
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                _ => {
+                        LiteralOrFile::Literal(LiteralNode::Hempty)
+                    }
+                    TokenType::Write => {
+                        //takes 3 arguments:
+                        // 1. the file
+                        // 2. the string to write
+                        // 3. the mode (a: append or w: overwrite)
+                        arg_error(
+                            3,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        // get the file
+                        let file = self
+                            .find_pointer_in_stuff(&call.arguments[0])
+                            .get_file(start_line, &call.keyword);
+                        // get the string
+                        let string = self
+                            .find_pointer_in_stuff(&call.arguments[1])
+                            .get_string(start_line, &call.keyword);
+                        // get the mode
+                        let mode = self
+                            .find_pointer_in_stuff(&call.arguments[2])
+                            .get_string(start_line, &call.keyword);
+                        // write the string to the file
+                        match write_file(&file, &string, &mode) {
+                            Ok(_) => LiteralOrFile::Literal(LiteralNode::Hempty),
+                            Err(err) => {
+                                error(start_line, format!("{err}").as_str());
+                            }
+                        }
+                    }
+                    TokenType::ReadLine => {
+                        // takes 2 arguments: file, line
+                        arg_error(
+                            2,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        // get the file
+                        let file = self
+                            .find_pointer_in_stuff(&call.arguments[0])
+                            .get_file(start_line, &call.keyword);
+                        // get the line
+                        let line = self
+                            .find_pointer_in_stuff(&call.arguments[1])
+                            .get_number(start_line, &call.keyword);
+                        // read the the file
+                        match read_file(&file) {
+                            Ok(contents) => {
+                                let lines = contents.split('\n').collect::<Vec<&str>>();
+                                if line as usize > lines.len() {
                                     error(
-                                        call.line,
+                                        start_line,
+                                        format!("Line {line} does not exist in file {file}"),
+                                    );
+                                }
+                                LiteralOrFile::Literal(LiteralNode::String(
+                                    lines[line as usize - 1].to_string(),
+                                ))
+                            }
+                            Err(err) => {
+                                error(start_line, format!("{err}").as_str());
+                            }
+                        }
+                    }
+                    TokenType::WriteLine => {
+                        // takes 4 arguments: file, line, string and mode (a: append to beging of line or w: overwrite)
+                        arg_error(
+                            4,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        // get the file
+                        let file = self
+                            .find_pointer_in_stuff(&call.arguments[0])
+                            .get_file(start_line, &call.keyword);
+                        // get the string
+                        let mut string = self
+                            .find_pointer_in_stuff(&call.arguments[1])
+                            .get_string(start_line, &call.keyword);
+                        // get the line
+                        let line = self
+                            .find_pointer_in_stuff(&call.arguments[2])
+                            .get_number(start_line, &call.keyword);
+                        // get the mode
+                        let mode = self
+                            .find_pointer_in_stuff(&call.arguments[3])
+                            .get_string(start_line, &call.keyword);
+                        // read the file
+                        let mut contents = match read_file(&file) {
+                            Ok(contents) => contents,
+                            Err(err) => {
+                                error(start_line, format!("{err}").as_str());
+                            }
+                        };
+                        // split the contents into lines
+                        let mut lines = contents.split('\n').collect::<Vec<&str>>();
+                        // if the line is greater than the number of lines, add a new line
+                        if line as usize > lines.len() {
+                            error(start_line, "Line does not exist in file");
+                        }
+                        string = match mode.as_str() {
+                            "a" => {
+                                format!("{string}{}", lines[line as usize - 1],)
+                            }
+                            "w" => string,
+                            _ => {
+                                error(
+                                    start_line,
+                                    format!("Mode {mode} is not a valid mode").as_str(),
+                                );
+                            }
+                        };
+                        lines[line as usize - 1] = string.as_str();
+                        // collect all lines
+                        contents = lines.join("\n");
+                        // write the file
+                        match write_file(&file, &contents, "w") {
+                            Ok(_) => LiteralOrFile::Literal(LiteralNode::Hempty),
+                            Err(err) => {
+                                error(start_line, format!("{err}").as_str());
+                            }
+                        }
+                    }
+                    TokenType::DeleteFile | TokenType::CreateFile => {
+                        // takes 1 argument: file
+                        arg_error(
+                            1,
+                            call.arguments.len() as u32,
+                            &call.keyword,
+                            false,
+                            start_line,
+                        );
+                        // get the file
+                        let file = self
+                            .find_pointer_in_stuff(&call.arguments[0])
+                            .get_file(start_line, &call.keyword);
+                        // match delete or create file
+                        match call.keyword {
+                            TokenType::DeleteFile => match fs::remove_file(&file) {
+                                Ok(_) => LiteralOrFile::Literal(LiteralNode::Hempty),
+                                Err(err) => {
+                                    error(start_line, format!("{err}").as_str());
+                                }
+                            },
+                            TokenType::CreateFile => {
+                                // create the file
+                                match OpenOptions::new().create(true).open(&file) {
+                                    Ok(_) => LiteralOrFile::File(file),
+                                    Err(err) => {
+                                        error(start_line, format!("{err}").as_str());
+                                    }
+                                }
+                            }
+                            _ => LiteralOrFile::Literal(LiteralNode::Hempty),
+                        }
+                    }
+                    t => {
+                        let mut new_stuff: Vec<LiteralNode> = Vec::new();
+                        call.arguments.iter().for_each(|thing| {
+                            match self.find_pointer_in_stuff(thing) {
+                                LiteralOrFile::Literal(literal) => {
+                                    new_stuff.push(literal);
+                                }
+                                LiteralOrFile::File(_) => {
+                                    error(
+                                        start_line,
                                         format!(
-                                            "First argument of {} must be a file",
+                                            "Cannot use file as argument for function {}",
                                             call.keyword
                                         )
                                         .as_str(),
                                     );
                                 }
-                            };
-                        }
-                    }
-                    LiteralOrFile::Literal(LiteralType::Hempty)
-                }
-                TokenType::Write => {
-                    //takes 3 arguments:
-                    // 1. the file
-                    // 2. the string to write
-                    // 3. the mode (a: append or w: overwrite)
-                    arg_error(
-                        3,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    // get the file
-                    let file = self
-                        .find_pointer_in_stuff(&call.arguments[0])
-                        .get_file(call.line, &call.keyword);
-                    // get the string
-                    let string = self
-                        .find_pointer_in_stuff(&call.arguments[1])
-                        .get_string(call.line, &call.keyword);
-                    // get the mode
-                    let mode = self
-                        .find_pointer_in_stuff(&call.arguments[2])
-                        .get_string(call.line, &call.keyword);
-                    // write the string to the file
-                    match write_file(&file, &string, &mode) {
-                        Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
-                        Err(err) => {
-                            error(call.line, format!("{err}").as_str());
-                        }
-                    }
-                }
-                TokenType::ReadLine => {
-                    // takes 2 arguments: file, line
-                    arg_error(
-                        2,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    // get the file
-                    let file = self
-                        .find_pointer_in_stuff(&call.arguments[0])
-                        .get_file(call.line, &call.keyword);
-                    // get the line
-                    let line = self
-                        .find_pointer_in_stuff(&call.arguments[1])
-                        .get_number(call.line, &call.keyword);
-                    // read the the file
-                    match read_file(&file) {
-                        Ok(contents) => {
-                            let lines = contents.split('\n').collect::<Vec<&str>>();
-                            if line as usize > lines.len() {
-                                error(
-                                    call.line,
-                                    format!("Line {line} does not exist in file {file}"),
-                                );
                             }
-                            LiteralOrFile::Literal(LiteralType::String(
-                                lines[line as usize - 1].to_string(),
-                            ))
-                        }
-                        Err(err) => {
-                            error(call.line, format!("{err}").as_str());
-                        }
+                        });
+                        LiteralOrFile::Literal(t.r#do(&new_stuff, start_line))
                     }
                 }
-                TokenType::WriteLine => {
-                    // takes 4 arguments: file, line, string and mode (a: append to beging of line or w: overwrite)
-                    arg_error(
-                        4,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    // get the file
-                    let file = self
-                        .find_pointer_in_stuff(&call.arguments[0])
-                        .get_file(call.line, &call.keyword);
-                    // get the string
-                    let mut string = self
-                        .find_pointer_in_stuff(&call.arguments[1])
-                        .get_string(call.line, &call.keyword);
-                    // get the line
-                    let line = self
-                        .find_pointer_in_stuff(&call.arguments[2])
-                        .get_number(call.line, &call.keyword);
-                    // get the mode
-                    let mode = self
-                        .find_pointer_in_stuff(&call.arguments[3])
-                        .get_string(call.line, &call.keyword);
-                    // read the file
-                    let mut contents = match read_file(&file) {
-                        Ok(contents) => contents,
-                        Err(err) => {
-                            error(call.line, format!("{err}").as_str());
-                        }
-                    };
-                    // split the contents into lines
-                    let mut lines = contents.split('\n').collect::<Vec<&str>>();
-                    // if the line is greater than the number of lines, add a new line
-                    if line as usize > lines.len() {
-                        error(call.line, "Line does not exist in file");
-                    }
-                    string = match mode.as_str() {
-                        "a" => {
-                            format!("{string}{}", lines[line as usize - 1],)
-                        }
-                        "w" => string,
-                        _ => {
-                            error(
-                                call.line,
-                                format!("Mode {mode} is not a valid mode").as_str(),
-                            );
-                        }
-                    };
-                    lines[line as usize - 1] = string.as_str();
-                    // collect all lines
-                    contents = lines.join("\n");
-                    // write the file
-                    match write_file(&file, &contents, "w") {
-                        Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
-                        Err(err) => {
-                            error(call.line, format!("{err}").as_str());
-                        }
-                    }
-                }
-                TokenType::DeleteFile | TokenType::CreateFile => {
-                    // takes 1 argument: file
-                    arg_error(
-                        1,
-                        call.arguments.len() as u32,
-                        &call.keyword,
-                        false,
-                        call.line,
-                    );
-                    // get the file
-                    let file = self
-                        .find_pointer_in_stuff(&call.arguments[0])
-                        .get_file(call.line, &call.keyword);
-                    // match delete or create file
-                    match call.keyword {
-                        TokenType::DeleteFile => match fs::remove_file(&file) {
-                            Ok(_) => LiteralOrFile::Literal(LiteralType::Hempty),
-                            Err(err) => {
-                                error(call.line, format!("{err}").as_str());
-                            }
-                        },
-                        TokenType::CreateFile => {
-                            // create the file
-                            match OpenOptions::new().create(true).open(&file) {
-                                Ok(_) => LiteralOrFile::File(file),
-                                Err(err) => {
-                                    error(call.line, format!("{err}").as_str());
-                                }
-                            }
-                        }
-                        _ => LiteralOrFile::Literal(LiteralType::Hempty),
-                    }
-                }
-                t => {
-                    let mut new_stuff: Vec<LiteralType> = Vec::new();
-                    call.arguments.iter().for_each(|thing| {
-                        match self.find_pointer_in_stuff(thing) {
-                            LiteralOrFile::Literal(literal) => {
-                                new_stuff.push(literal);
-                            }
-                            LiteralOrFile::File(_) => {
-                                error(
-                                    call.line,
-                                    format!(
-                                        "Cannot use file as argument for function {}",
-                                        call.keyword
-                                    )
-                                    .as_str(),
-                                );
-                            }
-                        }
-                    });
-                    LiteralOrFile::Literal(t.r#do(&new_stuff, call.line))
-                }
-            },
-            Stuff::Literal(lit) => LiteralOrFile::Literal(lit.literal.clone()),
-            Stuff::Block(block) => {
-                let mut block = block.clone();
-                block.body = self.find_imports(block.body);
-                block.body = self.find_functions(block.body);
-                self.eval_expression(block.body);
-                LiteralOrFile::Literal(LiteralType::Hempty)
             }
+            Ast::Literal(lit) => LiteralOrFile::Literal(lit.node.clone()),
+            Ast::Block(block) => {
+                let block = block.clone();
+                self.eval_scope(block.node.0);
+                LiteralOrFile::Literal(LiteralNode::Hempty)
+            }
+            Ast::Function(_) => todo!(),
+            Ast::If(_) => todo!(),
+            Ast::Loop(_) => todo!(),
+            Ast::Break(_) => todo!(),
+            Ast::Continue(_) => todo!(),
+            Ast::Return(_) => todo!(),
+            Ast::Declaration(_) => todo!(),
         }
     }
 }
