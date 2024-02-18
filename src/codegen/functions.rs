@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue, PointerValue};
 
-use crate::{ast::UMPL2Expr, interior_mut::RC};
+use crate::{ast::UMPL2Expr, interior_mut::RC, pc::unit};
 
 use super::{Compiler, EvalType, TyprIndex};
 
@@ -150,8 +150,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) {
         let current_node = self
             .builder
-            .build_alloca(self.types.generic_pointer, "arg pointer");
-        self.builder.build_store(current_node, root);
+            .build_alloca(self.types.generic_pointer, "arg pointer")
+            .unwrap();
+        self.builder.build_store(current_node, root).unwrap();
         // let arg_cound = self.context.i64_type().const_zero();
 
         let (n, var) = match &exprs[0] {
@@ -178,38 +179,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .context
             .append_basic_block(self.fn_value.unwrap(), "normal");
         let arrity_mismatch = match var.to_string().as_str() {
-            "+" => self.builder.build_int_compare(
-                inkwell::IntPredicate::UGE,
-                argc,
-                self.context
-                    .i64_type()
-                    .const_int(n.trunc() as u64 + 1, false),
-                "",
-            ),
+            "+" => self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::UGE,
+                    argc,
+                    self.context
+                        .i64_type()
+                        .const_int(n.trunc() as u64 + 1, false),
+                    "",
+                )
+                .unwrap(),
 
-            "*" => self.builder.build_int_compare(
-                inkwell::IntPredicate::UGE,
-                argc,
-                self.context.i64_type().const_int(n.trunc() as u64, false),
-                "",
-            ),
+            "*" => self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::UGE,
+                    argc,
+                    self.context.i64_type().const_int(n.trunc() as u64, false),
+                    "",
+                )
+                .unwrap(),
 
-            _ => self.builder.build_int_compare(
-                inkwell::IntPredicate::EQ,
-                argc,
-                self.context.i64_type().const_int(n.trunc() as u64, false),
-                "",
-            ),
+            _ => self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    argc,
+                    self.context.i64_type().const_int(n.trunc() as u64, false),
+                    "",
+                )
+                .unwrap(),
         };
         self.builder
-            .build_conditional_branch(arrity_mismatch, normal, arg_err);
+            .build_conditional_branch(arrity_mismatch, normal, arg_err)
+            .unwrap();
         self.builder.position_at_end(arg_err);
         self.exit("arrity mismatch", 2);
         self.builder.position_at_end(normal);
         for i in 0..(n.floor() as u32) {
-            let arg_load =
-                self.builder
-                    .build_load(self.types.generic_pointer, current_node, "arg_load");
+            let arg_load = self
+                .builder
+                .build_load(self.types.generic_pointer, current_node, "arg_load")
+                .unwrap();
             let arg_object = self
                 .builder
                 .build_struct_gep(
@@ -230,23 +242,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     "next arg",
                 )
                 .unwrap();
-            let next_arg =
-                self.builder
-                    .build_load(self.types.generic_pointer, next_arg, "load next arg");
-            self.builder.build_store(current_node, next_arg);
+            let next_arg = self
+                .builder
+                .build_load(self.types.generic_pointer, next_arg, "load next arg")
+                .unwrap();
+            self.builder.build_store(current_node, next_arg).unwrap();
             // TODO: get var args
         }
         // means there is a variable amount of arguments
         if !var.is_empty() {
-            let argleft = self.builder.build_int_sub(
-                argc,
-                self.context.i64_type().const_int(n.trunc() as u64, false),
-                "args left",
-            );
+            let argleft = self
+                .builder
+                .build_int_sub(
+                    argc,
+                    self.context.i64_type().const_int(n.trunc() as u64, false),
+                    "args left",
+                )
+                .unwrap();
 
-            let cur_load =
-                self.builder
-                    .build_load(self.types.generic_pointer, current_node, "load");
+            let cur_load = self
+                .builder
+                .build_load(self.types.generic_pointer, current_node, "load")
+                .unwrap();
             self.insert_variable_new_ptr(
                 &n.trunc().to_string().into(),
                 self.builder
@@ -255,6 +272,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         &[cur_load.into(), argleft.into()],
                         "variadic arg procces",
                     )
+                    .unwrap()
                     .try_as_basic_value()
                     .unwrap_left(),
             )
@@ -305,16 +323,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let cont_bb = self
             .context
             .append_basic_block(fn_value, "normal evaluation");
-        let is_jmp = self.builder.build_int_compare(
-            inkwell::IntPredicate::NE,
-            jmp_block,
-            self.types.generic_pointer.const_null(),
-            "is null",
-        );
+        let is_jmp = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::NE,
+                jmp_block,
+                self.types.generic_pointer.const_null(),
+                "is null",
+            )
+            .unwrap();
         self.builder
-            .build_conditional_branch(is_jmp, jump_bb, cont_bb);
+            .build_conditional_branch(is_jmp, jump_bb, cont_bb)
+            .unwrap();
         self.builder.position_at_end(jump_bb);
-        self.builder.build_indirect_branch(jmp_block, &[]);
+        self.builder.build_indirect_branch(jmp_block, &[]).unwrap();
         self.builder.position_at_end(cont_bb);
         let ac = self
             .builder
@@ -328,6 +350,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 fn_value.get_first_param().unwrap().into_pointer_value(),
                 "load env",
             )
+            .unwrap()
             .into_struct_value();
         self.new_env();
         for i in 0..env.0.count_fields() {
@@ -339,7 +362,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .builder
                 .build_extract_value(envs, i, "load captured")
                 .unwrap();
-            self.builder.build_store(alloca, arg);
+            self.builder.build_store(alloca, arg).unwrap();
             self.insert_new_variable(cn.clone(), alloca).unwrap();
         }
         let args = fn_value.get_nth_param(2).unwrap().into_pointer_value();
@@ -350,7 +373,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let compile_scope = self.compile_scope(&exprs[1..]);
         self.state.pop();
         if let Some(ret) = compile_scope? {
-            self.builder.build_return(Some(&ret));
+            self.builder.build_return(Some(&ret)).unwrap();
         }
 
         // reset to previous state (before function) needed for functions in functions
@@ -381,9 +404,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let op = if let UMPL2Expr::Ident(ident) = &application[0] {
             if let Some(var) = self.get_variable(ident) {
                 match var {
-                    super::env::VarType::Lisp(val) => {
-                        self.builder.build_load(self.types.object, val, ident)
-                    }
+                    super::env::VarType::Lisp(val) => self
+                        .builder
+                        .build_load(self.types.object, val, ident)
+                        .unwrap(),
                     super::env::VarType::SpecialForm(sf) => {
                         return sf(self, &application[1..]);
                     }
@@ -419,24 +443,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .skip(1)
                 .rev()
                 .try_fold(null, |init, current| {
-                    let ptr = self.builder.build_alloca(self.types.args, "add arg");
-                    self.builder.build_store(ptr, self.const_thunk(current)?);
+                    let ptr = self
+                        .builder
+                        .build_alloca(self.types.args, "add arg")
+                        .unwrap();
+                    self.builder
+                        .build_store(ptr, self.const_thunk(current)?)
+                        .unwrap();
                     let next = self
                         .builder
                         .build_struct_gep(self.types.args, ptr, 1, "next arg")
                         .unwrap();
-                    self.builder.build_store(next, init);
+                    self.builder.build_store(next, init).unwrap();
                     Some(ptr)
                 }));
         let fn_ty = self.extract_type(val).unwrap();
-        let is_primitive = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            fn_ty.into_int_value(),
-            self.types.ty.const_int(TyprIndex::primitive as u64, false),
-            "application::fntype::cmp",
-        );
+        let is_primitive = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                fn_ty.into_int_value(),
+                self.types.ty.const_int(TyprIndex::primitive as u64, false),
+                "application::fntype::cmp",
+            )
+            .unwrap();
         self.builder
-            .build_conditional_branch(is_primitive, primitve_bb, lambda_bb);
+            .build_conditional_branch(is_primitive, primitve_bb, lambda_bb)
+            .unwrap();
         self.builder.position_at_end(primitve_bb);
         let op = self.extract_primitve(val).unwrap().into_pointer_value();
         let unwrap_left_prim = self
@@ -447,10 +480,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[call_info.into(), args.into()],
                 "application:call",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left();
         let primitve_bb = self.builder.get_insert_block().unwrap();
-        self.builder.build_unconditional_branch(cont_bb);
+        self.builder.build_unconditional_branch(cont_bb).unwrap();
         self.builder.position_at_end(lambda_bb);
         let op = self.extract_labmda(val).unwrap();
         let function_pointer = self
@@ -474,14 +508,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[env_pointer.into(), call_info.into(), args.into()],
                 "application:call",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left();
         let lambda_bb = self.builder.get_insert_block().unwrap();
-        self.builder.build_unconditional_branch(cont_bb);
+        self.builder.build_unconditional_branch(cont_bb).unwrap();
         self.builder.position_at_end(cont_bb);
         let cont = self
             .builder
-            .build_phi(self.types.object, "application::done");
+            .build_phi(self.types.object, "application::done")
+            .unwrap();
         cont.add_incoming(&[(&unwrap_left, lambda_bb), (&unwrap_left_prim, primitve_bb)]);
         Ok(Some(cont.as_basic_value()))
     }
@@ -507,20 +543,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[
                 self.builder
                     .build_global_string_ptr("\ncall:  (sub) tree size: %d\n", "p-format")
+                    .unwrap()
                     .as_pointer_value()
                     .into(),
                 size.into(),
             ],
             "print pointer",
         );
-        let done_subtree = self.builder.build_int_compare(
-            inkwell::IntPredicate::SLT,
-            size,
-            self.context.i64_type().const_int(1, false),
-            "early exit?",
-        );
+        let done_subtree = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::SLT,
+                size,
+                self.context.i64_type().const_int(1, false),
+                "early exit?",
+            )
+            .unwrap();
         self.builder
-            .build_conditional_branch(done_subtree, early_exit, normal);
+            .build_conditional_branch(done_subtree, early_exit, normal)
+            .unwrap();
 
         // early exit
         self.builder.position_at_end(early_exit);
@@ -533,19 +574,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_insert_value(return_struct, var_args, 1, "return struct - next")
             .unwrap();
-        self.builder.build_return(Some(&return_struct));
+        self.builder.build_return(Some(&return_struct)).unwrap();
 
         // normal
         self.builder.position_at_end(normal);
-        let mid = self.builder.build_int_signed_div(
-            size,
-            self.context.i64_type().const_int(2, false),
-            "mid",
-        );
+        let mid = self
+            .builder
+            .build_int_signed_div(size, self.context.i64_type().const_int(2, false), "mid")
+            .unwrap();
 
         let left_struct = self
             .builder
             .build_call(function, &[var_args.into(), mid.into()], "handle left")
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left()
             .into_struct_value();
@@ -562,6 +603,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let data = self
             .builder
             .build_load(self.types.object, next, "this data")
+            .unwrap()
             .into_struct_value();
         let next = self
             .builder
@@ -571,6 +613,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let next = self
             .builder
             .build_load(self.types.generic_pointer, next, "next")
+            .unwrap()
             .into_pointer_value();
         let right_struct = self
             .builder
@@ -580,14 +623,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     next.into(),
                     self.builder
                         .build_int_sub(
-                            self.builder.build_int_sub(size, mid, "right size"),
+                            self.builder.build_int_sub(size, mid, "right size").unwrap(),
                             self.context.i64_type().const_int(1, false),
                             "right size",
                         )
+                        .unwrap()
                         .into(),
                 ],
                 "handle right",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left()
             .into_struct_value();
@@ -615,7 +660,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_insert_value(return_struct, next, 1, "return struct - next")
             .unwrap();
-        self.builder.build_return(Some(&return_struct));
+        self.builder.build_return(Some(&return_struct)).unwrap();
 
         function.verify(true);
         self.fpm.run_on(&function);

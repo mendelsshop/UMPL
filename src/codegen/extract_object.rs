@@ -17,14 +17,18 @@ macro_rules! make_extract {
                 .append_basic_block(current_fn, &prefix("error"));
 
             let ty = self.extract_type(val).unwrap().into_int_value();
-            let condition = self.builder.build_int_compare(
-                inkwell::IntPredicate::EQ,
-                ty,
-                self.types.ty.const_int(TyprIndex::$type as u64, false),
-                &prefix("cmp-type"),
-            );
+            let condition = self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    ty,
+                    self.types.ty.const_int(TyprIndex::$type as u64, false),
+                    &prefix("cmp-type"),
+                )
+                .unwrap();
             self.builder
-                .build_conditional_branch(condition, ret_block, error_block);
+                .build_conditional_branch(condition, ret_block, error_block)
+                .unwrap();
             self.builder.position_at_end(error_block);
             self.print_type(val);
             self.exit(&format!(" does not work as {}\n", $name), 1);
@@ -32,7 +36,7 @@ macro_rules! make_extract {
             self.builder.position_at_end(ret_block);
             self.builder
                 .build_extract_value(val, TyprIndex::$type as u32 + 1, &prefix("return"))
-                .ok_or("could not extract value".to_string())
+                .map_err(|_| "could not extract value".to_string())
         }
     };
 }
@@ -53,13 +57,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.extract_cons_inner(val).map(|pointer| {
             self.builder
                 .build_load(self.types.cons, pointer.into_pointer_value(), "loadcons")
+                .unwrap()
         })
     }
     pub(super) fn extract_type(
         &self,
         cond_struct: StructValue<'ctx>,
     ) -> Option<BasicValueEnum<'ctx>> {
-        self.builder.build_extract_value(cond_struct, 0, "get_type")
+        self.builder
+            .build_extract_value(cond_struct, 0, "get_type")
+            .ok()
     }
 
     pub(crate) fn print_type(&self, object: StructValue<'ctx>) {
@@ -68,20 +75,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let type_as_str = |index, name| {
             (
-                self.builder.build_int_compare(
-                    inkwell::IntPredicate::EQ,
-                    type_index,
-                    self.types.ty.const_int(index as u64, false),
-                    "",
-                ),
+                self.builder
+                    .build_int_compare(
+                        inkwell::IntPredicate::EQ,
+                        type_index,
+                        self.types.ty.const_int(index as u64, false),
+                        "",
+                    )
+                    .unwrap(),
                 self.builder
                     .build_global_string_ptr(name, name)
+                    .unwrap()
                     .as_basic_value_enum(),
             )
         };
         let type_name = self.build_n_select(
             self.builder
                 .build_global_string_ptr("type not recognized", "")
+                .unwrap()
                 .as_basic_value_enum(),
             &[
                 type_as_str(TyprIndex::boolean, "boolean"),
@@ -95,6 +106,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ],
         );
         self.builder
-            .build_call(print_fn, &[type_name.into()], "print type");
+            .build_call(print_fn, &[type_name.into()], "print type")
+            .unwrap();
     }
 }

@@ -1,0 +1,9 @@
+globals must be initilized!!!
+allocas should be in a functions entry block
+prefer inserting instead of const struct unless you are sure you are only using constants
+when doing conditnals and phis alway get the latest place the builder is at for case or else the phi will be messed up
+
+
+inkwell specific
+all builder instructions return results now but most of them are only for when the builder positio isn't set in which case i just unwrap here is the list of the function
+build_store, build_alloca, build_load, build_call, build_int_compare, build_unreachable, build_int_signed_rem, build_indirect_call, build_and, build_or, build_int_cast, build_select, build_int_truncate - todo replace the unwraps on these calls with expects or feature ate them in inkwell

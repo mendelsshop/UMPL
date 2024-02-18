@@ -297,7 +297,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         choices: &[(IntValue<'ctx>, BasicValueEnum<'ctx>)],
     ) -> BasicValueEnum<'ctx> {
         choices.iter().fold(default, |prev, choice| {
-            self.builder.build_select(choice.0, choice.1, prev, "")
+            self.builder
+                .build_select(choice.0, choice.1, prev, "")
+                .unwrap()
         })
     }
 
@@ -321,7 +323,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             |first_instr| self.builder.position_before(&first_instr),
         );
 
-        let build_alloca = self.builder.build_alloca(ty, name);
+        let build_alloca = self.builder.build_alloca(ty, name).unwrap();
         if let Some(bb) = old_block {
             self.builder.position_at_end(bb);
         }
@@ -422,14 +424,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let done_force = self.context.append_basic_block(current_fn, "done-force");
 
         let ty = self.extract_type(thunked).unwrap().into_int_value();
-        let cond = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            ty,
-            self.types.ty.const_int(TyprIndex::thunk as u64, false),
-            "is thunk",
-        );
+        let cond = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                ty,
+                self.types.ty.const_int(TyprIndex::thunk as u64, false),
+                "is thunk",
+            )
+            .unwrap();
         self.builder
-            .build_conditional_branch(cond, force, done_force);
+            .build_conditional_branch(cond, force, done_force)
+            .unwrap();
         self.builder.position_at_end(force);
         let unthunked = self.extract_thunk(thunked).unwrap().into_struct_value();
         let thunked_fn = self
@@ -448,6 +454,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[unthunked_env.into()],
                 "unthunk",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left()
             .into_struct_value();
@@ -455,7 +462,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let force = self.builder.get_insert_block().unwrap();
         self.builder.position_at_end(done_force);
         // we dont need to reget the block for unthunking because we are only calling a function and nothing elsse that would make another block in between
-        let object = self.builder.build_phi(self.types.object, "value");
+        let object = self.builder.build_phi(self.types.object, "value").unwrap();
         object.add_incoming(&[(&thunked, current_bb), (&unthunked, force)]);
         object.as_basic_value().into_struct_value()
     }
@@ -472,18 +479,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn is_null(&self, pv: PointerValue<'ctx>) -> IntValue<'ctx> {
-        self.builder.build_is_null(pv, "null check")
+        self.builder.build_is_null(pv, "null check").unwrap()
     }
 
-    fn is_hempty(&self, arg: StructValue<'ctx>) -> inkwell::values::IntValue<'ctx> {
+    fn is_hempty(&self, arg: StructValue<'ctx>) -> IntValue<'ctx> {
         let arg_type = self.extract_type(arg).unwrap();
-        let is_hempty = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            arg_type.into_int_value(),
-            self.types.ty.const_int(TyprIndex::hempty as u64, false),
-            "is hempty",
-        );
-        is_hempty
+        self.builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                arg_type.into_int_value(),
+                self.types.ty.const_int(TyprIndex::hempty as u64, false),
+                "is hempty",
+            )
+            .unwrap()
     }
 
     fn init_special_forms(&mut self) {
@@ -543,6 +551,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         ],
                         "main",
                     )
+                    .unwrap()
                     .try_as_basic_value()
                     .unwrap_left(),
             ));
@@ -559,14 +568,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let cont_bb = self
                 .context
                 .append_basic_block(inner_main_fn, "normal evaluation");
-            let is_jmp = self.builder.build_int_compare(
-                inkwell::IntPredicate::NE,
-                jmp_block,
-                self.types.generic_pointer.const_null(),
-                "is null",
-            );
+            let is_jmp = self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    jmp_block,
+                    self.types.generic_pointer.const_null(),
+                    "is null",
+                )
+                .unwrap();
             self.builder
-                .build_conditional_branch(is_jmp, jump_bb, cont_bb);
+                .build_conditional_branch(is_jmp, jump_bb, cont_bb)
+                .unwrap();
             self.builder.position_at_end(jump_bb);
             self.builder.build_indirect_branch(jmp_block, &[]);
             self.builder.position_at_end(cont_bb);
@@ -707,6 +720,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr(reason, "error exit")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print",

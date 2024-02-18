@@ -15,9 +15,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let done_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "done-loop");
-        self.builder.build_unconditional_branch(loop_bb);
+        self.builder.build_unconditional_branch(loop_bb).unwrap();
         self.builder.position_at_end(done_bb);
-        let phi_return = self.builder.build_phi(self.types.object, "loop ret");
+        let phi_return = self
+            .builder
+            .build_phi(self.types.object, "loop ret")
+            .unwrap();
         self.state.push(EvalType::Loop {
             loop_bb,
             done_loop_bb: done_bb,
@@ -27,7 +30,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         for expr in exprs {
             self.compile_expr(expr)?;
         }
-        self.builder.build_unconditional_branch(loop_bb);
+        self.builder.build_unconditional_branch(loop_bb).unwrap();
 
         self.builder.position_at_end(done_bb);
         self.state.pop();
@@ -114,12 +117,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         let val = self.actual_value(expr);
         // initialize trees
-        self.builder.build_store(tree, val);
+        self.builder.build_store(tree, val).unwrap();
 
         self.builder
-            .build_store(helper, self.types.generic_pointer.const_null());
+            .build_store(helper, self.types.generic_pointer.const_null())
+            .unwrap();
 
-        self.builder.build_unconditional_branch(loop_entry_bb);
+        self.builder
+            .build_unconditional_branch(loop_entry_bb)
+            .unwrap();
 
         // loop_entry
         self.builder.position_at_end(loop_entry_bb);
@@ -127,11 +133,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let tree_load = self
             .builder
             .build_load(self.types.object, tree, "load tree")
+            .unwrap()
             .into_struct_value();
         let is_tree_hempty = self.is_hempty(tree_load);
 
         self.builder
-            .build_conditional_branch(is_tree_hempty, loop_swap_bb, loop_process_bb);
+            .build_conditional_branch(is_tree_hempty, loop_swap_bb, loop_process_bb)
+            .unwrap();
 
         // loop_process
         self.builder.position_at_end(loop_process_bb);
@@ -140,6 +148,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let tree_load = self
             .builder
             .build_load(self.types.object, tree, "load tree")
+            .unwrap()
             .into_struct_value();
         let tree_cons = self.extract_cons(tree_load)?;
         let car = self
@@ -149,11 +158,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let is_car_hempty = self.is_hempty(car.into_struct_value());
 
         self.builder
-            .build_conditional_branch(is_car_hempty, loop_bb, loop_save_bb);
+            .build_conditional_branch(is_car_hempty, loop_bb, loop_save_bb)
+            .unwrap();
 
         // loop_done
         self.builder.position_at_end(loop_done_bb);
-        let phi = self.builder.build_phi(self.types.object, "loop value");
+        let phi = self
+            .builder
+            .build_phi(self.types.object, "loop value")
+            .unwrap();
 
         // loop
         self.state.push(EvalType::Loop {
@@ -165,14 +178,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let tree_load: StructValue<'_> = self
             .builder
             .build_load(self.types.object, tree, "load tree")
+            .unwrap()
             .into_struct_value();
         let tree_cons = self.extract_cons(tree_load)?;
         let val = self
             .builder
             .build_extract_value(tree_cons.into_struct_value(), 1, "get current")
             .unwrap();
-        let this = self.builder.build_alloca(self.types.object, "save this");
-        self.builder.build_store(this, val);
+        let this = self
+            .builder
+            .build_alloca(self.types.object, "save this")
+            .unwrap();
+        self.builder.build_store(this, val).unwrap();
 
         self.set_or_new(name, this).unwrap(); // allowed to unwarp b/c error only if theres is no environment -> compiler borked
                                               // code goes here
@@ -187,8 +204,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_extract_value(tree_cons.into_struct_value(), 2, "get next")
             .unwrap();
         // let cgr = self.actual_value(cgr);
-        self.builder.build_store(tree, cgr);
-        self.builder.build_unconditional_branch(loop_entry_bb);
+        self.builder.build_store(tree, cgr).unwrap();
+        self.builder
+            .build_unconditional_branch(loop_entry_bb)
+            .unwrap();
 
         // loop_save
         self.builder.position_at_end(loop_save_bb);
@@ -196,6 +215,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let tree_load: StructValue<'_> = self
             .builder
             .build_load(self.types.object, tree, "load tree")
+            .unwrap()
             .into_struct_value();
         let tree_cons = self
             .builder
@@ -205,25 +225,36 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 1, "cdr")
             .unwrap();
-        let this = self.builder.build_load(self.types.object, this, "load cdr");
+        let this = self
+            .builder
+            .build_load(self.types.object, this, "load cdr")
+            .unwrap();
         let cgr = self
             .builder
             .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 2, "cgr")
             .unwrap();
-        let cgr = self.builder.build_load(self.types.object, cgr, "load cgr");
+        let cgr = self
+            .builder
+            .build_load(self.types.object, cgr, "load cgr")
+            .unwrap();
         let new_cons = self
             .builder
-            .build_alloca(self.types.cons, "new cons in loop");
+            .build_alloca(self.types.cons, "new cons in loop")
+            .unwrap();
         let save = self.const_cons_with_ptr(
             new_cons,
             self.hempty(),
             this.into_struct_value(),
             cgr.into_struct_value(),
         );
-        let helper_load =
-            self.builder
-                .build_load(self.types.generic_pointer, helper, "load helper");
-        let new_helper = self.builder.build_alloca(helper_struct, "new helper");
+        let helper_load = self
+            .builder
+            .build_load(self.types.generic_pointer, helper, "load helper")
+            .unwrap();
+        let new_helper = self
+            .builder
+            .build_alloca(helper_struct, "new helper")
+            .unwrap();
         let new_helper_value = helper_struct.const_zero();
         let new_helper_value = self
             .builder
@@ -235,9 +266,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         // let new_helper_obj = self
         //     .builder
-        //     .build_struct_gep(helper_struct, new_helper, 0, "gep new helper current node")
-        //     .unwrap();
-        // self.builder.build_store(new_helper_obj, save);
+        //     .build_struct_gep(helper_struct, new_helper, 0, "gep new helper current node").unwrap();
+        // self.builder.build_store(new_helper_obj, save).unwrap();
         // let new_helper_prev = self
         //     .builder
         //     .build_struct_gep(
@@ -247,23 +277,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         //         "gep new helper previous helper node",
         //     )
         //     .unwrap();
-        // self.builder.build_store(new_helper_prev, helper_load);
-        self.builder.build_store(new_helper, new_helper_value);
-        self.builder.build_store(helper, new_helper);
+        // self.builder.build_store(new_helper_prev, helper_load).unwrap();
+        self.builder
+            .build_store(new_helper, new_helper_value)
+            .unwrap();
+        self.builder.build_store(helper, new_helper).unwrap();
 
         let car = self
             .builder
             .build_struct_gep(self.types.cons, tree_cons.into_pointer_value(), 0, "cgr")
             .unwrap();
-        let car = self.builder.build_load(self.types.object, car, "load cgr");
-        self.builder.build_store(tree, car);
-        self.builder.build_unconditional_branch(loop_entry_bb);
+        let car = self
+            .builder
+            .build_load(self.types.object, car, "load cgr")
+            .unwrap();
+        self.builder.build_store(tree, car).unwrap();
+        self.builder
+            .build_unconditional_branch(loop_entry_bb)
+            .unwrap();
 
         // loop_swap
         self.builder.position_at_end(loop_swap_bb);
         let helper_load = self
             .builder
             .build_load(self.types.generic_pointer, helper, "load helper")
+            .unwrap()
             .into_pointer_value();
         phi.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.builder.build_conditional_branch(
@@ -275,6 +313,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let helper_load_load = self
             .builder
             .build_load(helper_struct, helper_load, "load load helper")
+            .unwrap()
             .into_struct_value();
         let current = self
             .builder
@@ -284,25 +323,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .builder
             .build_extract_value(helper_load_load, 1, "rest")
             .unwrap();
-        self.builder.build_store(tree, current);
-        self.builder.build_store(helper, rest);
+        self.builder.build_store(tree, current).unwrap();
+        self.builder.build_store(helper, rest).unwrap();
 
         let tree_load = self
             .builder
             .build_load(self.types.object, tree, "load tree")
+            .unwrap()
             .into_struct_value();
         let is_tree_null = self.is_hempty(tree_load);
         let helper_load = self
             .builder
             .build_load(self.types.generic_pointer, helper, "load helper")
+            .unwrap()
             .into_pointer_value();
 
         let is_helper_null = self.is_null(helper_load);
         let are_both_null = self
             .builder
-            .build_and(is_helper_null, is_tree_null, "both is null");
+            .build_and(is_helper_null, is_tree_null, "both is null")
+            .unwrap();
         self.builder
-            .build_conditional_branch(are_both_null, loop_done_bb, loop_entry_bb);
+            .build_conditional_branch(are_both_null, loop_done_bb, loop_entry_bb)
+            .unwrap();
         phi.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.state.pop();
         self.builder.position_at_end(loop_done_bb);
@@ -325,9 +368,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let done_bb = self
             .context
             .append_basic_block(self.fn_value.unwrap(), "done-loop");
-        self.builder.build_unconditional_branch(loop_start_bb);
+        self.builder
+            .build_unconditional_branch(loop_start_bb)
+            .unwrap();
         self.builder.position_at_end(done_bb);
-        let phi_return = self.builder.build_phi(self.types.object, "loop ret");
+        let phi_return = self
+            .builder
+            .build_phi(self.types.object, "loop ret")
+            .unwrap();
         self.state.push(EvalType::Loop {
             done_loop_bb: done_bb,
             connection: phi_return,
@@ -340,14 +388,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let expr = self.actual_value(expr.into_struct_value());
         let cond = self.is_false(expr.into());
         self.builder
-            .build_conditional_branch(cond, done_bb, loop_bb);
+            .build_conditional_branch(cond, done_bb, loop_bb)
+            .unwrap();
         // if we break b/c condition not met the loop return hempty
         phi_return.add_incoming(&[(&self.hempty(), self.builder.get_insert_block().unwrap())]);
         self.builder.position_at_end(loop_bb);
         for expr in &exprs[1..] {
             self.compile_expr(expr)?;
         }
-        self.builder.build_unconditional_branch(loop_start_bb);
+        self.builder
+            .build_unconditional_branch(loop_start_bb)
+            .unwrap();
         self.builder.position_at_end(done_bb);
         self.state.pop();
         Ok(Some(phi_return.as_basic_value()))

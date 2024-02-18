@@ -14,7 +14,7 @@ enum TableAccess {
     Symbol,
 }
 
-macro_rules! buider_object {
+macro_rules! builder_object {
     ($value:ident, $type:ty) => {
         pub fn $value(&self, value: $type) -> StructValue<'ctx> {
             let ty = TyprIndex::$value;
@@ -34,14 +34,14 @@ macro_rules! buider_object {
 
 /// Seperate impl for the [Compiler] for making new objects
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    buider_object!(boolean, IntValue<'ctx>);
-    buider_object!(number, FloatValue<'ctx>);
-    buider_object!(string, PointerValue<'ctx>);
-    buider_object!(primitive, PointerValue<'ctx>);
-    buider_object!(cons, PointerValue<'ctx>);
-    buider_object!(lambda, StructValue<'ctx>);
-    buider_object!(thunk, StructValue<'ctx>);
-    buider_object!(symbol, PointerValue<'ctx>);
+    builder_object!(boolean, IntValue<'ctx>);
+    builder_object!(number, FloatValue<'ctx>);
+    builder_object!(string, PointerValue<'ctx>);
+    builder_object!(primitive, PointerValue<'ctx>);
+    builder_object!(cons, PointerValue<'ctx>);
+    builder_object!(lambda, StructValue<'ctx>);
+    builder_object!(thunk, StructValue<'ctx>);
+    builder_object!(symbol, PointerValue<'ctx>);
     pub fn hempty(&self) -> StructValue<'ctx> {
         let ty = TyprIndex::hempty;
         let obj = self.types.object.const_zero();
@@ -68,20 +68,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let random = self
                     .builder
                     .build_call(self.functions.rand, &[], "random number")
+                    .unwrap()
                     .try_as_basic_value()
                     .unwrap_left();
                 // mod it to be 0 or 1
-                let random_bool = self.builder.build_int_unsigned_rem(
-                    random.into_int_value(),
-                    self.context.i32_type().const_int(2, false),
-                    "get random bool",
-                );
+                let random_bool = self
+                    .builder
+                    .build_int_unsigned_rem(
+                        random.into_int_value(),
+                        self.context.i32_type().const_int(2, false),
+                        "get random bool",
+                    )
+                    .unwrap();
                 // trunc it to bool
-                let random_bool = self.builder.build_int_truncate(
-                    random_bool,
-                    self.types.boolean,
-                    "trunc to bool",
-                );
+                let random_bool = self
+                    .builder
+                    .build_int_truncate(random_bool, self.types.boolean, "trunc to bool")
+                    .unwrap();
                 self.boolean(random_bool)
             }
         }
@@ -103,12 +106,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .extract_type(object.into_struct_value())
             .unwrap()
             .into_int_value();
-        let is_bool = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            object_type,
-            self.types.ty.const_int(TyprIndex::boolean as u64, false),
-            "boolean?",
-        );
+        let is_bool = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                object_type,
+                self.types.ty.const_int(TyprIndex::boolean as u64, false),
+                "boolean?",
+            )
+            .unwrap();
         let bool_val = self
             .builder
             .build_extract_value(
@@ -118,14 +124,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             )
             .unwrap()
             .into_int_value();
-        let is_false = self.builder.build_int_compare(
-            inkwell::IntPredicate::EQ,
-            bool_val,
-            self.types.boolean.const_zero(),
-            "false?",
-        );
+        let is_false = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                bool_val,
+                self.types.boolean.const_zero(),
+                "false?",
+            )
+            .unwrap();
         self.builder
             .build_and(is_bool, is_false, "is boolean and false?")
+            .unwrap()
     }
 
     fn make_string(
@@ -139,6 +149,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             || {
                 self.builder
                     .build_global_string_ptr(value, value)
+                    .unwrap()
                     .as_pointer_value()
             },
             |acces| {
@@ -150,7 +161,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if let Some(str) = string_map.get(value) {
                     str.as_pointer_value()
                 } else {
-                    let str = self.builder.build_global_string_ptr(value, value);
+                    let str = self.builder.build_global_string_ptr(value, value).unwrap();
                     string_map.insert(value.clone(), str);
                     str.as_pointer_value()
                 }
@@ -175,6 +186,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 thunk.get_first_param().unwrap().into_pointer_value(),
                 "load env",
             )
+            .unwrap()
             .into_struct_value();
         self.new_env();
         for i in 0..env.0.count_fields() {
@@ -187,14 +199,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .builder
                 .build_extract_value(envs, i, "load captured")
                 .unwrap();
-            self.builder.build_store(alloca, arg);
+            self.builder.build_store(alloca, arg).unwrap();
             self.insert_new_variable(cn.clone(), alloca).unwrap(); // allowed to unwrap b/c we create new scope and copy variables from old scope to here so if old scope correct -> new scope correct
         }
         let ret = self.compile_expr(object);
         match ret {
             Ok(v) => {
                 let v = self.actual_value(v?.into_struct_value());
-                self.builder.build_return(Some(&v));
+                self.builder.build_return(Some(&v)).unwrap();
             }
             Err(e) => self.exit(&e, 2),
         };
@@ -233,11 +245,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> StructValue<'ctx> {
         // TODO: try to not use globals
         // let left_ptr = create_entry_block_alloca(types.object, "cdr").unwrap();
-        // builder.build_store(left_ptr, left_tree);
+        // builder.build_store(left_ptr, left_tree).unwrap();
         // let this_ptr = create_entry_block_alloca(types.object, "car").unwrap();
-        // builder.build_store(this_ptr, this);
+        // builder.build_store(this_ptr, this).unwrap();
         // let right_ptr = create_entry_block_alloca(types.object, "cgr").unwrap();
-        // builder.build_store(right_ptr, right_tree);
+        // builder.build_store(right_ptr, right_tree).unwrap();
         let tree_type = self.types.cons.const_zero();
         let tree_type = self
             .builder
@@ -256,7 +268,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let tree_ptr = self
             .create_entry_block_alloca(tree_type.into_struct_value().get_type(), "cons")
             .unwrap();
-        self.builder.build_store(tree_ptr, tree_type);
+        self.builder.build_store(tree_ptr, tree_type).unwrap();
         self.cons(tree_ptr)
     }
 
@@ -269,11 +281,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> StructValue<'ctx> {
         // TODO: try to not use globals
         // let left_ptr = create_entry_block_alloca(types.object, "cdr").unwrap();
-        // builder.build_store(left_ptr, left_tree);
+        // builder.build_store(left_ptr, left_tree).unwrap();
         // let this_ptr = create_entry_block_alloca(types.object, "car").unwrap();
-        // builder.build_store(this_ptr, this);
+        // builder.build_store(this_ptr, this).unwrap();
         // let right_ptr = create_entry_block_alloca(types.object, "cgr").unwrap();
-        // builder.build_store(right_ptr, right_tree);
+        // builder.build_store(right_ptr, right_tree).unwrap();
         let tree_type = self.types.cons.const_zero();
         let tree_type = self
             .builder
@@ -289,7 +301,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
         // let tree_ptr = self.module.add_global(tree_type.get_type(), None, "cons");
         // tree_ptr.set_initializer(&self.types.cons.const_zero());
-        self.builder.build_store(pv, tree_type);
+        self.builder.build_store(pv, tree_type).unwrap();
         self.cons(pv)
     }
 

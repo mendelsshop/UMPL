@@ -58,17 +58,21 @@ macro_rules! extract {
                 .append_basic_block(current_fn, &prefix("return"));
 
             let ty = self.extract_type(val).unwrap().into_int_value();
-            let condition = self.builder.build_int_compare(
-                inkwell::IntPredicate::EQ,
-                ty,
-                self.context
-                    .i32_type()
-                    .const_int(TypeIndex::$type as u64, false),
-                &prefix("cmp-type"),
-            );
+            let condition = self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    ty,
+                    self.context
+                        .i32_type()
+                        .const_int(TypeIndex::$type as u64, false),
+                    &prefix("cmp-type"),
+                )
+                .unwrap();
             self.set_error(&format!("type mismtatch expected {}\n", $name), 1);
             self.builder
-                .build_conditional_branch(condition, ret_block, self.error_block);
+                .build_conditional_branch(condition, ret_block, self.error_block)
+                .unwrap();
 
             self.builder.position_at_end(ret_block);
             self.$unchecked(val)
@@ -79,11 +83,14 @@ macro_rules! extract {
                 .builder
                 .build_extract_value(val, 1, &prefix("return"))
                 .unwrap();
-            (self.builder.build_load(
-                self.types.types.get(TypeIndex::$type),
-                pointer.into_pointer_value(),
-                &prefix(""),
-            ))
+            (self
+                .builder
+                .build_load(
+                    self.types.types.get(TypeIndex::$type),
+                    pointer.into_pointer_value(),
+                    &prefix(""),
+                )
+                .unwrap())
         }
     };
 }
@@ -118,7 +125,7 @@ fixed_map!(TypeMap, BasicTypeEnum<'ctx>,TypeIndex {empty bool number string symb
 
 fixed_map!(#[allow(non_snake_case)]RegiMap, PointerValue<'ctx>,Register {Env Argl Val Proc Continue Thunk}
     fn new(builder: &Builder<'ctx>, ty: StructType<'ctx>) -> Self {
-        let create_register = |name| builder.build_alloca(ty, name);
+        let create_register = |name| builder.build_alloca(ty, name).unwrap();
         Self {
             Env: create_register("env"),
             Argl: create_register("argl"),
@@ -239,14 +246,16 @@ macro_rules! is_type {
         #[allow(dead_code)]
         fn $name(&self, obj: StructValue<'ctx>) -> IntValue<'ctx> {
             let arg_type = self.extract_type(obj).unwrap();
-            self.builder.build_int_compare(
-                inkwell::IntPredicate::EQ,
-                arg_type.into_int_value(),
-                self.context
-                    .i32_type()
-                    .const_int(TypeIndex::$typeindex as u64, false),
-                "is hempty",
-            )
+            self.builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    arg_type.into_int_value(),
+                    self.context
+                        .i32_type()
+                        .const_int(TypeIndex::$typeindex as u64, false),
+                    "is hempty",
+                )
+                .unwrap()
         }
     };
 }
@@ -268,7 +277,9 @@ pub struct CodeGen<'a, 'ctx> {
 
 impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn extract_type(&self, cond_struct: StructValue<'ctx>) -> Option<BasicValueEnum<'ctx>> {
-        self.builder.build_extract_value(cond_struct, 0, "get_type")
+        self.builder
+            .build_extract_value(cond_struct, 0, "get_type")
+            .ok()
     }
     is_type!(is_hempty, "hempty", empty);
     is_type!(is_number, "number", number);
@@ -352,15 +363,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     &[types.pointer.const_null().into()],
                     "get time to further randomize rng",
                 )
+                .unwrap()
                 .try_as_basic_value()
                 .unwrap_left();
-            builder.build_call(functions.srand, &[time.into()], "set rng seed");
+            builder
+                .build_call(functions.srand, &[time.into()], "set rng seed")
+                .unwrap();
         }
         let registers = RegiMap::new(builder, object);
         let mut this = Self {
-            stack: builder.build_alloca(stack, "stack"),
+            stack: builder.build_alloca(stack, "stack").unwrap(),
             context,
-            flag: builder.build_alloca(types.object, "flag"),
+            flag: builder.build_alloca(types.object, "flag").unwrap(),
             current: main,
             builder,
             module,
@@ -391,7 +405,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         let block = this.context.append_basic_block(this.current, &namer(name));
                         this.builder.position_at_end(block);
                         code(this, block, exp);
-                        this.builder.build_return(None);
+                        this.builder.build_return(None).unwrap();
                         block
                     };
 
@@ -403,19 +417,20 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     let true_str = this
                         .builder
                         .build_global_string_ptr("true", "true")
+                        .unwrap()
                         .as_pointer_value();
                     let false_str = this
                         .builder
                         .build_global_string_ptr("false", "false")
+                        .unwrap()
                         .as_pointer_value();
-                    let value = this.builder.build_select(
-                        value.into_int_value(),
-                        true_str,
-                        false_str,
-                        "bool value",
-                    );
+                    let value = this
+                        .builder
+                        .build_select(value.into_int_value(), true_str, false_str, "bool value")
+                        .unwrap();
                     this.builder
-                        .build_call(this.functions.printf, &[value.into()], "printf debug");
+                        .build_call(this.functions.printf, &[value.into()], "printf debug")
+                        .unwrap();
                 });
 
                 let number_bb = make_print_block("number", |this, _, exp| {
@@ -436,12 +451,16 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     let car = this.make_unchecked_car(exp);
                     let cdr = this.make_unchecked_cdr(exp);
                     this.make_printf("(", vec![]);
-                    this.builder.build_call(print, &[car.into()], "print car");
+                    this.builder
+                        .build_call(print, &[car.into()], "print car")
+                        .unwrap();
                     this.make_printf(" ", vec![]);
                     // TODO: dot notation and not printing () at end
-                    this.builder.build_call(print, &[cdr.into()], "print car");
+                    this.builder
+                        .build_call(print, &[cdr.into()], "print car")
+                        .unwrap();
                     this.make_printf(")", vec![]);
-                    this.builder.build_return(None);
+                    this.builder.build_return(None).unwrap();
                     block
                 };
                 let primitive_bb = make_print_block("primitive", |this, _, _| {
@@ -502,7 +521,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         macro_rules! accessors {
         ($(($name:literal $acces:ident )),*) => {
             vec![$(($name, self.create_primitive($name, |this,func,_|{
-                self.builder.build_return(Some(&this.$acces(this.make_car(func.get_first_param().unwrap().into_struct_value()))));
+                self.builder.build_return(Some(&this.$acces(this.make_car(func.get_first_param().unwrap().into_struct_value())))).unwrap();
             }))),*]
         };
 
@@ -523,19 +542,22 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let t1 = this.extract_type(e1).unwrap().into_int_value();
                 let t2 = this.extract_type(e2).unwrap().into_int_value();
 
-                let is_same_type =
-                    this.builder
-                        .build_int_compare(IntPredicate::EQ, t1, t2, "same type?");
+                let is_same_type = this
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, t1, t2, "same type?")
+                    .unwrap();
                 let same_bb = this.context.append_basic_block(this.current, "same type");
                 let not_same_bb = this
                     .context
                     .append_basic_block(this.current, "not same type");
                 this.builder
-                    .build_conditional_branch(is_same_type, same_bb, not_same_bb);
+                    .build_conditional_branch(is_same_type, same_bb, not_same_bb)
+                    .unwrap();
                 {
                     this.builder.position_at_end(not_same_bb);
                     this.builder
-                        .build_return(Some(&this.types.types.bool.const_zero()));
+                        .build_return(Some(&this.types.types.bool.const_zero()))
+                        .unwrap();
                 }
                 {
                     this.builder.position_at_end(same_bb);
@@ -573,32 +595,29 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                         let basic_value = this.types.types.bool.into_int_type().const_int(1, false);
 
-                        this.builder.build_return(Some(&basic_value));
+                        this.builder.build_return(Some(&basic_value)).unwrap();
                     }
                     {
                         this.builder.position_at_end(bool_bb);
                         let b1 = this.unchecked_get_bool(e1).into_int_value();
                         let b2 = this.unchecked_get_bool(e2).into_int_value();
-                        let same = this.builder.build_int_compare(
-                            IntPredicate::EQ,
-                            b1,
-                            b2,
-                            "bool compare",
-                        );
+                        let same = this
+                            .builder
+                            .build_int_compare(IntPredicate::EQ, b1, b2, "bool compare")
+                            .unwrap();
 
-                        this.builder.build_return(Some(&same));
+                        this.builder.build_return(Some(&same)).unwrap();
                     }
                     {
                         this.builder.position_at_end(number_bb);
                         let b1 = this.unchecked_get_number(e1).into_float_value();
                         let b2 = this.unchecked_get_number(e2).into_float_value();
-                        this.builder
-                            .build_return(Some(&this.builder.build_float_compare(
-                                FloatPredicate::OEQ,
-                                b1,
-                                b2,
-                                "number compare",
-                            )));
+                        this.builder.build_return(Some(
+                            &this
+                                .builder
+                                .build_float_compare(FloatPredicate::OEQ, b1, b2, "number compare")
+                                .unwrap(),
+                        ));
                     }
                     {
                         this.builder.position_at_end(string_bb);
@@ -627,17 +646,22 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         let car = this
                             .builder
                             .build_call(eq_fn, &[car1.into(), car2.into()], "car eq")
+                            .unwrap()
                             .try_as_basic_value()
                             .unwrap_left()
                             .into_int_value();
                         let cdr = this
                             .builder
                             .build_call(eq_fn, &[cdr1.into(), cdr2.into()], "cdr eq")
+                            .unwrap()
                             .try_as_basic_value()
                             .unwrap_left()
                             .into_int_value();
                         this.builder
-                            .build_return(Some(&this.builder.build_and(car, cdr, "cons eq?")));
+                            .build_return(Some(
+                                &this.builder.build_and(car, cdr, "cons eq?").unwrap(),
+                            ))
+                            .unwrap();
                     }
                     {
                         self.builder.position_at_end(label_bb);
@@ -659,23 +683,31 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                         // although it may be possible to use ptrtoint to compare the 2 pointers
 
-                        // let p_eq = self.builder.build_ptr_diff(l2.get_type()., lhs_ptr, rhs_ptr, name)
-                        this.builder.build_unconditional_branch(this.error_block);
+                        // let p_eq = self.builder.build_ptr_diff(l2.get_type()., lhs_ptr, rhs_ptr, name).unwrap()
+                        this.builder
+                            .build_unconditional_branch(this.error_block)
+                            .unwrap();
                         this.set_error("cannot compare labels", 1)
                     }
                     {
                         self.builder.position_at_end(thunk_bb);
-                        this.builder.build_unconditional_branch(this.error_block);
+                        this.builder
+                            .build_unconditional_branch(this.error_block)
+                            .unwrap();
                         this.set_error("cannot compare thunks", 1)
                     }
                     {
                         self.builder.position_at_end(lambda_bb);
-                        this.builder.build_unconditional_branch(this.error_block);
+                        this.builder
+                            .build_unconditional_branch(this.error_block)
+                            .unwrap();
                         this.set_error("cannot compare lambdas", 1)
                     }
                     {
                         self.builder.position_at_end(primitive_bb);
-                        this.builder.build_unconditional_branch(this.error_block);
+                        this.builder
+                            .build_unconditional_branch(this.error_block)
+                            .unwrap();
                         this.set_error("cannot compare primitives", 1)
                     }
                 }
@@ -696,89 +728,101 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 &[this
                     .builder
                     .build_global_string_ptr("\n", "\n")
+                    .unwrap()
                     .as_pointer_value()
                     .into()],
                 "call newline",
             );
-            this.builder.build_return(Some(&this.empty()));
+            this.builder.build_return(Some(&this.empty())).unwrap();
         });
         let primitive_cons = self.create_primitive("cons", |this, cons, _| {
             let argl = cons.get_first_param().unwrap().into_struct_value();
             let car = this.make_car(argl);
             let cdr = this.make_cadr(argl); // doesnt do proper thing even though i have verified that argl is like (6 (6 ()))
-                                            // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
-            this.builder.build_return(Some(&this.make_cons(car, cdr)));
+                                            // this.builder.build_return(Some(&argl)).unwrap(); // this would act more like list, but is not what cons does
+            this.builder
+                .build_return(Some(&this.make_cons(car, cdr)))
+                .unwrap();
         });
         let primitive_eq = self.create_primitive("eq", |this, cons, _| {
             let argl = cons.get_first_param().unwrap().into_struct_value();
             let e1 = this.make_car(argl);
             let e2 = this.make_cadr(argl); // doesnt do proper thing even though i have verified that argl is like (6 (6 ()))
-                                           // this.builder.build_return(Some(&argl)); // this would act more like list, but is not what cons does
+                                           // this.builder.build_return(Some(&argl)).unwrap(); // this would act more like list, but is not what cons does
             let eq = this.make_object(&this.compare_objects(e1, e2), TypeIndex::bool);
-            this.builder.build_return(Some(&eq));
+            this.builder.build_return(Some(&eq)).unwrap();
         });
         let primitive_set_car = self.create_primitive("set-car!", |this, set_car, _| {
             let argl = set_car.get_first_param().unwrap().into_struct_value();
             let cons = this.make_car(argl);
             let val = this.make_cadr(argl);
             this.make_set_car(cons, val);
-            this.builder.build_return(Some(&this.empty()));
+            this.builder.build_return(Some(&this.empty())).unwrap();
         });
         let primitive_set_cdr = self.create_primitive("set-cdr!", |this, set_cdr, _| {
             let argl = set_cdr.get_first_param().unwrap().into_struct_value();
             let cons = this.make_car(argl);
             let val = this.make_cadr(argl);
             this.make_set_cdr(cons, val);
-            this.builder.build_return(Some(&this.empty()));
+            this.builder.build_return(Some(&this.empty())).unwrap();
         });
 
         let primitive_not = self.create_primitive("not", |this, primitive_not, _| {
             let args = primitive_not.get_first_param().unwrap().into_struct_value();
             let arg = this.make_car(args); // when we do arrity check we can make this unchecked car
             let truthy = this.truthy(arg);
-            let not_truthy = this.builder.build_not(truthy, "not");
+            let not_truthy = this.builder.build_not(truthy, "not").unwrap();
             this.builder
-                .build_return(Some(&this.make_object(&not_truthy, TypeIndex::bool)));
+                .build_return(Some(&this.make_object(&not_truthy, TypeIndex::bool)))
+                .unwrap();
         });
         let primitive_print = self.create_primitive("print", |this, set_car, _| {
             let argl = set_car.get_first_param().unwrap().into_struct_value();
             let val = this.make_car(argl);
             this.print_object(val);
-            this.builder.build_return(Some(&this.empty()));
+            this.builder.build_return(Some(&this.empty())).unwrap();
         });
 
         let primitive_sub1 = self.create_primitive("-1", |this, sub1, _| {
             let argl = sub1.get_first_param().unwrap().into_struct_value();
             let val = this.make_car(argl);
             let num = this.get_number(val).into_float_value();
-            let num1 = this.builder.build_float_sub(
-                num,
-                this.types
-                    .types
-                    .get(TypeIndex::number)
-                    .into_float_type()
-                    .const_float(1.0),
-                "sub 1",
-            );
+            let num1 = this
+                .builder
+                .build_float_sub(
+                    num,
+                    this.types
+                        .types
+                        .get(TypeIndex::number)
+                        .into_float_type()
+                        .const_float(1.0),
+                    "sub 1",
+                )
+                .unwrap();
 
             this.builder
-                .build_return(Some(&this.make_object(&num1, TypeIndex::number)));
+                .build_return(Some(&this.make_object(&num1, TypeIndex::number)))
+                .unwrap();
         });
         let primitive_add1 = self.create_primitive("+1", |this, add1, _| {
             let argl = add1.get_first_param().unwrap().into_struct_value();
             let val = this.make_car(argl);
             let num = this.get_number(val).into_float_value();
-            let num1 = this.builder.build_float_add(
-                num,
-                this.types
-                    .types
-                    .get(TypeIndex::number)
-                    .into_float_type()
-                    .const_float(1.0),
-                "add 1",
-            );
+            let num1 = this
+                .builder
+                .build_float_add(
+                    num,
+                    this.types
+                        .types
+                        .get(TypeIndex::number)
+                        .into_float_type()
+                        .const_float(1.0),
+                    "add 1",
+                )
+                .unwrap();
             this.builder
-                .build_return(Some(&this.make_object(&num1, TypeIndex::number)));
+                .build_return(Some(&this.make_object(&num1, TypeIndex::number)))
+                .unwrap();
         });
         let primitives = [
             ("newline", primitive_newline),
@@ -813,7 +857,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let env = self.make_cons(primitive_env, self.empty());
 
         self.builder
-            .build_store(self.registers.get(Register::Env), env);
+            .build_store(self.registers.get(Register::Env), env)
+            .unwrap();
     }
 
     // TODO: maybe make primitives be a block rather that a function and instead of doing an exit + unreachable with errors we could have an error block with a phi for for error string and ret code,
@@ -826,6 +871,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             &self.types.error.const_named_struct(&[
                 self.builder
                     .build_global_string_ptr(reason, "error exit")
+                    .unwrap()
                     .as_basic_value_enum(),
                 self.context.i32_type().const_int(code as u64, false).into(),
             ]),
@@ -847,12 +893,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn print_object(&self, obj: StructValue<'ctx>) {
         let print = self.module.get_function("print-obj").unwrap();
         self.builder
-            .build_call(print, &[obj.into()], "print object");
+            .build_call(print, &[obj.into()], "print object")
+            .unwrap();
     }
     fn compare_objects(&self, obj1: StructValue<'ctx>, obj2: StructValue<'ctx>) -> IntValue<'ctx> {
         let compare = self.module.get_function("eq-obj").unwrap();
         self.builder
             .build_call(compare, &[obj1.into(), obj2.into()], "compare objects")
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value()
@@ -916,7 +964,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.compile_instructions(inst);
             });
         self.builder
-            .build_return(Some(&self.context.i32_type().const_zero()));
+            .build_return(Some(&self.context.i32_type().const_zero()))
+            .unwrap();
         self.fpm.run_on(&self.current);
         let fpm = PassManager::create(());
         // TODO: more optimizations
@@ -946,25 +995,32 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
     fn truthy(&self, val: StructValue<'ctx>) -> IntValue<'ctx> {
         let ty = self.extract_type(val).unwrap().into_int_value();
-        let is_not_bool = self.builder.build_int_compare(
-            IntPredicate::NE,
-            ty,
-            self.context
-                .i32_type()
-                .const_int(TypeIndex::bool as u64, false),
-            "not bool check",
-        );
+        let is_not_bool = self
+            .builder
+            .build_int_compare(
+                IntPredicate::NE,
+                ty,
+                self.context
+                    .i32_type()
+                    .const_int(TypeIndex::bool as u64, false),
+                "not bool check",
+            )
+            .unwrap();
         let value = self
             .builder
             .build_extract_value(val, 1, "get object context")
             .unwrap();
-        let value = self.builder.build_load(
-            self.types.types.get(TypeIndex::bool),
-            value.into_pointer_value(),
-            "get bool value",
-        );
+        let value = self
+            .builder
+            .build_load(
+                self.types.types.get(TypeIndex::bool),
+                value.into_pointer_value(),
+                "get bool value",
+            )
+            .unwrap();
         self.builder
             .build_or(is_not_bool, value.into_int_value(), "non bool or true")
+            .unwrap()
     }
 
     fn compile_instructions(&mut self, instruction: Instruction) {
@@ -972,15 +1028,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Instruction::Assign(r, e) => {
                 let register = self.registers.get(r);
                 let expr = self.compile_expr(e);
-                self.builder.build_store(register, expr);
+                self.builder.build_store(register, expr).unwrap();
             }
             Instruction::Test(p) => {
-                self.builder.build_store(self.flag, self.compile_perform(p));
+                self.builder
+                    .build_store(self.flag, self.compile_perform(p))
+                    .unwrap();
             }
             Instruction::Branch(l) => {
                 let flag = self
                     .builder
-                    .build_load(self.types.object, self.flag, "load flag");
+                    .build_load(self.types.object, self.flag, "load flag")
+                    .unwrap();
                 // TODO: hack technically (in most cases) if we have a branch, the next instruction after it will be a label so we dont need a new block for each branch but rather we should either "peek" ahead to the next instruction to obtain the label
                 // or encode the label as part of the branch variant
                 let next_label = self.context.append_basic_block(self.current, "next-block");
@@ -995,15 +1054,15 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 match g {
                     Goto::Label(l) => {
                         self.builder
-                            .build_unconditional_branch(*self.labels.get(&l).unwrap());
+                            .build_unconditional_branch(*self.labels.get(&l).unwrap())
+                            .unwrap();
                     }
                     Goto::Register(r) => {
                         let register = self.registers.get(r);
-                        let register = self.builder.build_load(
-                            self.types.object,
-                            register,
-                            &format!("load register {r}"),
-                        );
+                        let register = self
+                            .builder
+                            .build_load(self.types.object, register, &format!("load register {r}"))
+                            .unwrap();
                         let label = self
                             .unchecked_get_label(register.into_struct_value())
                             .into_pointer_value();
@@ -1024,18 +1083,23 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Instruction::Save(reg) => {
                 // self.make_printf(&format!("\nsave start {reg}\n"), vec![]);
                 let register = reg;
-                let prev_stack =
-                    self.builder
-                        .build_load(self.types.stack, self.stack, "load stack");
+                let prev_stack = self
+                    .builder
+                    .build_load(self.types.stack, self.stack, "load stack")
+                    .unwrap();
                 let prev_stack_ptr = self
                     .builder
-                    .build_alloca(self.types.stack, "previous stack");
-                self.builder.build_store(prev_stack_ptr, prev_stack);
+                    .build_alloca(self.types.stack, "previous stack")
+                    .unwrap();
+                self.builder
+                    .build_store(prev_stack_ptr, prev_stack)
+                    .unwrap();
                 let new_stack = self.types.stack.const_zero();
                 let reg = self.registers.get(reg);
                 let reg_value = self
                     .builder
-                    .build_load(self.types.object, reg, "load register");
+                    .build_load(self.types.object, reg, "load register")
+                    .unwrap();
                 let new_stack = self
                     .builder
                     .build_insert_value(new_stack, reg_value, 0, "save register")
@@ -1046,13 +1110,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     .build_insert_value(new_stack, prev_stack_ptr, 1, "save previous stack")
                     .unwrap();
                 // self.make_printf(&format!("save {register}\n"), vec![]);
-                self.builder.build_store(self.stack, new_stack);
+                self.builder.build_store(self.stack, new_stack).unwrap();
             }
             Instruction::Restore(reg) => {
                 // self.make_printf(&format!("\nrestore start {reg}\n"), vec![]);
                 let stack = self
                     .builder
-                    .build_load(self.types.stack, self.stack, "stack");
+                    .build_load(self.types.stack, self.stack, "stack")
+                    .unwrap();
                 let old_stack = self
                     .builder
                     .build_extract_value(stack.into_struct_value(), 1, "old stack")
@@ -1061,21 +1126,28 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     .builder
                     .build_extract_value(stack.into_struct_value(), 0, "current stack")
                     .unwrap();
-                self.builder.build_store(self.registers.get(reg), current);
-                let old_stack = self.builder.build_load(
-                    self.types.stack,
-                    old_stack.into_pointer_value(),
-                    "load previous stack",
-                );
+                self.builder
+                    .build_store(self.registers.get(reg), current)
+                    .unwrap();
+                let old_stack = self
+                    .builder
+                    .build_load(
+                        self.types.stack,
+                        old_stack.into_pointer_value(),
+                        "load previous stack",
+                    )
+                    .unwrap();
                 // self.make_printf(&format!("restore {reg}\n"), vec![]);
-                self.builder.build_store(self.stack, old_stack);
+                self.builder.build_store(self.stack, old_stack).unwrap();
             }
             Instruction::Perform(p) => {
                 self.compile_perform(p);
             }
             Instruction::Label(l) => {
                 let label = self.labels.get(&l);
-                self.builder.build_unconditional_branch(*label.unwrap());
+                self.builder
+                    .build_unconditional_branch(*label.unwrap())
+                    .unwrap();
                 self.builder.position_at_end(*self.labels.get(&l).unwrap());
             }
         }
@@ -1092,6 +1164,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let reg = self.registers.get(r);
                 self.builder
                     .build_load(self.types.object, reg, &format!("load register {r}"))
+                    .unwrap()
                     .into_struct_value()
             }
             Expr::Op(p) => self.compile_perform(p),
@@ -1111,15 +1184,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let found_bb = self.context.append_basic_block(self.current, "found");
         let scan_next_bb = self.context.append_basic_block(self.current, "scan-next");
 
-        let env_ptr = self.builder.build_alloca(self.types.object, "env");
-        self.builder.build_store(env_ptr, env);
-        self.builder.build_unconditional_branch(lookup_entry_bb);
+        let env_ptr = self.builder.build_alloca(self.types.object, "env").unwrap();
+        self.builder.build_store(env_ptr, env).unwrap();
+        self.builder
+            .build_unconditional_branch(lookup_entry_bb)
+            .unwrap();
 
         self.builder.position_at_end(lookup_entry_bb);
         self.set_error("unbound variable\n", 1);
         let env_load = self
             .builder
-            .build_load(self.types.object, env_ptr, "load env");
+            .build_load(self.types.object, env_ptr, "load env")
+            .unwrap();
         self.builder.build_conditional_branch(
             self.is_hempty(env_load.into_struct_value()),
             self.error_block,
@@ -1128,32 +1204,45 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
         self.builder.position_at_end(lookup_bb);
         let frame = self.make_unchecked_car(env_load.into_struct_value());
-        let vars_pointer = self.builder.build_alloca(self.types.object, "vars");
-        let vals_pointer = self.builder.build_alloca(self.types.object, "vals");
+        let vars_pointer = self
+            .builder
+            .build_alloca(self.types.object, "vars")
+            .unwrap();
+        let vals_pointer = self
+            .builder
+            .build_alloca(self.types.object, "vals")
+            .unwrap();
         self.builder
-            .build_store(vars_pointer, self.make_unchecked_car(frame));
+            .build_store(vars_pointer, self.make_unchecked_car(frame))
+            .unwrap();
         self.builder
-            .build_store(vals_pointer, self.make_unchecked_cdr(frame));
-        self.builder.build_unconditional_branch(scan_bb);
+            .build_store(vals_pointer, self.make_unchecked_cdr(frame))
+            .unwrap();
+        self.builder.build_unconditional_branch(scan_bb).unwrap();
 
         self.builder.position_at_end(scan_bb);
         let vars = self
             .builder
             .build_load(self.types.object, vars_pointer, "vars")
+            .unwrap()
             .into_struct_value();
         self.builder
             // vars might not be write theing here maybe vars pointer loaded b./c that what scan next sets
-            .build_conditional_branch(self.is_hempty(vars), next_env_bb, check_bb);
+            .build_conditional_branch(self.is_hempty(vars), next_env_bb, check_bb)
+            .unwrap();
 
         self.builder.position_at_end(next_env_bb);
         let new_env = self.make_unchecked_cdr(env_load.into_struct_value());
-        self.builder.build_store(env_ptr, new_env);
-        self.builder.build_unconditional_branch(lookup_entry_bb);
+        self.builder.build_store(env_ptr, new_env).unwrap();
+        self.builder
+            .build_unconditional_branch(lookup_entry_bb)
+            .unwrap();
 
         self.builder.position_at_end(check_bb);
         let vars_load = self
             .builder
             .build_load(self.types.object, vars_pointer, "load vars")
+            .unwrap()
             .into_struct_value();
         let vars_car = self.make_unchecked_car(vars_load);
         self.builder.build_conditional_branch(
@@ -1166,16 +1255,20 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let vals_load = self
             .builder
             .build_load(self.types.object, vals_pointer, "load vals")
+            .unwrap()
             .into_struct_value();
         self.builder
-            .build_store(vars_pointer, self.make_unchecked_cdr(vars_load));
+            .build_store(vars_pointer, self.make_unchecked_cdr(vars_load))
+            .unwrap();
         self.builder
-            .build_store(vals_pointer, self.make_unchecked_cdr(vals_load));
-        self.builder.build_unconditional_branch(scan_bb);
+            .build_store(vals_pointer, self.make_unchecked_cdr(vals_load))
+            .unwrap();
+        self.builder.build_unconditional_branch(scan_bb).unwrap();
 
         self.builder.position_at_end(found_bb);
         self.builder
             .build_load(self.types.object, vals_pointer, "load vals")
+            .unwrap()
             .into_struct_value()
     }
 
@@ -1199,16 +1292,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .into_int_value();
         let s1 = self.builder.build_extract_value(s1, 1, "get str").unwrap();
         let s2 = self.builder.build_extract_value(s2, 1, "get str").unwrap();
-        let str_len_matches =
-            self.builder
-                .build_int_compare(IntPredicate::EQ, len1, len2, "len matches");
-        let str_small_size = self.builder.build_select(
-            self.builder
-                .build_int_compare(IntPredicate::SLT, len1, len2, "smaller"),
-            len1,
-            len2,
-            "str smallaest size",
-        );
+        let str_len_matches = self
+            .builder
+            .build_int_compare(IntPredicate::EQ, len1, len2, "len matches")
+            .unwrap();
+        let str_small_size = self
+            .builder
+            .build_select(
+                self.builder
+                    .build_int_compare(IntPredicate::SLT, len1, len2, "smaller")
+                    .unwrap(),
+                len1,
+                len2,
+                "str smallaest size",
+            )
+            .unwrap();
         let str_cmp = self
             .builder
             .build_call(
@@ -1216,6 +1314,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 &[s1.into(), s2.into(), str_small_size.into()],
                 "strcmp",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left()
             .into_int_value();
@@ -1224,29 +1323,37 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         // Zero if lhs and rhs compare equal, or if count is zero.
         // Positive value if lhs appears after rhs in lexicographical order
         // so to know that the strings are the same we check that the result of strncmp is zero
-        let is_same = self.builder.build_int_compare(
-            IntPredicate::EQ,
-            str_cmp,
-            self.context.i32_type().const_zero(),
-            "is same string",
-        );
-        self.builder.build_and(
-            str_len_matches,
-            self.builder
-                .build_int_cast(is_same, self.context.bool_type(), ""),
-            "eq?",
-        )
+        let is_same = self
+            .builder
+            .build_int_compare(
+                IntPredicate::EQ,
+                str_cmp,
+                self.context.i32_type().const_zero(),
+                "is same string",
+            )
+            .unwrap();
+        self.builder
+            .build_and(
+                str_len_matches,
+                self.builder
+                    .build_int_cast(is_same, self.context.bool_type(), "")
+                    .unwrap(),
+                "eq?",
+            )
+            .unwrap()
     }
 
     fn make_printf(&self, string: &str, values: Vec<BasicValueEnum<'ctx>>) {
         let format = self
             .builder
             .build_global_string_ptr(string, "printf-format")
+            .unwrap()
             .as_pointer_value();
         let mut values: Vec<_> = values.into_iter().map(Into::into).collect();
         values.insert(0, format.into());
         self.builder
-            .build_call(self.functions.printf, &values, "printf debug");
+            .build_call(self.functions.printf, &values, "printf debug")
+            .unwrap();
     }
 
     fn compile_perform(&mut self, action: Perform) -> StructValue<'ctx> {
@@ -1309,6 +1416,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         &[argl.into()],
                         "call primitive",
                     )
+                    .unwrap()
                     .try_as_basic_value()
                     .unwrap_left()
                     .into_struct_value()
@@ -1336,20 +1444,25 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::False => {
                 let boolean = self
                     .builder
-                    .build_not(self.truthy(*args.first().unwrap()), "not truthy");
+                    .build_not(self.truthy(*args.first().unwrap()), "not truthy")
+                    .unwrap();
                 self.make_object(&boolean, TypeIndex::bool)
             }
             Operation::RandomBool => {
                 let bool = self
                     .builder
                     .build_call(self.functions.rand, &[], "random bool")
+                    .unwrap()
                     .try_as_basic_value()
                     .unwrap_left();
-                let bool = self.builder.build_int_signed_rem(
-                    bool.into_int_value(),
-                    self.context.i32_type().const_int(2, false),
-                    "truncate to bool",
-                );
+                let bool = self
+                    .builder
+                    .build_int_signed_rem(
+                        bool.into_int_value(),
+                        self.context.i32_type().const_int(2, false),
+                        "truncate to bool",
+                    )
+                    .unwrap();
 
                 self.make_object(&bool, TypeIndex::bool)
             }
@@ -1401,7 +1514,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operation::NotThunk => {
                 let thunk = args[0];
                 let is_thunk = self.is_thunk(thunk);
-                let is_not_thunk = self.builder.build_not(is_thunk, "not thunk");
+                let is_not_thunk = self.builder.build_not(is_thunk, "not thunk").unwrap();
                 self.make_object(&is_not_thunk, TypeIndex::bool)
             }
         }
@@ -1443,12 +1556,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn make_car(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
         self.builder
             .build_load(self.types.object, self.car(cons), "load car")
+            .unwrap()
             .into_struct_value()
     }
 
     fn make_cdr(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
         self.builder
             .build_load(self.types.object, self.cdr(cons), "load cdr")
+            .unwrap()
             .into_struct_value()
     }
 
@@ -1457,7 +1572,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         cons: StructValue<'ctx>,
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
-        self.builder.build_store(self.car(cons), new_value);
+        self.builder.build_store(self.car(cons), new_value).unwrap();
         self.empty()
     }
 
@@ -1466,7 +1581,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         cons: StructValue<'ctx>,
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
-        self.builder.build_store(self.cdr(cons), new_value);
+        self.builder.build_store(self.cdr(cons), new_value).unwrap();
         self.empty()
     }
     fn unchecked_car(&self, cons: StructValue<'ctx>) -> PointerValue<'ctx> {
@@ -1487,12 +1602,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn make_unchecked_car(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
         self.builder
             .build_load(self.types.object, self.unchecked_car(cons), "load car")
+            .unwrap()
             .into_struct_value()
     }
 
     fn make_unchecked_cdr(&self, cons: StructValue<'ctx>) -> StructValue<'ctx> {
         self.builder
             .build_load(self.types.object, self.unchecked_cdr(cons), "load cdr")
+            .unwrap()
             .into_struct_value()
     }
 
@@ -1502,7 +1619,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
         self.builder
-            .build_store(self.unchecked_car(cons), new_value);
+            .build_store(self.unchecked_car(cons), new_value)
+            .unwrap();
         self.empty()
     }
 
@@ -1512,7 +1630,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         new_value: StructValue<'ctx>,
     ) -> StructValue<'ctx> {
         self.builder
-            .build_store(self.unchecked_cdr(cons), new_value);
+            .build_store(self.unchecked_cdr(cons), new_value)
+            .unwrap();
         self.empty()
     }
 
@@ -1551,10 +1670,16 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
     fn make_cons(&self, car: StructValue<'ctx>, cdr: StructValue<'ctx>) -> StructValue<'ctx> {
         let cons = self.types.cons.const_zero();
-        let car_ptr = self.builder.build_alloca(self.types.object, "car ptr");
-        let cdr_ptr = self.builder.build_alloca(self.types.object, "cdr ptr");
-        self.builder.build_store(car_ptr, car);
-        self.builder.build_store(cdr_ptr, cdr);
+        let car_ptr = self
+            .builder
+            .build_alloca(self.types.object, "car ptr")
+            .unwrap();
+        let cdr_ptr = self
+            .builder
+            .build_alloca(self.types.object, "cdr ptr")
+            .unwrap();
+        self.builder.build_store(car_ptr, car).unwrap();
+        self.builder.build_store(cdr_ptr, cdr).unwrap();
         let cons = self
             .builder
             .build_insert_value(cons, car_ptr, 0, "insert car - cons")
@@ -1575,9 +1700,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     fn make_object(&self, obj: &dyn BasicValue<'ctx>, index: TypeIndex) -> StructValue<'ctx> {
         let value_ptr = self
             .builder
-            .build_alloca(self.types.types.get(index), "object value");
+            .build_alloca(self.types.types.get(index), "object value")
+            .unwrap();
         self.builder
-            .build_store(value_ptr, obj.as_basic_value_enum());
+            .build_store(value_ptr, obj.as_basic_value_enum())
+            .unwrap();
         let obj = self.types.object.const_zero();
         let obj = self
             .builder
@@ -1612,8 +1739,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let cons: StructValue<'_> = self.types.cons.const_zero();
                 let mut compile_and_add = |expr, name, cons, index| {
                     let expr_compiled = self.compile_expr(expr);
-                    let expr = self.builder.build_alloca(self.types.object, name);
-                    self.builder.build_store(expr, expr_compiled);
+                    let expr = self.builder.build_alloca(self.types.object, name).unwrap();
+                    self.builder.build_store(expr, expr_compiled).unwrap();
                     self.builder
                         .build_insert_value(cons, expr, index, &format!("insert {name}"))
                         .unwrap()
@@ -1637,6 +1764,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let global_str = self
             .builder
             .build_global_string_ptr(s, s)
+            .unwrap()
             .as_pointer_value();
         let obj = self.types.string.const_zero();
         let add_to_string = |string_object, name, expr, index| {
@@ -1674,7 +1802,7 @@ fn init_error_handler<'ctx>(
     let error_block = context.append_basic_block(function, "error");
     builder.position_at_end(error_block);
     // error phi
-    let error_phi = builder.build_phi(error, "error phi");
+    let error_phi = builder.build_phi(error, "error phi").unwrap();
     {
         let error_msg = builder
             .build_extract_value(
@@ -1690,9 +1818,13 @@ fn init_error_handler<'ctx>(
                 "error_code",
             )
             .unwrap();
-        builder.build_call(printf, &[error_msg.into()], "print");
-        builder.build_call(exit, &[error_code.into()], "print");
-        builder.build_unreachable();
+        builder
+            .build_call(printf, &[error_msg.into()], "print")
+            .unwrap();
+        builder
+            .build_call(exit, &[error_code.into()], "print")
+            .unwrap();
+        builder.build_unreachable().unwrap();
     }
     (error_block, error_phi)
 }

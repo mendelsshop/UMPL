@@ -21,7 +21,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let else_bb = self.context.append_basic_block(parent, "else");
         let cont_bb = self.context.append_basic_block(parent, "ifcont");
         self.builder
-            .build_conditional_branch(cond, else_bb, then_bb);
+            .build_conditional_branch(cond, else_bb, then_bb)
+            .unwrap();
 
         // else block
         self.builder.position_at_end(else_bb);
@@ -31,7 +32,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Some(self.const_boolean(crate::ast::Boolean::False).into())
         };
         if else_val.is_some() {
-            self.builder.build_unconditional_branch(cont_bb);
+            self.builder.build_unconditional_branch(cont_bb).unwrap();
         }
         let else_bb = self.builder.get_insert_block().unwrap();
 
@@ -39,14 +40,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(then_bb);
         let then_val = self.compile_expr(&exprs[1])?;
         if then_val.is_some() {
-            self.builder.build_unconditional_branch(cont_bb);
+            self.builder.build_unconditional_branch(cont_bb).unwrap();
         }
         let then_bb = self.builder.get_insert_block().unwrap();
 
         // emit merge block
         self.builder.position_at_end(cont_bb);
 
-        let phi = self.builder.build_phi(self.types.object, "if:phi-cont");
+        let phi = self
+            .builder
+            .build_phi(self.types.object, "if:phi-cont")
+            .unwrap();
         match (then_val, else_val) {
             (None, None) => phi.add_incoming(&[]),
             (None, Some(else_val)) => phi.add_incoming(&[(&else_val, else_bb)]),

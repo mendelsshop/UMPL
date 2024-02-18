@@ -191,7 +191,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let VarType::Lisp(ptr) = ptr else {
             return Err("attempted to lookup variable but whas not a variable: ".to_string() + s);
         };
-        Ok(self.builder.build_load(self.types.object, ptr, s))
+        Ok(self.builder.build_load(self.types.object, ptr, s).unwrap())
     }
 
     pub fn insert_special_form(

@@ -18,13 +18,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> [StructValue<'ctx>; N] {
         let current_node = self
             .builder
-            .build_alloca(self.types.generic_pointer, "arg pointer");
-        self.builder.build_store(current_node, root);
+            .build_alloca(self.types.generic_pointer, "arg pointer")
+            .unwrap();
+        self.builder.build_store(current_node, root).unwrap();
         let mut args = [self.types.object.const_zero(); N];
         for i in 0..N {
-            let arg_load =
-                self.builder
-                    .build_load(self.types.generic_pointer, current_node, "arg_load");
+            let arg_load = self
+                .builder
+                .build_load(self.types.generic_pointer, current_node, "arg_load")
+                .unwrap();
             let arg_object = self
                 .builder
                 .build_struct_gep(
@@ -38,6 +40,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let arg_object = self
                 .builder
                 .build_load(self.types.object, arg_object, "arg data")
+                .unwrap()
                 .into_struct_value();
 
             let next_arg = self
@@ -49,16 +52,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     "next arg",
                 )
                 .unwrap();
-            let next_arg =
-                self.builder
-                    .build_load(self.types.generic_pointer, next_arg, "load next arg");
-            self.builder.build_store(current_node, next_arg);
+            let next_arg = self
+                .builder
+                .build_load(self.types.generic_pointer, next_arg, "load next arg")
+                .unwrap();
+            self.builder.build_store(current_node, next_arg).unwrap();
             args[i] = arg_object;
         }
         args
     }
 
-    // fn build_var_arg(&mut self, action: impl Fn(BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx> {
+    // fn build_var_arg(&mut self, action: impl Fn(BasicValueEnum<'ctx>) -> BasicValueEnum<'ctx>).unwrap() -> BasicValueEnum<'ctx> {
 
     // }
 
@@ -130,13 +134,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[
                     self.builder
                         .build_global_string_ptr(fmt_spec, &format!("{name} fmt specifier"))
+                        .unwrap()
                         .as_basic_value_enum()
                         .into(),
                     val.into(),
                 ],
                 &format!("print {name}"),
             );
-            self.builder.build_unconditional_branch(ret_block);
+            self.builder.build_unconditional_branch(ret_block).unwrap();
             self.builder.get_insert_block().unwrap()
         };
         let bool_block = {
@@ -145,20 +150,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let true_str = self
                 .builder
                 .build_global_string_ptr("true", "true")
+                .unwrap()
                 .as_basic_value_enum();
             let false_str = self
                 .builder
                 .build_global_string_ptr("false", "false")
+                .unwrap()
                 .as_basic_value_enum();
             self.builder.build_call(
                 print,
                 &[self
                     .builder
                     .build_select(val.into_int_value(), true_str, false_str, "bool print")
+                    .unwrap()
                     .into()],
                 "print boolean",
             );
-            self.builder.build_unconditional_branch(ret_block);
+            self.builder.build_unconditional_branch(ret_block).unwrap();
             self.builder.get_insert_block().unwrap()
         };
         let number_block = print_type(number_block, Self::extract_number, "%f", "number");
@@ -175,6 +183,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr("(", "open paren")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print open",
@@ -186,6 +195,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[call_info.into(), value.into()],
                 "getcar",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
@@ -201,6 +211,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr(" ", "space")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print space",
@@ -212,6 +223,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[call_info.into(), value.into()],
                 "getcar",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
@@ -227,6 +239,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr(" ", "space")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print space",
@@ -239,6 +252,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[call_info.into(), value.into()],
                 "getcgr",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
@@ -254,11 +268,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr(")", "open paren")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print open",
         );
-        self.builder.build_unconditional_branch(ret_block);
+        self.builder.build_unconditional_branch(ret_block).unwrap();
         let cons_block = self.builder.get_insert_block().unwrap();
         self.builder.position_at_end(hempty_block);
         self.builder.build_call(
@@ -266,17 +281,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr("hempty", "hempty")
+                .unwrap()
                 .as_pointer_value()
                 .into()],
             "printcar",
         );
-        self.builder.build_unconditional_branch(ret_block);
+        self.builder.build_unconditional_branch(ret_block).unwrap();
         self.builder.position_at_end(error_block);
         self.builder.build_call(
             print,
             &[
                 self.builder
                     .build_global_string_ptr("not valid type %d\n", "idk")
+                    .unwrap()
                     .as_pointer_value()
                     .into(),
                 ty.into(),
@@ -287,7 +304,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.exit("", 1);
 
         self.builder.position_at_end(ret_block);
-        let phi = self.builder.build_phi(self.types.object, "print return");
+        let phi = self
+            .builder
+            .build_phi(self.types.object, "print return")
+            .unwrap();
         phi.add_incoming(&[
             (&args, bool_block),
             (&args, number_block),
@@ -296,7 +316,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             (&args, hempty_block),
             (&args, symbol_block),
         ]);
-        self.builder.build_return(Some(&phi.as_basic_value()));
+        self.builder
+            .build_return(Some(&phi.as_basic_value()))
+            .unwrap();
         self.insert_function("print".into(), print_fn);
     }
 
@@ -312,56 +334,73 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(entry);
         let current_node = self
             .builder
-            .build_alloca(self.types.generic_pointer, "arg pointer");
+            .build_alloca(self.types.generic_pointer, "arg pointer")
+            .unwrap();
         self.builder
-            .build_store(current_node, func.get_nth_param(1).unwrap());
+            .build_store(current_node, func.get_nth_param(1).unwrap())
+            .unwrap();
         let init = self.types.number.const_zero();
-        let sum = self.builder.build_alloca(self.types.number, "return sum");
-        self.builder.build_store(sum, init);
+        let sum = self
+            .builder
+            .build_alloca(self.types.number, "return sum")
+            .unwrap();
+        self.builder.build_store(sum, init).unwrap();
         let is_done_bb = self.context.append_basic_block(func, "done args?");
         let process_arg_bb = self.context.append_basic_block(func, "process arg");
         let done_bb = self.context.append_basic_block(func, "done args");
 
-        self.builder.build_unconditional_branch(is_done_bb);
+        self.builder.build_unconditional_branch(is_done_bb).unwrap();
         self.builder.position_at_end(is_done_bb);
-        let load_args =
-            self.builder
-                .build_load(self.types.generic_pointer, current_node, "load args");
+        let load_args = self
+            .builder
+            .build_load(self.types.generic_pointer, current_node, "load args")
+            .unwrap();
         let is_done = self
             .builder
-            .build_is_null(load_args.into_pointer_value(), "null = done args");
+            .build_is_null(load_args.into_pointer_value(), "null = done args")
+            .unwrap();
         self.builder
-            .build_conditional_branch(is_done, done_bb, process_arg_bb);
+            .build_conditional_branch(is_done, done_bb, process_arg_bb)
+            .unwrap();
 
         self.builder.position_at_end(process_arg_bb);
-        let arg = self.builder.build_load(
-            self.types.args,
-            load_args.into_pointer_value(),
-            "actual load arg",
-        );
+        let arg = self
+            .builder
+            .build_load(
+                self.types.args,
+                load_args.into_pointer_value(),
+                "actual load arg",
+            )
+            .unwrap();
         let current = self
             .builder
             .build_extract_value(arg.into_struct_value(), 0, "get_arg_value")
             .unwrap();
         let current = self.actual_value(current.into_struct_value());
         let current = self.extract_number(current).unwrap().into_float_value();
-        let old = self.builder.build_load(self.types.number, sum, "load sum");
+        let old = self
+            .builder
+            .build_load(self.types.number, sum, "load sum")
+            .unwrap();
         let init = self
             .builder
-            .build_float_add(old.into_float_value(), current, "add");
-        self.builder.build_store(sum, init);
+            .build_float_add(old.into_float_value(), current, "add")
+            .unwrap();
+        self.builder.build_store(sum, init).unwrap();
         let next_arg = self
             .builder
             .build_extract_value(arg.into_struct_value(), 1, "get next arg")
             .unwrap();
-        self.builder.build_store(current_node, next_arg);
-        self.builder.build_unconditional_branch(is_done_bb);
+        self.builder.build_store(current_node, next_arg).unwrap();
+        self.builder.build_unconditional_branch(is_done_bb).unwrap();
         self.builder.position_at_end(done_bb);
         let sum = self
             .builder
-            .build_load(self.types.number, sum, "load sum for returning");
+            .build_load(self.types.number, sum, "load sum for returning")
+            .unwrap();
         self.builder
-            .build_return(Some(&self.number(sum.into_float_value())));
+            .build_return(Some(&self.number(sum.into_float_value())))
+            .unwrap();
         self.insert_function("add".into(), func);
     }
 
@@ -383,7 +422,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .builder
                 .build_extract_value(cons_object, idx, &format!("get-{name}"))
                 .unwrap();
-            self.builder.build_return(Some(&car));
+            self.builder.build_return(Some(&car)).unwrap();
             self.insert_function(name.into(), func);
         };
         accesor(0, "car");
@@ -410,14 +449,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let args = self.actual_value(args[0]);
                 let is_type = {
                     let arg_type = self.extract_type(args).unwrap();
-                    self.builder.build_int_compare(
-                        inkwell::IntPredicate::EQ,
-                        arg_type.into_int_value(),
-                        self.types.ty.const_int(TyprIndex::$typeindex as u64, false),
-                        "is hempty",
-                    )
+                    self.builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            arg_type.into_int_value(),
+                            self.types.ty.const_int(TyprIndex::$typeindex as u64, false),
+                            "is hempty",
+                        )
+                        .unwrap()
                 };
-                self.builder.build_return(Some(&self.boolean(is_type)));
+                self.builder
+                    .build_return(Some(&self.boolean(is_type)))
+                    .unwrap();
                 self.insert_function(format!("{}?", $type).into(), func);
             }};
         }
@@ -444,12 +487,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr("\n", "newline")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print newline",
         );
         self.builder
-            .build_return(Some(&self.const_string(&"\n".into())));
+            .build_return(Some(&self.const_string(&"\n".into())))
+            .unwrap();
         self.insert_function("newline".into(), func);
     }
 
@@ -467,13 +512,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let msg = self.extract_string(args).unwrap(); // TODO: should allow for symbols also (or maybe anything printable)
 
         self.builder
-            .build_call(self.functions.printf, &[msg.into()], "print");
+            .build_call(self.functions.printf, &[msg.into()], "print")
+            .unwrap();
         self.builder.build_call(
             self.functions.exit,
             &[self.context.i32_type().const_int(1, false).into()],
             "exit",
         );
-        self.builder.build_unreachable();
+        self.builder.build_unreachable().unwrap();
         self.insert_function("error".into(), func);
     }
 
@@ -492,7 +538,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // is_false returns true if false otherwise false, so no need for an actual not
         let bool_val = self.is_false(args.into());
         let not_obj = self.boolean(bool_val);
-        self.builder.build_return(Some(&not_obj));
+        self.builder.build_return(Some(&not_obj)).unwrap();
         self.insert_function("not".into(), func);
     }
 
@@ -534,6 +580,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 &[call_info.into(), args.into()],
                 "print",
             )
+            .unwrap()
             .try_as_basic_value()
             .unwrap_left();
         self.builder.build_call(
@@ -541,11 +588,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             &[self
                 .builder
                 .build_global_string_ptr("\n", "newline")
+                .unwrap()
                 .as_basic_value_enum()
                 .into()],
             "print newline",
         );
-        self.builder.build_return(Some(&res));
+        self.builder.build_return(Some(&res)).unwrap();
         self.insert_function("println".into(), func);
     }
 
@@ -580,13 +628,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn make_args(&mut self, args: &[StructValue<'ctx>]) -> PointerValue<'ctx> {
         let null = self.types.generic_pointer.const_null();
         args.iter().fold(null, |init, current| {
-            let ptr = self.builder.build_alloca(self.types.args, "add arg");
-            self.builder.build_store(ptr, *current);
+            let ptr = self
+                .builder
+                .build_alloca(self.types.args, "add arg")
+                .unwrap();
+            self.builder.build_store(ptr, *current).unwrap();
             let next = self
                 .builder
                 .build_struct_gep(self.types.args, ptr, 1, "next arg")
                 .unwrap();
-            self.builder.build_store(next, init);
+            self.builder.build_store(next, init).unwrap();
             ptr
         })
     }
