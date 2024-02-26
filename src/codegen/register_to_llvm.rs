@@ -13,7 +13,7 @@ use inkwell::{
 };
 use inkwell::{module::Linkage, types::BasicTypeEnum};
 use itertools::Itertools;
-use std::{collections::HashMap, primitive};
+use std::{collections::HashMap, iter, primitive};
 
 use super::sicp::{Const, Expr, Goto, Instruction, Operation, Perform, Register};
 
@@ -612,12 +612,30 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         this.builder.position_at_end(number_bb);
                         let b1 = this.unchecked_get_number(e1).into_float_value();
                         let b2 = this.unchecked_get_number(e2).into_float_value();
-                        this.builder.build_return(Some(
-                            &this
-                                .builder
-                                .build_float_compare(FloatPredicate::OEQ, b1, b2, "number compare")
-                                .unwrap(),
-                        ));
+                        let equal = this
+                            .builder
+                            .build_float_compare(FloatPredicate::OEQ, b1, b2, "number compare")
+                            .unwrap();
+                        // this.make_printf(
+                        //     "\n%.2f = %.2f: %s\n",
+                        //     vec![
+                        //         b1.as_basic_value_enum(),
+                        //         b2.into(),
+                        //         this.builder
+                        //             .build_select(
+                        //                 equal,
+                        //                 this.builder
+                        //                     .build_global_string_ptr("true", "true")
+                        //                     .unwrap(),
+                        //                 this.builder
+                        //                     .build_global_string_ptr("false", "false")
+                        //                     .unwrap(),
+                        //                 "equal string",
+                        //             )
+                        //             .unwrap(),
+                        //     ],
+                        // );
+                        this.builder.build_return(Some(&equal));
                     }
                     {
                         this.builder.position_at_end(string_bb);
@@ -799,7 +817,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     "sub 1",
                 )
                 .unwrap();
-
+            let result = this.make_object(&num1, TypeIndex::number);
+            // this.print_object(result);
             this.builder
                 .build_return(Some(&this.make_object(&num1, TypeIndex::number)))
                 .unwrap();
@@ -820,10 +839,81 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     "add 1",
                 )
                 .unwrap();
-            this.builder
-                .build_return(Some(&this.make_object(&num1, TypeIndex::number)))
-                .unwrap();
+            let result = this.make_object(&num1, TypeIndex::number);
+            // this.print_object(result);
+            this.builder.build_return(Some(&result)).unwrap();
         });
+
+        // for some reason the problem with primitives - you guessed it is only with primitives, so
+        // when we make one "non" primitive it works flawlesly
+        // two places were primitves are broken at caller - or declaration and given the fact the
+        // printing the result before returning prints the correct results it may be by calling?
+        let add1 ={
+            let env = self.registers.get(Register::Env);
+
+            let env = self
+                .builder
+                .build_load(self.types.object, env, "load argl")
+                .unwrap();
+            let prev_bb = self.builder.get_insert_block().unwrap();
+
+            let start_label = self.context.append_basic_block(self.current, "add1");
+            self.labels.insert("add1".to_string(), start_label);
+            self.builder.position_at_end(start_label);
+            let argl = self.registers.get(Register::Argl);
+            let argl = self
+                .builder
+                .build_load(self.types.object, argl, "load argl")
+                .unwrap();
+            let value = self.make_unchecked_car(argl.into_struct_value());
+            let num = self.get_number(value).into_float_value();
+            let num1 = self
+                .builder
+                .build_float_add(
+                    num,
+                    self.types
+                        .types
+                        .get(TypeIndex::number)
+                        .into_float_type()
+                        .const_float(1.0),
+                    "add 1",
+                )
+                .unwrap();
+            let result = self.make_object(&num1, TypeIndex::number);
+
+            let val = self.registers.get(Register::Val);
+            self.builder.build_store(val, result);
+            let continue_reg = self.registers.get(Register::Continue);
+            let register = self
+                .builder
+                .build_load(
+                    self.types.object,
+                    continue_reg,
+                    &format!("load register continue"),
+                )
+                .unwrap();
+            let label = self
+                .unchecked_get_label(register.into_struct_value())
+                .into_pointer_value();
+            self.builder
+                // we need all possible labels as destinations b/c indirect br requires a destination but we dont which one at compile time so we use all of them - maybe fixed with register_to_llvm_more_opt
+                .build_indirect_branch(label, &self.labels.values().copied().collect_vec());
+            self.builder.position_at_end(prev_bb);
+            let lambda = self.make_object(
+                &self.list_to_struct(
+                    self.types.types.get(TypeIndex::lambda).into_struct_type(),
+                    &[
+                        self.make_object(
+                            &unsafe { start_label.get_address().unwrap() },
+                            TypeIndex::label,
+                        ).into(),
+                        env
+                    ],
+                ),
+                TypeIndex::lambda,
+            );
+            (self.create_symbol("+1"),lambda)
+        };
         let primitives = [
             ("newline", primitive_newline),
             ("=", primitive_eq),
@@ -832,13 +922,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ("set_cdr!", primitive_set_cdr),
             ("set_car!", primitive_set_car),
             ("cons", primitive_cons),
-            ("+1", primitive_add1),
+            // ("+1", primitive_add1),
             ("-1", primitive_sub1),
         ];
         let primitive_env = primitives
             .into_iter()
             .chain(accesors)
             .map(|(name, function)| self.make_primitive_pair(name, function))
+            .chain(iter::once(add1))
             .fold(
                 (self.empty(), self.empty()),
                 |(symbols, functions), (symbol, function)| {
@@ -971,17 +1062,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .build_return(Some(&self.context.i32_type().const_zero()))
             .unwrap();
         // self.fpm.run_on(&self.current);
-        // let fpm = PassManager::create(());
+        let fpm = PassManager::create(());
         // TODO: more and better optimizations
-        //
+
         // fpm.add_function_inlining_pass();
         // fpm.add_merge_functions_pass();
         // fpm.add_global_dce_pass();
         // fpm.add_ipsccp_pass();
-        // // makes hard to debug llvm ir
-        // // fpm.add_strip_symbol_pass();
+
+        // makes hard to debug llvm ir
+        // fpm.add_strip_symbol_pass();
+
         // fpm.add_constant_merge_pass();
-        //
         // fpm.add_new_gvn_pass();
         // fpm.add_instruction_combining_pass();
         // fpm.add_reassociate_pass();
@@ -995,7 +1087,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         // fpm.add_function_inlining_pass();
         // fpm.add_strip_dead_prototypes_pass();
 
-        // fpm.run_on(self.module);
+        fpm.run_on(self.module);
     }
 
     fn truthy(&self, val: StructValue<'ctx>) -> IntValue<'ctx> {
