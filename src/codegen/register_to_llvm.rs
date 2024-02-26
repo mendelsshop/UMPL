@@ -928,6 +928,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.current = function;
         code(self, function, entry);
         self.builder.position_at_end(prev);
+        if self.error_phi.count_incoming() == 0 {
+            self.error_block.remove_from_function();
+            self.error_phi.as_instruction().remove_from_basic_block();
+        }
         (self.current, self.error_block, self.error_phi) =
             (prev_function, prev_error, prev_error_phi);
         function
@@ -966,31 +970,32 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.builder
             .build_return(Some(&self.context.i32_type().const_zero()))
             .unwrap();
-        self.fpm.run_on(&self.current);
-        let fpm = PassManager::create(());
-        // TODO: more optimizations
-        fpm.add_function_inlining_pass();
-        fpm.add_merge_functions_pass();
-        fpm.add_global_dce_pass();
-        fpm.add_ipsccp_pass();
-        // makes hard to debug llvm ir
-        // fpm.add_strip_symbol_pass();
-        fpm.add_constant_merge_pass();
+        // self.fpm.run_on(&self.current);
+        // let fpm = PassManager::create(());
+        // TODO: more and better optimizations
+        //
+        // fpm.add_function_inlining_pass();
+        // fpm.add_merge_functions_pass();
+        // fpm.add_global_dce_pass();
+        // fpm.add_ipsccp_pass();
+        // // makes hard to debug llvm ir
+        // // fpm.add_strip_symbol_pass();
+        // fpm.add_constant_merge_pass();
+        //
+        // fpm.add_new_gvn_pass();
+        // fpm.add_instruction_combining_pass();
+        // fpm.add_reassociate_pass();
+        // fpm.add_gvn_pass();
+        // fpm.add_basic_alias_analysis_pass();
+        // fpm.add_promote_memory_to_register_pass();
+        // fpm.add_aggressive_inst_combiner_pass();
+        // // // doesn't work with current goto implementation
+        // fpm.add_cfg_simplification_pass();
+        // fpm.add_aggressive_dce_pass();
+        // fpm.add_function_inlining_pass();
+        // fpm.add_strip_dead_prototypes_pass();
 
-        fpm.add_new_gvn_pass();
-        fpm.add_instruction_combining_pass();
-        fpm.add_reassociate_pass();
-        fpm.add_gvn_pass();
-        fpm.add_basic_alias_analysis_pass();
-        fpm.add_promote_memory_to_register_pass();
-        fpm.add_aggressive_inst_combiner_pass();
-        // // doesn't work with current goto implementation
-        fpm.add_cfg_simplification_pass();
-        fpm.add_aggressive_dce_pass();
-        fpm.add_function_inlining_pass();
-        fpm.add_strip_dead_prototypes_pass();
-
-        fpm.run_on(self.module);
+        // fpm.run_on(self.module);
     }
 
     fn truthy(&self, val: StructValue<'ctx>) -> IntValue<'ctx> {
