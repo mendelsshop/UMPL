@@ -650,8 +650,10 @@ fn compile_lambda_body(
 }
 
 fn compile_application(exp: Vec<Ast2>, target: Register, linkage: Linkage) -> InstructionSequnce {
+    #[cfg(feature = "lazy")]
     let proc_code = force_it(exp[0].clone(), Register::Proc, Linkage::Next);
-    // let proc_code = compile(exp[0].clone(), Register::Proc, Linkage::Next);
+    #[cfg(not(feature = "lazy"))]
+    let proc_code = compile(exp[0].clone(), Register::Proc, Linkage::Next);
     // TODO: make it non strict by essentially turning each argument into zero parameter function and then when we need to unthunk the parameter we just call the function with the env
     let operand_codes_primitive = {
         exp[1..]
@@ -698,6 +700,7 @@ fn compile_procedure_call(
     operand_codes_primitive: Vec<InstructionSequnce>,
     operand_codes_compiled: Vec<InstructionSequnce>,
 ) -> InstructionSequnce {
+    // TODO: make cfg for lazy so when its not we can just have one set of operand codes
     let primitive_branch = make_label_name("primitive-branch".to_string());
     let compiled_branch = make_label_name("compiled-branch".to_string());
     let after_call = make_label_name("after-call".to_string());
@@ -902,6 +905,7 @@ fn add_to_argl(inst: InstructionSequnce) -> InstructionSequnce {
     )
 }
 
+#[cfg(feature = "lazy")]
 fn force_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce {
     let actual_value_label = make_label_name("actual-value".to_string());
     let force_label = make_label_name("force".to_string());
@@ -944,6 +948,7 @@ fn force_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce
     )
 }
 
+#[cfg(feature = "lazy")]
 fn delay_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce {
     let thunk_label = make_label_name("thunk".to_string());
     let after_thunk = make_label_name("after-label".to_string());
@@ -975,6 +980,7 @@ fn delay_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce
     inst
 }
 
+#[cfg(feature = "lazy")]
 fn compile_thunk_body(thunk: Ast2, thunk_entry: Label) -> InstructionSequnce {
     append_instruction_sequnce(
         InstructionSequnce::new(
@@ -994,7 +1000,15 @@ fn compile_thunk_body(thunk: Ast2, thunk_entry: Label) -> InstructionSequnce {
         compile(thunk, Register::Thunk, Linkage::Return),
     )
 }
+#[cfg(not(feature = "lazy"))]
+fn delay_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce {
+    compile(exp, target, linkage)
+}
 
+#[cfg(not(feature = "lazy"))]
+fn force_it(exp: Ast2, target: Register, linkage: Linkage) -> InstructionSequnce {
+    compile(exp, target, linkage)
+}
 fn construct_arg_list(operand_codes: Vec<InstructionSequnce>) -> InstructionSequnce {
     operand_codes
         .into_iter()

@@ -5,8 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-# default = ["multi-threaded"]
+# TODO: when lazy fully works make it defualt
+default = []
 multi-threaded = []
+lazy = []
 
 [dependencies]
 hexponent = "0.3.1"
