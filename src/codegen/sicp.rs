@@ -662,6 +662,7 @@ fn compile_application(exp: Vec<Ast2>, target: Register, linkage: Linkage) -> In
             // .map(|exp| compile(exp.clone(), Register::Val, Linkage::Next))
             .collect()
     };
+    #[cfg(feature = "lazy")]
     let operand_codes_compiled = {
         exp[1..]
             .iter()
@@ -677,6 +678,7 @@ fn compile_application(exp: Vec<Ast2>, target: Register, linkage: Linkage) -> In
             target,
             linkage,
             operand_codes_primitive,
+            #[cfg(feature = "lazy")]
             operand_codes_compiled,
         ),
     )
@@ -693,7 +695,74 @@ fn make_intsruction_sequnce(
 ) -> InstructionSequnce {
     InstructionSequnce::new(needs, modifies, instructions)
 }
-
+#[cfg(not(feature = "lazy"))]
+fn compile_procedure_call(
+    target: Register,
+    linkage: Linkage,
+    operand_codes: Vec<InstructionSequnce>,
+) -> InstructionSequnce {
+    // TODO: make cfg for lazy so when its not we can just have one set of operand codes
+    let primitive_branch = make_label_name("primitive-branch".to_string());
+    let compiled_branch = make_label_name("compiled-branch".to_string());
+    let after_call = make_label_name("after-call".to_string());
+    let compiled_linkage = if linkage == Linkage::Next {
+        Linkage::Label(after_call.clone())
+    } else {
+        linkage.clone()
+    };
+    preserving(
+        hashset!(Register::Proc, Register::Continue),
+        construct_arg_list(operand_codes),
+        append_instruction_sequnce(
+            InstructionSequnce::new(
+                hashset!(Register::Proc),
+                hashset!(),
+                vec![
+                    Instruction::Test(Perform {
+                        op: Operation::PrimitiveProcedure,
+                        args: vec![Expr::Register(Register::Proc)],
+                    }),
+                    Instruction::Branch(primitive_branch.clone()),
+                ],
+                // ),
+            ),
+            parallel_instruction_sequnce(
+                append_instruction_sequnce(
+                    make_label_instruction(compiled_branch),
+                    compile_proc_appl::<Procedure>(target, compiled_linkage),
+                ),
+                append_instruction_sequnce(
+                    make_label_instruction(primitive_branch),
+                    // preserving(
+                    // hashset!(Register::Proc, Register::Continue),
+                    // construct_arg_list(operand_codes_primitive),
+                    append_instruction_sequnce(
+                        end_with_linkage(
+                            linkage,
+                            make_intsruction_sequnce(
+                                hashset!(Register::Proc, Register::Argl),
+                                hashset!(target),
+                                vec![Instruction::Assign(
+                                    target,
+                                    Expr::Op(Perform {
+                                        op: Operation::ApplyPrimitiveProcedure,
+                                        args: vec![
+                                            Expr::Register(Register::Proc),
+                                            Expr::Register(Register::Argl),
+                                        ],
+                                    }),
+                                )],
+                            ),
+                        ),
+                        make_label_instruction(after_call),
+                        // ),
+                    ),
+                ),
+            ),
+        ),
+    )
+}
+#[cfg(feature = "lazy")]
 fn compile_procedure_call(
     target: Register,
     linkage: Linkage,
@@ -817,8 +886,8 @@ fn compile_proc_appl<T: Application>(
 ) -> InstructionSequnce {
     match (compiled_linkage) {
         (Linkage::Return)
-        // if target == T::return_register()
-         => make_intsruction_sequnce(
+            // if target == T::return_register() 
+ => make_intsruction_sequnce(
             hashset!(T::register(), Register::Continue),
             all_regs(),
             vec![
@@ -848,7 +917,10 @@ fn compile_proc_appl<T: Application>(
             ],
         ),
         (Linkage::Next) => unreachable!(),
-        (Linkage::Return) => panic!("return linkage, target not {} -- COMPILE {target}", T::return_register()),
+        (Linkage::Return) => panic!(
+            "return linkage, target not {} -- COMPILE {target}",
+            T::return_register()
+        ),
         (Linkage::Label(l)) => {
             let proc_return = make_label_name(format!("{}-return", T::name()));
             make_intsruction_sequnce(
